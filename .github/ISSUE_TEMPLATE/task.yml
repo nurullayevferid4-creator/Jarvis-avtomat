@@ -1,0 +1,38 @@
+name: Tapşırıq
+description: Claude və ChatGPT-yə iş ver
+title: "[Tapşırıq] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Bu repo açıqdır. Açar, parol və şəxsi məlumat yazma.
+  - type: textarea
+    id: task
+    attributes:
+      label: Nə lazımdır?
+      description: Telefonun klaviaturasındakı mikrofonla diktə edə bilərsən.
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Nəticə necə olmalıdır?
+      description: İş bitəndə nəyi görmək istəyirsən?
+  - type: dropdown
+    id: who
+    attributes:
+      label: Kim etsin?
+      options:
+        - Claude bölsün (tövsiyə olunur)
+        - Yalnız Claude
+        - Yalnız ChatGPT
+    validations:
+      required: true
+  - type: textarea
+    id: trigger
+    attributes:
+      label: Claude-u çağır
+      description: Bu sətri silmə, Claude-u işə salır.
+      value: "@claude bu tapşırığı TEAM.md protokoluna görə planla və başla."
+    validations:
+      required: true
