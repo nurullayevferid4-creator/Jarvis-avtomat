@@ -1,0 +1,10 @@
+{
+  "name": "jarvis-avtomat",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "JARVIS Voice Hub: voice-first Claude + GPT assistant on a Cloudflare Worker",
+  "scripts": {
+    "test": "node --check worker.js && node test.mjs"
+  }
+}

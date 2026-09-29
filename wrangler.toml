@@ -1,0 +1,11 @@
+name = "jarvis"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+
+# Secrets (ANTHROPIC_API_KEY, OPENAI_API_KEY, PASSCODE) are NOT stored here.
+# Add them in the Cloudflare dashboard under the Worker's Settings > Variables and Secrets.
+
+# Optional memory across restarts: create a KV namespace, paste its id, then remove the leading #.
+# [[kv_namespaces]]
+# binding = "JARVIS_KV"
+# id = "PASTE_KV_NAMESPACE_ID"
