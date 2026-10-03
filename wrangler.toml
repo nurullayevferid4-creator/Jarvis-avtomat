@@ -9,3 +9,14 @@ compatibility_date = "2026-09-01"
 # [[kv_namespaces]]
 # binding = "JARVIS_KV"
 # id = "PASTE_KV_NAMESPACE_ID"
+
+# Optional, NOT secret: model names and safety limits. Remove the leading # to change a value.
+# See .env.example for what each one does.
+# [vars]
+# CLAUDE_MODEL = "claude-sonnet-5-5"
+# OPENAI_MODEL = "gpt-4o"
+# MAX_SUBTASKS = "4"
+# MAX_MODEL_CALLS = "12"
+# CALL_TIMEOUT_SECONDS = "25"
+# LOGIN_MAX_FAILURES = "5"
+# LOGIN_WINDOW_SECONDS = "900"
