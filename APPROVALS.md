@@ -35,3 +35,4 @@ Bütün yollar `x-passcode` tələb edir. Bayraq: `FEATURE_APPROVALS=0` API-ni s
 - Telefon səhifəsində (UI) təsdiq düymələri hələ yoxdur. Hazırda yalnız API var. UI 4-cü mərhələdədir.
 - Tək istifadəçi üçündür. Eyni anda iki qərarın yarışına qarşı kilid yoxdur.
 - KV olmadan qeydlər Worker yenidən başlayanda itir.
+- KV son-nəticəli (eventually consistent) saxlanışdır: qərardan dərhal sonra başqa Cloudflare məntəqəsindən oxuma qısa müddət köhnə vəziyyət göstərə bilər. Tək istifadəçi üçün bu qəbul edilən riskdir. Güclü zəmanət (iki qərarın toqquşmaması) üçün sonradan D1 və ya Durable Object lazımdır.

@@ -27,6 +27,8 @@ Veb səhifə, video mətni, sosial şəbəkə və köməkçi modelin (OpenAI) ax
 4. Şübhəli naxış tapılsa (`ignore previous instructions`, `əvvəlki təlimatları unut`, `reveal API key` və s.) istifadəçiyə xəbərdarlıq çıxır.
 5. Xarici mətn statusu, alt tapşırıqları və ya təsdiqləri dəyişdirə bilmir. Bu, `tests/api.test.mjs`-də yoxlanır.
 
+Naxışlardakı bütün təkrarlar məhduddur və yoxlanan mətn 20 000 simvolla kəsilir. Əks halda pis niyyətli uzun mətn (məs. `parolparol...`) regex ilə saniyələrlə CPU yeyə bilərdi. Bu, `tests/security.test.mjs`-də ölçülür.
+
 **Məhdudiyyət:** naxış axtarışı yalnız xəbərdarlıq üçündür və aşılması mümkündür. Əsas müdafiə quruluşdadır: etibarsız qutu + təhlükəli əməliyyatların təsdiq qapısı. Modelin qutudakı təlimata tabe olmaması model davranışıdır, kodla 100% təmin edilmir.
 
 ## SSRF

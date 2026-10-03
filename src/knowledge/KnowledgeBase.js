@@ -67,7 +67,7 @@ export class KnowledgeBase {
     if (!rawText) return { ok: false, error: "mətn boşdur" };
     const trust = item.trust === "external" ? "external" : "owner";
     const wrapped = wrapExternal(rawText, { source: item.source_url || "knowledge", maxLen: 8000 });
-    const text = rawText.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F​-‏‪-‮⁠-⁤⁦-⁩﻿]/g, "").slice(0, 8000);
+    const text = rawText.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g, "").slice(0, 8000);
     const tags = (Array.isArray(item.tags) ? item.tags : []).map((t) => normalize(t).slice(0, 40)).filter(Boolean).slice(0, 10);
 
     const hash = await sha256Hex(normalize(title + " " + text));
