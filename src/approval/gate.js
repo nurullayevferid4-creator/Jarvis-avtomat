@@ -18,12 +18,12 @@ export function resolvePending(state, norm) {
     const p = state.pending;
     state.pending = null;
     const spoken = "Təsdiqi aldım, amma «" + p.external + "» üçün inteqrasiya bu versiyada qoşulmayıb. Qaralama hazırdır, özün icra etməlisən.";
-    return { handled: true, save: true, response: { status: "blocked", spoken, screen: spoken + "\n\n" + (p.draft || ""), tasks: [] } };
+    return { handled: true, save: true, decision: "approved", response: { status: "blocked", spoken, screen: spoken + "\n\n" + (p.draft || ""), tasks: [] } };
   }
 
   if (NO.has(norm)) {
     state.pending = null;
-    return { handled: true, save: true, response: { status: "chat", spoken: "Yaxşı, ləğv etdim.", screen: "Gözləyən iş ləğv edildi.", tasks: [] } };
+    return { handled: true, save: true, decision: "rejected", response: { status: "chat", spoken: "Yaxşı, ləğv etdim.", screen: "Gözləyən iş ləğv edildi.", tasks: [] } };
   }
 
   if (norm.includes("harada dayandıq")) {
