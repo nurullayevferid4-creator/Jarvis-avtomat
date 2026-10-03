@@ -1,0 +1,19 @@
+# Gizli məlumatlar: bunlar GitHub-a düşməməlidir
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+*.pem
+*.key
+.secrets/
+secrets.*
+credentials*.json
+
+# Cloudflare və Node
+.wrangler/
+node_modules/
+
+# Sistem faylları
+.DS_Store

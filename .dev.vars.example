@@ -1,0 +1,7 @@
+# NÜMUNƏ fayldır. Real açarları BURAYA YAZMA.
+# Lokal "wrangler dev" üçün bu faylı kopyala, adını .dev.vars qoy və orada doldur.
+# .dev.vars faylı .gitignore ilə qorunur. Bütün izahat .env.example faylındadır.
+
+ANTHROPIC_API_KEY=
+OPENAI_API_KEY=
+PASSCODE=
