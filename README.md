@@ -120,15 +120,33 @@ src/index.js               ünvanlar, parol, parol cəhd limiti
 src/orchestrator/          ClaudeOrchestrator (planlama, yoxlama, yekun cavab)
 src/adapters/              ClaudeAdapter, OpenAIAdapter, səs, reyestr, BaseAdapter
 src/guards/                limitlər (çağırış sayı, vaxt, parol)
-src/approval/              təsdiq qapısı
-src/state/                 söhbət yaddaşı və iş tarixçəsi
+src/approval/              söhbət təsdiq qapısı (gate.js) və təsdiq mərkəzi (center.js)
+src/security/              SSRF qoruması, xarici məzmunun təmizlənməsi (prompt injection)
+src/tools/                 alət reyestri və daxili alətlər (hələ orkestratora qoşulmayıb)
+src/knowledge/             bilik bazası
+src/audit/                 audit jurnalı
+src/policy.js              risk səviyyələri və icazələr
+src/validate.js            sxem yoxlayıcı
+src/state/                 söhbət yaddaşı, iş tarixçəsi, ümumi sənəd anbarı
 src/ui/                    telefon səhifəsi
+SECURITY.md, APPROVALS.md, TOOLS.md   1-ci mərhələnin sənədləri
 tests/                     yeni testlər
 test.mjs                   köhnə testlər (dəyişdirilməyib)
 .env.example               açar adlarının nümunəsi (dəyərlər boş)
 ```
 
 `CLAUDE.md`, `AGENTS.md`, `TEAM.md` və `.github/` GitHub Issue ilə üçlü iş qaydasına aiddir və bu sistemdən ayrıdır.
+
+## Mərhələlər
+
+Böyük plan 4 mərhələyə bölünüb, hər biri ayrı PR və ayrı test ilə gedir:
+
+1. **Təməl və təhlükəsizlik** (bu mərhələ): təsdiq mərkəzi, alət reyestri, SSRF və prompt injection qoruması, audit jurnalı, bilik bazası, `/api/status`. Bax `SECURITY.md`, `APPROVALS.md`, `TOOLS.md`.
+2. Agentlər və Shopify / sosial şəbəkə / CRM mock-ları (real API olmadan).
+3. Öyrənmə dövrü (Learning Agent) və workflow mühərriki.
+4. Telefon səhifəsinə yeni tablar (təsdiq, bilik, status) və qalan sənədlər.
+
+Əvvəlki mərhələlərin həqiqi vəziyyəti `/api/status` və bu sənədlərdədir. Hələ qurulmayan şey burada "var" kimi yazılmır.
 
 ## Məhdudiyyətlər
 
