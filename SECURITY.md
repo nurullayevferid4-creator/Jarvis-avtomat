@@ -12,7 +12,7 @@ Bu sənəd 1-ci mərhələdə (təməl) **həqiqətən kodda olan** qoruma qatla
 
 ## Giriş
 
-- Bütün `/api/*` yolları `x-passcode` başlığı ilə qorunur. Müqayisə sabit vaxtlıdır (`src/guards/login.js`).
+- Bütün `/api/*` yolları parol başlığı ilə qorunur. Səhifə parolu UTF-8 → Base64 edib `x-passcode-b64` başlığı ilə göndərir (brauzer başlığı yalnız ASCII qəbul edir, ə/ı/ş/ğ kimi hərfli parol xam başlıqla göndərilə bilmir). Köhnə `x-passcode` başlığı da qəbul olunur (yalnız Latin-1 simvollu parol üçün). Pozuq Base64 və ya UTF-8 səhv parol sayılır (401, cəhd limitinə daxildir). Müqayisə sabit vaxtlıdır (`src/guards/login.js`).
 - Eyni IP-dən 5 səhv cəhd (standart) 15 dəqiqə blok yaradır. Limit `LOGIN_MAX_FAILURES` və `LOGIN_WINDOW_SECONDS` ilə dəyişir.
 - Məhdudiyyət: KV olmadan sayğac yaddaşdadır və Worker yenidən başlayanda sıfırlanır. KV ilə də tam dəqiq deyil. Güclü qoruma üçün Cloudflare Rate Limiting qaydası da əlavə etmək məsləhətdir.
 - Səhv parol cəhdləri audit jurnalına yazılmır. Yoxsa bot hücumu KV yazma limitini doldurardı.

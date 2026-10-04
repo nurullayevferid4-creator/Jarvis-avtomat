@@ -16,6 +16,28 @@ export function safeEqual(a, b) {
   return diff === 0;
 }
 
+const MAX_B64_HEADER = 1024;
+
+// Sorğudan parolu oxuyur.
+// 1) x-passcode-b64: parol UTF-8 -> Base64 (brauzer başlığı yalnız ASCII qəbul edir, ə/ı/ş/ğ kimi hərflər üçün).
+// 2) x-passcode: köhnə uyğunluq (yalnız Latin-1 simvollu parol).
+// Pozuq Base64 və ya pozuq UTF-8 olarsa null qaytarır (çağıran bunu səhv parol sayır, 500 yox).
+export function readPasscode(req) {
+  const b64 = req.headers.get("x-passcode-b64");
+  if (b64 !== null) {
+    if (b64.length > MAX_B64_HEADER) return null;
+    try {
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch (e) {
+      return null;
+    }
+  }
+  return req.headers.get("x-passcode");
+}
+
 async function getCount(env, ip) {
   if (env.JARVIS_KV) {
     const v = await env.JARVIS_KV.get("login:" + ip);
