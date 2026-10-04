@@ -4,6 +4,14 @@
 
 import { clampInt } from "./util.js";
 
+export const VERSION = "1.2.0-phase1";
+
+// Xüsusiyyət bayraqları: FEATURE_VOICE, FEATURE_APPROVALS, FEATURE_KNOWLEDGE = 0 / 1 (standart: 1)
+export function getFeatures(env = {}) {
+  const on = (v) => (v === undefined || v === null || v === "" ? true : !/^(0|false|off|no)$/i.test(String(v)));
+  return { voice: on(env.FEATURE_VOICE), approvals: on(env.FEATURE_APPROVALS), knowledge: on(env.FEATURE_KNOWLEDGE) };
+}
+
 export const DEFAULTS = {
   claudeModel: "claude-sonnet-5-5",
   openaiModel: "gpt-4o",

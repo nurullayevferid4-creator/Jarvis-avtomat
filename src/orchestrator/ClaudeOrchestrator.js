@@ -17,15 +17,29 @@ import { normalize, parseJson } from "../util.js";
 import { resolvePending } from "../approval/gate.js";
 import { CallBudget } from "../guards/budget.js";
 import { buildLeadSystem, FINAL_SYSTEM, FACT_CHECK_SYSTEM } from "../prompts.js";
+import { wrapExternal } from "../security/sanitize.js";
+
+// Köməkçi modelin (məs. veb axtarışlı OpenAI) cavabı xarici məzmun sayılır:
+// başqa modelə verilərkən <external_content> qutusuna qoyulur, əmr kimi qəbul edilmir.
+const HELPER_MAX_CHARS = 20000;
 
 export class ClaudeOrchestrator {
-  constructor({ env, registry, limits, store }) {
+  // approvals (istəyə bağlı): təsdiq mərkəzi. Verilməsə köhnə davranış dəyişmir.
+  constructor({ env, registry, limits, store, approvals = null }) {
     this.env = env;
     this.registry = registry;
     this.limits = limits;
     this.store = store;
+    this.approvals = approvals;
     this.lead = registry.get("claude");
     if (!this.lead || typeof this.lead.complete !== "function") throw new Error("Reyestrdə 'claude' adapteri yoxdur");
+  }
+
+  // Lider modelin öz mətni olduğu kimi qalır, köməkçinin mətni qutuya salınır.
+  _guard(t, text) {
+    if (t.owner === "claude") return { text, flagged: false };
+    const w = wrapExternal(text, { source: "helper:" + t.owner, maxLen: HELPER_MAX_CHARS });
+    return { text: w.text, flagged: w.flagged };
   }
 
   async runSubtask(t, done, extra, ctx) {
@@ -50,10 +64,12 @@ export class ClaudeOrchestrator {
       await Promise.all(ready.map(async (t) => {
         try {
           const out = await this.runSubtask(t, done, "", ctx);
+          const g = this._guard(t, out.text);
           t.result = out.text;
           t.web = out.web;
+          t.flagged = g.flagged;
           t.status = "done";
-          done[t.id] = out.text;
+          done[t.id] = g.text;
         } catch (e) {
           t.status = "error";
           t.error = String((e && e.message) || e).slice(0, 200);
@@ -68,7 +84,7 @@ export class ClaudeOrchestrator {
   async review(tasks, ctx) {
     const helperDone = tasks.filter((t) => t.owner !== "claude" && t.status === "done");
     if (!helperDone.length) return { issues: [], unreviewed: false };
-    const payload = helperDone.map((t) => "[" + t.id + "] Task: " + t.instruction + "\nResult: " + t.result).join("\n\n");
+    const payload = helperDone.map((t) => "[" + t.id + "] Task: " + t.instruction + "\nResult: " + this._guard(t, t.result).text).join("\n\n");
     const prompt = 'Review the results below for factual errors, invented links or numbers, or ignoring the task. Reply with ONLY JSON: {"issues":[{"id":"t1","problem":"..."}]}. Use an empty list if all is fine.\n\n' + payload;
     try {
       const txt = await this.lead.complete(FACT_CHECK_SYSTEM, [{ role: "user", content: prompt }], 800, ctx);
@@ -85,8 +101,10 @@ export class ClaudeOrchestrator {
       if (!t) continue;
       try {
         const out = await this.runSubtask(t, done, "A reviewer found this problem in your previous answer, fix it: " + i.problem, ctx);
+        const g = this._guard(t, out.text);
         t.result = out.text;
-        done[t.id] = out.text;
+        done[t.id] = g.text;
+        t.flagged = t.flagged || g.flagged;
         t.web = out.web;
       } catch (e) { /* ilk cavab qalır */ }
       t.note = "Yoxlama qeydi: " + String(i.problem).slice(0, 160);
@@ -103,9 +121,14 @@ export class ClaudeOrchestrator {
     const state = await this.store.load();
     const norm = normalize(text);
 
+    const pendingBefore = state.pending;
     const gate = resolvePending(state, norm);
     if (gate.handled) {
       if (gate.save) await this.store.save(state);
+      // Söhbətdə "hə/yox" deyiləndə təsdiq mərkəzindəki qeyd də bağlanır
+      if (this.approvals && pendingBefore && pendingBefore.approval_id && gate.decision) {
+        try { await this.approvals.decide(pendingBefore.approval_id, { decision: gate.decision === "approved" ? "approve" : "reject" }); } catch (e) { /* əsas axın pozulmasın */ }
+      }
       return gate.response;
     }
 
@@ -152,7 +175,7 @@ export class ClaudeOrchestrator {
     let status = ok === 0 ? "blocked" : ok < tasks.length ? "partial" : "achieved";
     if (plan.external_action && status === "achieved") status = "pending_approval";
 
-    const results = tasks.map((t) => "[" + t.id + " / " + t.owner + " / " + t.status + "]\n" + (t.status === "done" ? t.result : "XƏTA: " + t.error)).join("\n\n");
+    const results = tasks.map((t) => "[" + t.id + " / " + t.owner + " / " + t.status + "]\n" + (t.status === "done" ? this._guard(t, t.result).text : "XƏTA: " + t.error)).join("\n\n");
     let spoken;
     let screen;
     try {
@@ -171,17 +194,27 @@ export class ClaudeOrchestrator {
     if (tasks.some((t) => t.owner !== "claude" && t.status === "done" && t.web === false)) notes.push("Canlı axtarış işləmədi, məlumat köhnə ola bilər.");
     if (rv.unreviewed) notes.push("Köməkçi modelin nəticələri yoxlanmadı (yoxlama alınmadı).");
     if (budget.exceeded) notes.push("Model çağırış limiti dolduğu üçün iş tam başa çatmaya bilər.");
+    if (tasks.some((t) => t.flagged)) notes.push("Xarici məzmunda şübhəli təlimat izləri tapıldı. O, əmr kimi qəbul edilmədi, yalnız məlumat kimi istifadə olundu.");
     if (notes.length) {
       spoken += " " + notes.join(" ");
       screen += "\n\n" + notes.join("\n");
     }
 
+    let approvalId = null;
     if (status === "pending_approval") {
       spoken += " «" + plan.external_action + "» üçün təsdiq lazımdır. İcra edim? Hə və ya yox de.";
-      state.pending = { goal: text, external: plan.external_action, draft: screen.slice(0, 4000) };
+      if (this.approvals) {
+        try {
+          const ap = await this.approvals.create({ action: plan.external_action, content: screen.slice(0, 4000), risk: "medium", source: "orchestrator" });
+          approvalId = ap.id;
+        } catch (e) { /* qeyd açılmasa da söhbətdəki təsdiq qapısı işləyir */ }
+      }
+      state.pending = { goal: text, external: plan.external_action, draft: screen.slice(0, 4000), approval_id: approvalId };
     }
     await remember(spoken);
     await this.store.saveJob({ ts: new Date().toISOString(), request: text, status, spoken, tasks: ClaudeOrchestrator.publicTasks(tasks) });
-    return { status, spoken, screen, tasks: ClaudeOrchestrator.publicTasks(tasks) };
+    const result = { status, spoken, screen, tasks: ClaudeOrchestrator.publicTasks(tasks) };
+    if (approvalId) result.approval_id = approvalId;
+    return result;
   }
 }
