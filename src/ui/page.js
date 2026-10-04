@@ -41,6 +41,12 @@ var SILENT="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACAB
 var LABEL={achieved:"Tamamlandı",partial:"Qismən",blocked:"Bloklandı",pending_approval:"Təsdiq gözləyir",clarification:"Sual",chat:"Söhbət"};
 try{$("pass").value=localStorage.getItem("jv_pass")||""}catch(e){}
 $("pass").addEventListener("change",function(){try{localStorage.setItem("jv_pass",$("pass").value)}catch(e){}});
+// Parol UTF-8 -> Base64 olaraq başlığa qoyulur: başlıq yalnız ASCII ola bilər, parolda ə, ı, ş, ğ kimi hərflər ola bilər.
+function authHeaders(){
+var b=new TextEncoder().encode($("pass").value),s="";
+for(var i=0;i<b.length;i++)s+=String.fromCharCode(b[i]);
+return {"x-passcode-b64":btoa(s)};
+}
 function unlock(){try{player.src=SILENT;var p=player.play();if(p&&p.catch)p.catch(function(){})}catch(e){}}
 function setState(s){$("state").textContent=s}
 function el(tag,cls,text){var e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e}
@@ -58,7 +64,7 @@ out.appendChild(c);
 function call(fd,isJson){
 busy=true;$("mic").disabled=true;var t0=Date.now();
 timer=setInterval(function(){setState("işləyirəm "+Math.round((Date.now()-t0)/1000)+" san")},500);
-var opt={method:"POST",headers:{"x-passcode":$("pass").value},body:fd};
+var opt={method:"POST",headers:authHeaders(),body:fd};
 if(isJson){opt.headers["content-type"]="application/json"}
 fetch("/api/talk",opt).then(function(r){return r.json()}).then(function(d){
 render(d);
@@ -94,7 +100,7 @@ call(JSON.stringify({text:v}),true);
 $("send").addEventListener("click",sendText);
 $("txt").addEventListener("keydown",function(e){if(e.key==="Enter")sendText()});
 $("jobs").addEventListener("click",function(){
-fetch("/api/jobs",{headers:{"x-passcode":$("pass").value}}).then(function(r){return r.json()}).then(function(d){
+fetch("/api/jobs",{headers:authHeaders()}).then(function(r){return r.json()}).then(function(d){
 var jl=$("jl");jl.textContent="";
 if(d.error){jl.appendChild(el("div","lbl",d.error));return}
 if(!d.jobs.length){jl.appendChild(el("div","lbl","Hələ iş yoxdur."));return}

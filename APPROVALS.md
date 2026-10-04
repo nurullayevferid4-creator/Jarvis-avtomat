@@ -24,7 +24,7 @@ id, ts, status, action, content, risk, source, revisions, expires_at, decided_at
    - `GET /api/approvals?status=pending`
    - `POST /api/approvals/<id>` gövdə: `{"decision":"approve"}`, `{"decision":"reject"}` və ya `{"decision":"edit","content":"yeni mətn"}` (edit qeydi gözləyən saxlayır, `revisions` artır)
 
-Bütün yollar `x-passcode` tələb edir. Bayraq: `FEATURE_APPROVALS=0` API-ni söndürür.
+Bütün yollar parol tələb edir (`x-passcode-b64`, bax `SECURITY.md`). Bayraq: `FEATURE_APPROVALS=0` API-ni söndürür.
 
 ## Alətlərlə əlaqə
 

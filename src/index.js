@@ -12,7 +12,7 @@ import { createRegistry } from "./adapters/registry.js";
 import { stt, tts } from "./adapters/openaiAudio.js";
 import { ClaudeOrchestrator } from "./orchestrator/ClaudeOrchestrator.js";
 import { createStore } from "./state/store.js";
-import { safeEqual, isBlocked, recordFailure, clearFailures } from "./guards/login.js";
+import { safeEqual, readPasscode, isBlocked, recordFailure, clearFailures } from "./guards/login.js";
 import { createAudit } from "./audit/log.js";
 import { ApprovalCenter } from "./approval/center.js";
 import { KnowledgeBase } from "./knowledge/KnowledgeBase.js";
@@ -69,7 +69,7 @@ export default {
         { "retry-after": String(limits.loginWindowSeconds) },
       );
     }
-    if (!safeEqual(req.headers.get("x-passcode"), env.PASSCODE)) {
+    if (!safeEqual(readPasscode(req), env.PASSCODE)) {
       await recordFailure(env, ip, limits);
       return json({ error: "Parol səhvdir." }, 401);
     }
