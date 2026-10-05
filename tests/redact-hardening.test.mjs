@@ -205,3 +205,35 @@ test("etiketdən sonra çox qısa dəyər (1-2 simvol) də maskalanır, boş də
   assert.equal(redactText("token:\nabc"), "token:\nabc", "növbəti sətirə keçmir");
   assert.equal(redactText("password: " + MASK), "password: " + MASK);
 });
+
+test("audit (038cda9 sonrası): format işarəli etiket, böyük hərfli Azərbaycan yazılışı və secret_key tipli adlar", () => {
+  const cases = [
+    ["**Password**: hunter2x", "hunter2x"], ["- **API key**: hunter2x", "hunter2x"], ["`token`: hunter2x", "hunter2x"],
+    ["<b>password</b>: hunter2x", "hunter2x"], ["'password' = hunter2x", "hunter2x"], ['"password"=hunter2x', "hunter2x"],
+    ["**Parol**: hunter2x", "hunter2x"], ["~~secret~~: hunter2x", "hunter2x"],
+    ["ŞİFRƏ: hunter2x", "hunter2x"], ["Şifrə: hunter2x", "hunter2x"], ["ŞIFRE = hunter2x", "hunter2x"], ["şıfrə: hunter2x", "hunter2x"], ["SİFRƏM: hunter2x", "hunter2x"],
+    ["SECRET_KEY=hunter2x", "hunter2x"], ["secret_key: hunter2x", "hunter2x"], ["signing_key=hunter2x", "hunter2x"], ["ENCRYPTION KEY: hunter2x", "hunter2x"],
+    ["JWT_KEY=hunter2x", "hunter2x"], ["hmac-key: hunter2x", "hunter2x"],
+  ];
+  for (const [input, secret] of cases) {
+    const out = assertMasked(input, input, [secret]);
+    assert.equal(redactText(out), out, "təkrar keçid sabitdir: " + input);
+  }
+  for (const s of ["**Qalın mətn**: salam", "key lime: pie", "Sifariş: 12345", "secretary: Ali", "master plan: yaz", "<b>Ünvan</b>: Bakı"]) {
+    assert.equal(redactText(s), s, "yalançı müsbət: " + s);
+  }
+});
+
+test("CPU: format işarələri və yeni adlar pozucu mətndə iş xəttidir", () => {
+  const N = 200000;
+  const inputs = {
+    wrapStar: rep("password**", N / 10), wrapTag: rep("password</b", N / 11), wrapQuote: rep("token'''", N / 8),
+    secretKey: rep("secret_key", N / 10), sifre: rep("ŞİFRƏ", N / 5), eqKey: rep('"a"=', N / 4), jwtKey: rep("jwt key ", N / 8),
+  };
+  for (const [name, input] of Object.entries(inputs)) {
+    const t = Date.now();
+    redactText(input);
+    const ms = Date.now() - t;
+    assert.ok(ms < 1500, name + " üçün " + ms + " ms çəkdi");
+  }
+});

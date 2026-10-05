@@ -23,9 +23,13 @@ export const MASK = "[gizlədildi]";
 const CTRL_RE = /[\p{Cf}\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/gu;
 
 // Parol tipli etiketlər: dəyər BOŞLUQLU ola bilər, ona görə dırnaqsızdırsa sətrin sonuna qədər maskalanır.
-const PASS_NAME = String.raw`(?:(?:parol|şifrə|şifre|sifrə|sifre)\p{L}{0,4}|пароль|password|passwd|passphrase|pass[ _-]phrase|pwd|passcode|authorization|cookie)`;
+const PASS_NAME = String.raw`(?:(?:parol|[şs][iİı]fr[əe])\p{L}{0,4}|пароль|password|passwd|passphrase|pass[ _-]phrase|pwd|passcode|authorization|cookie)`;
 // Açar tipli etiketlər: dəyər tək sözdür.
-const KEY_NAME = String.raw`(?:token|secret|api[ _-]?key|access[ _-]?key|private[ _-]?key|credentials?|açar\p{L}{0,3}|bearer)`;
+const KEY_NAME = String.raw`(?:(?:secret|signing|encryption|master|hmac|jwt)[ _-]?key|token|secret|api[ _-]?key|access[ _-]?key|private[ _-]?key|credentials?|açar\p{L}{0,3}|bearer)`;
+
+// Etiketlə ayırıcı arasında qala bilən format işarələri: **Password**: ..., ~~secret~~: ..., <b>parol</b>: ...
+// Dırnaq və tərs dırnaq buraya düşmür: onlar JSON_KV-də işlənir (əks halda JSON_KV-nin maskaladığı dəyərdən sonra sətrin qalanı da örtülərdi).
+const WRAP = String.raw`(?:[*~]{1,3}|<\/[a-z]{1,6}>)?`;
 
 // Dırnaqlı sətir (JSON kimi, \" ilə), uzunluq limiti yox. Bağlanmayan dırnaq düşür və "qalan hissə" variantı işləyir.
 const DQ = String.raw`"((?:[^"\\\n]|\\.)*)"`;
@@ -34,19 +38,19 @@ const SQ = String.raw`'([^'\n]*)'`;
 // 1) JSON / config açarı dırnaqda: {"password":"..."}, 'api_key': '...', "Authorization": "Bearer ..."
 //    Dırnaqsız dəyər (rəqəm, true və s.) vergülə, } və ] işarəsinə qədər.
 const JSON_KV_RE = new RegExp(
-  String.raw`(["'\x60][^"'\x60\n]{0,40}(?:${PASS_NAME}|${KEY_NAME})[^"'\x60\n]{0,20}["'\x60][ \t]{0,3}(?::|=>)[ \t]{0,3})` +
+  String.raw`(["'\x60][^"'\x60\n]{0,40}(?:${PASS_NAME}|${KEY_NAME})[^"'\x60\n]{0,20}["'\x60][ \t]{0,3}(?::|=>|=)[ \t]{0,3})` +
     String.raw`(?:${DQ}|${SQ}|\x60([^\x60\n]*)\x60|((?:\[gizlədildi\]|[^,}\]\n])+))`,
   "giu"
 );
 
 // 2) Parol tipli etiket düz mətndə: "parol: ...", "password = ...", "password is ...", "parol budur - ..."
 const PASS_PLAIN_RE = new RegExp(
-  String.raw`(${PASS_NAME}[ \t]{0,3}(?:=>|[:=]|[ \t]{1,3}(?:is|budur|—|–|-)[ \t]{1,3})[ \t]{0,3})(?:${DQ}|${SQ}|([^\s][^\n]*))`,
+  String.raw`(${PASS_NAME}${WRAP}[ \t]{0,3}(?:=>|[:=]|[ \t]{1,3}(?:is|budur|—|–|-)[ \t]{1,3})[ \t]{0,3})(?:${DQ}|${SQ}|([^\s][^\n]*))`,
   "giu"
 );
 
 // 3) Açar tipli etiket: "token: ...", "api key=...", "secret => ..." (tək söz, & işarəsinə qədər)
-const KEY_PLAIN_RE = new RegExp(String.raw`(${KEY_NAME}[ \t]{0,3}(?:=>|[:=])[ \t]{0,3})(?:${DQ}|${SQ}|([^\s&]+))`, "giu");
+const KEY_PLAIN_RE = new RegExp(String.raw`(${KEY_NAME}${WRAP}[ \t]{0,3}(?:=>|[:=])[ \t]{0,3})(?:${DQ}|${SQ}|([^\s&]+))`, "giu");
 
 // 4) URL sorğu parametrləri: ?token=..., &api_key=..., &sig=...
 const QUERY_RE = /([?&][\w.%-]{0,30}?(?:key|token|secret|passw(?:or)?d|pwd|signature|sig|auth)[\w.%-]{0,10}=)([^&\s#"'<>]+)/gi;

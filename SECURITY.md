@@ -50,7 +50,7 @@ Təsdiq addımları, alət çağırışları (ad, status, müddət; giriş məzm
 
 `src/security/redact.js` tanınan formatları `[gizlədildi]` ilə əvəz edir:
 - prefiksli açarlar: `sk-...`, Stripe (`sk_live_`), `Bearer ...`, Meta (`EAA...`), GitHub, Slack, AWS, Google API açarı, JWT, Telegram bot tokeni, Shopify tokeni;
-- etiketdən sonrakı dəyər: düz mətndə (`parol: ...`, `password is ...`, `api_key => ...`), JSON/config-də (`{"password":"..."}`, `'secret': '...'`), `Authorization:` və `Cookie:` başlıqları;
+- etiketdən sonrakı dəyər: düz mətndə (`parol: ...`, `password is ...`, `api_key => ...`), JSON/config-də (`{"password":"..."}`, `'secret': '...'`), `Authorization:` və `Cookie:` başlıqları etiket ətrafında `**Password**:`, `<b>parol</b>:` kimi format işarələri, böyük hərflə `ŞİFRƏ:` və `SECRET_KEY=` tipli adlar da tanınır; etiket tanınıbsa dəyərin uzunluğundan asılı olmayaraq (1 simvol da) maskalanır;
 - URL-də `user:parol@host`, sorğu parametrləri (`?token=`, `&sig=`), şəxsi açar bloku (PEM);
 - e-poçt (yalnız adi rejimdə).
 
@@ -70,7 +70,7 @@ Təsdiq addımları, alət çağırışları (ad, status, müddət; giriş məzm
 - Cari sorğuda modelə gedən mətn və istifadəçiyə qaytarılan cavab: model istifadəçinin real mətnini alır, yalnız yaddaşa yazılan nüsxə maskalanır.
 - Maskalamadan əvvəl saxlanmış köhnə məlumat geriyə təmizlənmir.
 
-**Məhdudiyyətlər:** yalnız tanınan formatlar və etiketlər tutulur. Prefiksi və etiketi olmayan açarlar (məs. Cloudflare API tokeni), `parolum 12345` kimi etiketsiz yazılış və telefon nömrələri tutulmur (telefon sifariş üçün lazımdır). Naxışların prefiksləri hələ rəsmi sənədlərlə yoxlanmayıb (Issue #5, ChatGPT hissəsi).
+**Məhdudiyyətlər:** yalnız tanınan formatlar və etiketlər tutulur. Prefiksi və etiketi olmayan açarlar (məs. Cloudflare API tokeni), `parolum 12345` və ya `password abc` kimi ayırıcısız yazılış, dəyərin növbəti sətirdə olması (`password:\nabc`), PGP şəxsi açar bloku, `curl -u user:parol` və telefon nömrələri tutulmur (telefon sifariş üçün lazımdır). Naxışların prefiksləri hələ rəsmi sənədlərlə yoxlanmayıb (Issue #5, ChatGPT hissəsi).
 
 ## Son iş qeydi (LAST_JOB)
 
