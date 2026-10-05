@@ -50,7 +50,7 @@ Təsdiq addımları, alət çağırışları (ad, status, müddət; giriş məzm
 
 `src/security/redact.js` tanınan formatları `[gizlədildi]` ilə əvəz edir: `sk-...`, `Bearer ...`, Meta (`EAA...`), GitHub, Slack, AWS, Google API açarı, JWT, `parol: ...` / `password=...` kimi etiketdən sonrakı dəyər və e-poçt.
 
-**Tətbiq olunur:** bilik bazası (başlıq, mətn, mənbə ünvanı; `redacted` sayı qeydə yazılır), söhbət tarixçəsi, iş qeydləri (`/api/jobs`), son iş qeydi (`lastJob`), audit jurnalı.
+**Tətbiq olunur:** bilik bazası (başlıq, mətn, mənbə ünvanı, etiketlər; `redacted` sayı qeydə yazılır), söhbət tarixçəsi, iş qeydləri (`/api/jobs`), son iş qeydi (`lastJob`), audit jurnalı.
 
 **Tətbiq OLUNMUR (qəsdən):**
 - Təsdiq qeydləri və təsdiq gözləyən qaralama (`state.pending`): Fərid nəyi təsdiq edirsə, onu olduğu kimi görməlidir.
@@ -62,6 +62,8 @@ Təsdiq addımları, alət çağırışları (ad, status, müddət; giriş məzm
 ## Son iş qeydi (LAST_JOB)
 
 Hər tapşırıqdan sonra sistem `state.lastJob` yazır: status, hər alt tapşırığın sahibi və qısa (maskalanmış) təlimatı. Növbəti sorğuda lider modelin sistem təlimatına `LAST_JOB` bloku əlavə olunur. İş bölgüsü haqqında suallara yalnız bu qeyddən cavab verilir, qeyd yoxdursa "qeyd yoxdur" deyilir. Köməkçi modelin cavabı və xətalar bu qeydə yazılmır.
+
+Qeyddəki sərbəst mətn (əvvəlki sorğu, planın təlimatı) **etibarsız** sayılır, çünki istifadəçi kopyalanmış xarici mətn yaza bilər, plan təlimatı isə modeldən gəlir. Promptda yalnız qısa təhlükəsiz simvollu hissə (id, sahib, status, asılılıq) sistem məlumatı kimi verilir (başqa dəyər `invalid` olur). Sərbəst mətn `<external_content>` qutusuna qoyulur və `UNTRUSTED_RULE` əlavə olunur. Şübhəli təlimat izi (`detectInjection`) olan sətir göstərilmir. Yaddaşdakı qeyd dəyişmir, süzgəc yalnız promptda tətbiq olunur. Məhdudiyyət: naxış axtarışı aşıla bilər, əsas müdafiə etibarsız qutu qaydasıdır (bax yuxarıdakı bölmə).
 
 ## Bilinən boşluqlar
 

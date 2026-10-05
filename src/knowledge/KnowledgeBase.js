@@ -75,8 +75,10 @@ export class KnowledgeBase {
     const title = rTitle.text;
     const text = rText.text;
     const rUrl = redactWithCount(item.source_url);
-    const redacted = rTitle.count + rText.count + rUrl.count;
-    const tags = (Array.isArray(item.tags) ? item.tags : []).map((t) => normalize(t).slice(0, 40)).filter(Boolean).slice(0, 10);
+    // Etiketlər də maskalanır: normalize durğu işarələrini silir ("sk-ant-..." -> "skant..."), ona görə maskalama normalize-dən ƏVVƏL aparılır.
+    const rTags = (Array.isArray(item.tags) ? item.tags : []).slice(0, 30).map((t) => redactWithCount(String(t === undefined || t === null ? "" : t).slice(0, 200)));
+    const redacted = rTitle.count + rText.count + rUrl.count + rTags.reduce((n, r) => n + r.count, 0);
+    const tags = rTags.map((r) => normalize(r.text).slice(0, 40)).filter(Boolean).slice(0, 10);
 
     const hash = await sha256Hex(normalize(title + " " + text));
     const wset = words(title + " " + text);
