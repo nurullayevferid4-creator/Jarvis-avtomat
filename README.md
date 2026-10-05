@@ -151,7 +151,7 @@ Böyük plan 4 mərhələyə bölünüb, hər biri ayrı PR və ayrı test ilə 
 ## Məhdudiyyətlər
 
 - Düyməyə basıb danışmaq rejimidir, canlı zəng deyil.
-- Shopify, Instagram, Telegram inteqrasiyaları hələ yoxdur. Paylaşım tapşırıqlarında yalnız qaralama hazırlanır.
+- Instagram, TikTok, YouTube, Telegram, Shopify üçün oxuma adapterləri və Telegram webhook kodu hazırdır (rəsmi sənədlə yoxlanıb), lakin **real hesabla sınanmayıb** və credential qoyulmayıb. Paylaşım/DM/yazma əməliyyatları açılmayıb; yeganə təsdiqli yazma Telegram mesajıdır. Bax `docs/WIRING.md`, `docs/KV_SETUP.md`.
 - Real API ilə sınaq hələ keçirilməyib (yuxarıya bax).
 - API açarlarını heç vaxt bu repo-ya yazma. Repo açıqdırsa hər kəs görür.
 Üçlü komanda testi: Fərid + Claude + ChatGPT

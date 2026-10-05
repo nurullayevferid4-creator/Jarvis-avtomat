@@ -3,6 +3,10 @@ name = "jarvis-avtomat"
 main = "worker.js"
 compatibility_date = "2026-09-01"
 
+# Dashboard-da əl ilə yazılmış GİZLİ OLMAYAN dəyişənləri (TELEGRAM_ALLOWED_CHAT_IDS, SHOPIFY_STORE_DOMAIN və s.) hər deploy-da silməsin.
+# Rəsmi sənəd: "Whether Wrangler should keep variables configured in the dashboard on deploy". Secret-lər bu ayardan asılı olmayaraq qorunur.
+keep_vars = true
+
 # Cloudflare Worker Previews (budaq/PR build-ləri) bu bloku tələb edir (sənədə görə boş ola bilər).
 # Boş blok: preview production ilə eyni ayarları alır, ayrıca ayar yoxdur.
 [previews]
@@ -10,7 +14,11 @@ compatibility_date = "2026-09-01"
 # Secrets (ANTHROPIC_API_KEY, OPENAI_API_KEY, PASSCODE) are NOT stored here.
 # Add them in the Cloudflare dashboard under the Worker's Settings > Variables and Secrets.
 
-# Optional memory across restarts: create a KV namespace, paste its id, then remove the leading #.
+# KV yaddaş (təsdiq qeydləri, bilik bazası, öyrənmə, lead-lər və Telegram təkrar-qorunması üçün; yoxdursa yaddaş yalnız cari prosesdə qalır).
+# Namespace ID-ni UYDURMAQ OLMAZ. Real ID yalnız Cloudflare hesabında namespace yaradılandan sonra alınır (bax docs/KV_SETUP.md):
+#   1) npx wrangler kv namespace create JARVIS_KV     (və ya Dashboard > Storage & Databases > KV > Create)
+#   2) çıxışdakı 32 simvollu id-ni aşağıya yaz, 3 sətirdəki "#" işarələrini sil, commit et.
+# ID yazılmamış bu blok açılarsa deploy uğursuz olur, ona görə şərhdə saxlanılır.
 # [[kv_namespaces]]
 # binding = "JARVIS_KV"
 # id = "PASTE_KV_NAMESPACE_ID"

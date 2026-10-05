@@ -10,7 +10,7 @@ import { createAudit } from "./audit/log.js";
 import { ApprovalCenter } from "./approval/center.js";
 import { ApprovalExecutor } from "./approval/executor.js";
 import { KnowledgeBase } from "./knowledge/KnowledgeBase.js";
-import { createWiredToolRegistry, grantedPermissions } from "./tools/integrationTools.js";
+import { createWiredToolRegistry, grantedPermissions, revokedPermissions } from "./tools/integrationTools.js";
 import { createFoundation } from "./foundation/index.js";
 
 const on = (v) => (v === undefined || v === null || v === "" ? true : !/^(0|false|off|no)$/i.test(String(v)));
@@ -39,6 +39,7 @@ export function createRuntime(env, { features, wiring = getWiringFeatures(env), 
 
   const toolCtx = () => ({
     permissions: grantedPermissions(env),
+    revoked: revokedPermissions(env),
     approvals: approvalsOn ? approvals : null,
     integrations: foundation.integrations,
     storage: foundation.storage,

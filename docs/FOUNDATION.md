@@ -1,6 +1,6 @@
 # JARVIS Foundation: gələcək inteqrasiyalar üçün skelet
 
-**Status: skelet. Heç bir real platforma bağlantısı yoxdur və heç nə mövcud sistemə qoşulmayıb.** Bu modullar `src/index.js`, orkestrator, alət reyestri, yaddaş, bilik bazası və təsdiq mərkəzi tərəfindən çağırılmır (`tests/foundation-safety.test.mjs` bunu yoxlayır). Real credential olmadan heç bir "inteqrasiya tamamlandı" demək olmaz.
+**Status (yenilənib): foundation skeletləri `src/wiring.js` vasitəsilə orkestratora, alət reyestrinə və təsdiq→icra axınına qoşulub; bax `docs/WIRING.md`.** Platforma adapterləri indi oxuma əməliyyatlarını rəsmi sənədlə yoxlanmış endpoint-lərlə icra edə bilir, lakin **heç biri real hesabla sınanmayıb**. Aşağıdakı cədvəl PR #11-dəki ilkin skelet vəziyyətini göstərir və tarixi qeyd kimi saxlanılıb. Real credential olmadan heç bir "inteqrasiya tamamlandı" demək olmaz.
 
 ## Quruluş
 

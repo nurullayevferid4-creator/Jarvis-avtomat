@@ -25,7 +25,7 @@ const VIDEO_FIELDS = "id,title,video_description,create_time,cover_image_url,sha
 export const TIKTOK_OPERATIONS = {
   "account.get": { kind: "read", description: "Hesab məlumatı (profil və statistika əlavə scope tələb edir)", input: { type: "object", properties: { include_profile: { type: "boolean" }, include_stats: { type: "boolean" } }, additionalProperties: false } },
   "videos.list": { kind: "read", description: "Videoların siyahısı (ictimai)", input: PAGE_INPUT },
-  "videos.get": { kind: "read", description: "Seçilmiş videoların məlumatı (max 20 id)", input: { type: "object", properties: { video_ids: { type: "array", maxItems: 20, items: { type: "string", minLength: 1, maxLength: 30 } } }, required: ["video_ids"], additionalProperties: false } },
+  "videos.get": { kind: "read", description: "Seçilmiş videoların məlumatı (max 20 id)", input: { type: "object", properties: { video_ids: { type: "array", minItems: 1, maxItems: 20, items: { type: "string", minLength: 1, maxLength: 30 } } }, required: ["video_ids"], additionalProperties: false } },
   "video.publish": { kind: "write", description: "Video paylaşımı (hazırlanmayıb)", input: { type: "object", properties: { title: { type: "string", maxLength: 150 } }, additionalProperties: false } },
 };
 

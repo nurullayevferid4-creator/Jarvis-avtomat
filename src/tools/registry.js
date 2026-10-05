@@ -81,9 +81,12 @@ export class ToolRegistry {
   }
 
   // Çatışan icazələrin siyahısı. APPROVAL_ONLY icazələr bu yoxlamada sayılmır: onlar təsdiq qapısı ilə qorunur.
+  // ctx.revoked (istəyə bağlı): geri götürülmüş icazələr. Bunlar APPROVAL_ONLY olsa belə çatışan sayılır (söndürmə açarı;
+  // artıq təsdiqlənmiş çağırışın icrası zamanı da təkrar yoxlanır).
   _missingPermissions(tool, ctx) {
     const granted = ctx.permissions || DEFAULT_PERMISSIONS;
-    return tool.permissions.filter((p) => !granted.includes(p) && !APPROVAL_ONLY_PERMISSIONS.includes(p));
+    const revoked = Array.isArray(ctx.revoked) ? ctx.revoked : [];
+    return tool.permissions.filter((p) => revoked.includes(p) || (!granted.includes(p) && !APPROVAL_ONLY_PERMISSIONS.includes(p)));
   }
 
   // Qaytarır: { ok, status, output?, errors?, error?, approval_id? }

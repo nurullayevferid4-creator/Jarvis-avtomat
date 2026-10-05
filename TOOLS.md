@@ -48,3 +48,7 @@ Siyasət bir yerdə dəyişdirilir: `src/policy.js`.
 ## Yeni alət əlavə etmək
 
 `builtin.js`-də `reg.register({...})` çağır, sxemləri və riski yaz. Qaydalara uymasa qeydiyyat xəta ilə dayanır. Yeni alət üçün `tests/tools.test.mjs`-ə test əlavə et.
+
+## İnteqrasiya, agent və storage alətləri
+
+`src/tools/integrationTools.js` platforma (Instagram, TikTok, YouTube, Telegram, Shopify), storage, LearningAgent və SalesAgent alətlərini eyni reyestrə qeyd edir. Yalnız rəsmi sənədlə yoxlanmış endpoint-lər alət olur. Siyahı, təsdiq tələbi və doğrulama səviyyəsi: `docs/WIRING.md`. Təsdiq tələb edən alətlər `run()` ilə icra olunmur; icra yalnız `executeApproved()` ilə, tək istifadəlik təsdiq sübutu ilə (`src/approval/executor.js`).

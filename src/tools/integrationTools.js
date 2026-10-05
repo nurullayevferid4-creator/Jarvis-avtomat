@@ -24,8 +24,12 @@ export const STORAGE_PERMISSIONS = Object.freeze(["read.storage", "write.storage
 
 // Standart olaraq verilən icazələr. REVOKED_PERMISSIONS (Worker dəyişəni, vergüllə) ilə hər biri sistemdən çıxarıla bilər:
 // çıxarılan icazə həm yeni çağırışı, həm də artıq təsdiqlənmiş çağırışın icrasını bloklayır (icazənin təkrar yoxlanması).
+export function revokedPermissions(env = {}) {
+  return String(env.REVOKED_PERMISSIONS || "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 50);
+}
+
 export function grantedPermissions(env = {}) {
-  const revoked = new Set(String(env.REVOKED_PERMISSIONS || "").split(",").map((s) => s.trim()).filter(Boolean));
+  const revoked = new Set(revokedPermissions(env));
   return [...DEFAULT_PERMISSIONS, ...INTEGRATION_READ_PERMISSIONS, ...SENSITIVE_READ_PERMISSIONS, ...AGENT_PERMISSIONS, ...STORAGE_PERMISSIONS].filter((p) => !revoked.has(p));
 }
 
@@ -229,7 +233,8 @@ function salesTools(reg) {
         const stored = await need(ctx, "leads").get(input.lead_id);
         if (!stored) throw new AgentError("not_found", "lead tapılmadı");
         const { id, created_at, ...rest } = stored; // eslint-disable-line no-unused-vars
-        lead = rest;
+        // Saxlanmış qeyddə boş sahələr null ola bilər; schema onları qəbul etmir
+        lead = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== null && v !== undefined));
       }
       if (!lead) throw new AgentError("invalid_input", "lead və ya lead_id lazımdır");
       const v = validate(LEAD_SCHEMA, lead);

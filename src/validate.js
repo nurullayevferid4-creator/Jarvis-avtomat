@@ -1,7 +1,7 @@
 // Kiçik sxem yoxlayıcı (kənar paket yoxdur).
 // JSON Schema-nın sadə alt çoxluğunu başa düşür:
 // type (string|number|integer|boolean|object|array|null), properties, required,
-// additionalProperties:false, enum, items, minLength, maxLength, minimum, maximum, maxItems.
+// additionalProperties:false, enum, items, minLength, maxLength, minimum, maximum, minItems, maxItems.
 
 function typeOf(v) {
   if (v === null) return "null";
@@ -40,6 +40,7 @@ function check(schema, v, path, errors) {
   }
 
   if (Array.isArray(v)) {
+    if (schema.minItems !== undefined && v.length < schema.minItems) errors.push(path + ": çox az element var");
     if (schema.maxItems !== undefined && v.length > schema.maxItems) errors.push(path + ": çox element var");
     if (schema.items) v.forEach((item, i) => check(schema.items, item, path + "[" + i + "]", errors));
   }
