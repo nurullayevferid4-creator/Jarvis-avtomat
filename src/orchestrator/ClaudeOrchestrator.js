@@ -18,10 +18,15 @@ import { resolvePending } from "../approval/gate.js";
 import { CallBudget } from "../guards/budget.js";
 import { buildLeadSystem, FINAL_SYSTEM, FACT_CHECK_SYSTEM } from "../prompts.js";
 import { wrapExternal } from "../security/sanitize.js";
+import { redactText, redactSecrets } from "../security/redact.js";
 
 // Köməkçi modelin (məs. veb axtarışlı OpenAI) cavabı xarici məzmun sayılır:
 // başqa modelə verilərkən <external_content> qutusuna qoyulur, əmr kimi qəbul edilmir.
 const HELPER_MAX_CHARS = 20000;
+
+// Alt tapşırıq id-si modeldən gəlir və istifadəçi mətnindəki qısa parolu belə əks etdirə bilər. Uzunluq və simvol süzgəci bunu
+// tutmur. Ona görə yaddaşa (iş qeydi, lastJob) modelin id-si YAZILMIR, yalnız sıra nömrəsindən yaranan kanonik "t<N>" yazılır.
+const safeTaskId = (id, i) => "t" + (i + 1);
 
 export class ClaudeOrchestrator {
   // approvals (istəyə bağlı): təsdiq mərkəzi. Verilməsə köhnə davranış dəyişmir.
@@ -72,7 +77,7 @@ export class ClaudeOrchestrator {
           done[t.id] = g.text;
         } catch (e) {
           t.status = "error";
-          t.error = String((e && e.message) || e).slice(0, 200);
+          t.error = String((e && e.message) || e).slice(0, 4000); // 4000 yalnız CPU üçündür: yaddaşa yazılanda ƏVVƏL maskalanır, sonra kəsilir (persistedTasks)
         }
       }));
     }
@@ -107,12 +112,38 @@ export class ClaudeOrchestrator {
         t.flagged = t.flagged || g.flagged;
         t.web = out.web;
       } catch (e) { /* ilk cavab qalır */ }
-      t.note = "Yoxlama qeydi: " + String(i.problem).slice(0, 160);
+      t.note = "Yoxlama qeydi: " + String(i.problem).slice(0, 4000); // istifadəçiyə 175, yaddaşa maskalamadan sonra 175 simvol (publicTasks/persistedTasks)
     }
   }
 
   static publicTasks(tasks) {
-    return tasks.map((t) => ({ id: t.id, owner: t.owner, instruction: t.instruction, status: t.status, error: t.error || null, note: t.note || null }));
+    return tasks.map((t) => ({ id: t.id, owner: t.owner, instruction: t.instruction, status: t.status, error: t.error ? String(t.error).slice(0, 200) : null, note: t.note ? String(t.note).slice(0, 175) : null }));
+  }
+
+  // Yaddaşa (iş qeydlərinə) yazılan variant: məxfi məlumat maskalanır. İstifadəçiyə qaytarılan cavab dəyişmir.
+  static persistedTasks(tasks) {
+    // Xam tapşırıqlardan qurulur (publicTasks-dan yox): publicTasks mətni kəsir, kəsmə isə maskalamadan SONRA olmalıdır.
+    return tasks.map((t, i) => ({
+      id: safeTaskId(t.id, i),
+      owner: t.owner,
+      instruction: redactText(String(t.instruction === undefined || t.instruction === null ? "" : t.instruction)),
+      status: t.status,
+      error: t.error ? redactText(String(t.error)).slice(0, 200) : null,
+      note: t.note ? redactText(String(t.note)).slice(0, 175) : null,
+    }));
+  }
+
+  // Növbəti sorğuda lider modelə verilən "son iş" qeydi: kim hansı alt tapşırığı etdi.
+  // Yalnız real icra nəticəsi (sahib, status, qısa təlimat) yazılır. Köməkçinin cavabı və xətalar yazılmır.
+  static lastJobRecord(text, status, tasks) {
+    // id və depends modeldən gəlir: modelin id-si saxlanmır, kanonik t<N> yazılır, depends yalnız qeyddəki tapşırıqlara yönələ bilər.
+    const ids = new Map(tasks.map((t, i) => [t.id, safeTaskId(t.id, i)]));
+    return {
+      ts: new Date().toISOString(),
+      status,
+      request: redactText(text).slice(0, 200),
+      tasks: tasks.map((t) => ({ id: ids.get(t.id), owner: t.owner, status: t.status, depends: (t.depends || []).map((d) => ids.get(d)).filter(Boolean), instruction: redactText(t.instruction).slice(0, 160) })),
+    };
   }
 
   async handle(text) {
@@ -133,12 +164,15 @@ export class ClaudeOrchestrator {
     }
 
     const hist = state.history.slice(-8);
-    const leadRaw = await this.lead.complete(buildLeadSystem(this.registry.helpers(), this.limits), [...hist, { role: "user", content: text }], 1200, ctx);
+    const leadRaw = await this.lead.complete(buildLeadSystem(this.registry.helpers(), this.limits, state.lastJob), [...hist, { role: "user", content: text }], 1200, ctx);
     let plan;
-    try { plan = parseJson(leadRaw); } catch (e) { plan = { mode: "chat", reply: leadRaw.slice(0, 600) }; }
+    try { plan = parseJson(leadRaw); } catch (e) { plan = { mode: "chat", reply: redactText(leadRaw).slice(0, 600) }; }
 
     const remember = async (spoken) => {
-      state.history.push({ role: "user", content: text }, { role: "assistant", content: spoken });
+      // Yaddaşa maskalanmış mətn yazılır. Cari sorğuda modelə isə istifadəçinin öz mətni gedir.
+      // Model cavabı string olmaya bilər (obyekt, massiv): redactText string olmayanı dəyişmədən qaytarır, ona görə əvvəlcə mətnə çevrilir.
+      const asText = (v) => (typeof v === "string" ? v : v === undefined || v === null ? "" : JSON.stringify(v));
+      state.history.push({ role: "user", content: redactText(asText(text)) }, { role: "assistant", content: redactText(asText(spoken)) });
       state.history = state.history.slice(-12);
       await this.store.save(state);
     };
@@ -175,7 +209,7 @@ export class ClaudeOrchestrator {
     let status = ok === 0 ? "blocked" : ok < tasks.length ? "partial" : "achieved";
     if (plan.external_action && status === "achieved") status = "pending_approval";
 
-    const results = tasks.map((t) => "[" + t.id + " / " + t.owner + " / " + t.status + "]\n" + (t.status === "done" ? this._guard(t, t.result).text : "XƏTA: " + t.error)).join("\n\n");
+    const results = tasks.map((t) => "[" + t.id + " / " + t.owner + " / " + t.status + "]\n" + (t.status === "done" ? this._guard(t, t.result).text : "XƏTA: " + String(t.error).slice(0, 200))).join("\n\n");
     let spoken;
     let screen;
     try {
@@ -205,14 +239,18 @@ export class ClaudeOrchestrator {
       spoken += " «" + plan.external_action + "» üçün təsdiq lazımdır. İcra edim? Hə və ya yox de.";
       if (this.approvals) {
         try {
-          const ap = await this.approvals.create({ action: plan.external_action, content: screen.slice(0, 4000), risk: "medium", source: "orchestrator" });
+          // screen tam ötürülür: təsdiq mərkəzi ƏVVƏL maskalayır, sonra 4000-ə kəsir (kəsmə secret-in ortasına düşməsin)
+          const ap = await this.approvals.create({ action: plan.external_action, content: screen, risk: "medium", source: "orchestrator" });
           approvalId = ap.id;
         } catch (e) { /* qeyd açılmasa da söhbətdəki təsdiq qapısı işləyir */ }
       }
-      state.pending = { goal: text, external: plan.external_action, draft: screen.slice(0, 4000), approval_id: approvalId };
+      // external və draft təsdiq qeydi ilə eyni məzmundur: Fərid nəyi təsdiq edirsə onu görməlidir, ona görə e-poçt kimi adi məlumat qalır.
+      // Amma token və parol (secrets-only maskalama) heç vaxt qaralamada saxlanmır. Maskalama kəsmədən ƏVVƏL aparılır.
+      state.pending = { goal: redactText(text), external: redactSecrets(String(plan.external_action)), draft: redactSecrets(screen).slice(0, 4000), approval_id: approvalId };
     }
+    state.lastJob = ClaudeOrchestrator.lastJobRecord(text, status, tasks);
     await remember(spoken);
-    await this.store.saveJob({ ts: new Date().toISOString(), request: text, status, spoken, tasks: ClaudeOrchestrator.publicTasks(tasks) });
+    await this.store.saveJob({ ts: new Date().toISOString(), request: redactText(text), status, spoken: redactText(spoken), tasks: ClaudeOrchestrator.persistedTasks(tasks) });
     const result = { status, spoken, screen, tasks: ClaudeOrchestrator.publicTasks(tasks) };
     if (approvalId) result.approval_id = approvalId;
     return result;

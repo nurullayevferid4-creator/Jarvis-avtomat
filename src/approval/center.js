@@ -8,6 +8,7 @@
 
 import { RISKS, APPROVAL_TTL_DAYS } from "../policy.js";
 import { makeId, isValidId } from "../state/store.js";
+import { redactSecrets } from "../security/redact.js";
 
 const DAY_MS = 86400000;
 const MAX_CONTENT = 4000;
@@ -25,7 +26,8 @@ export class ApprovalCenter {
 
   async create({ action, content, risk = "medium", source = "system" }) {
     if (!RISKS.includes(risk)) throw new Error("risk düzgün deyil");
-    const a = String(action || "").trim().slice(0, 200);
+    // Token və parol təsdiq qeydinə də düşmür (e-poçt kimi adi məlumat qalır: Fərid nəyi təsdiq edirsə onu görməlidir). Maskalama kəsmədən əvvəldir.
+    const a = redactSecrets(String(action || "").trim()).slice(0, 200);
     if (!a) throw new Error("əməliyyat adı boşdur");
     const t = this.now();
     const id = makeId(t);
@@ -34,7 +36,7 @@ export class ApprovalCenter {
       ts: new Date(t).toISOString(),
       status: "pending",
       action: a,
-      content: String(content || "").slice(0, MAX_CONTENT),
+      content: redactSecrets(String(content || "")).slice(0, MAX_CONTENT),
       risk,
       source: String(source).slice(0, 60),
       revisions: 0,
@@ -86,7 +88,7 @@ export class ApprovalCenter {
     } else if (decision === "edit") {
       const c = String(content || "").trim();
       if (!c) return { ok: false, error: "content_required" };
-      rec.content = c.slice(0, MAX_CONTENT);
+      rec.content = redactSecrets(c).slice(0, MAX_CONTENT);
       rec.revisions += 1;
     } else {
       return { ok: false, error: "bad_decision" };

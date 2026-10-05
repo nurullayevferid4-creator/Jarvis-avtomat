@@ -5,6 +5,7 @@
 // giriş yoxlanır, icazə yoxlanır, təsdiq tələb olunarsa alət İCRA OLUNMUR (təsdiq qeydi açılır),
 // çıxış yoxlanır, nəticə audit jurnalına yazılır.
 
+import { redactText } from "../security/redact.js";
 import { validate } from "../validate.js";
 import { RISKS, RISK_POLICY, DEFAULT_PERMISSIONS, APPROVAL_ONLY_PERMISSIONS, FORBIDDEN_PERMISSIONS } from "../policy.js";
 
@@ -112,10 +113,10 @@ export class ToolRegistry {
         await this._log("tool.done", { tool: name, ms: Date.now() - started, attempts: attempt + 1 });
         return { ok: true, status: "done", output: out };
       } catch (e) {
-        lastError = String((e && e.message) || e).slice(0, 200);
+        lastError = String((e && e.message) || e).slice(0, 4000); // audit əvvəl maskalayır, sonra kəsir
         if (e && e.timeout) {
           await this._log("tool.timeout", { tool: name });
-          return { ok: false, status: "timeout", error: lastError };
+          return { ok: false, status: "timeout", error: redactText(lastError).slice(0, 200) };
         }
         if (e && e.name === "UnsafeUrlError") break; // təkrarın mənası yoxdur
       } finally {
@@ -123,6 +124,6 @@ export class ToolRegistry {
       }
     }
     await this._log("tool.error", { tool: name, error: lastError });
-    return { ok: false, status: "error", error: lastError };
+    return { ok: false, status: "error", error: redactText(lastError).slice(0, 200) };
   }
 }

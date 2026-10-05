@@ -46,6 +46,40 @@ Naxışlardakı bütün təkrarlar məhduddur və yoxlanan mətn 20 000 simvolla
 
 Təsdiq addımları, alət çağırışları (ad, status, müddət; giriş məzmunu yox), söhbət sorğuları (status, simvol sayı) `/api/audit` ilə görünür. Jurnal 30 gün saxlanır. Jurnal yazılmasa əsas iş dayanmır.
 
+## Yaddaşda məxfi məlumat (maskalama)
+
+`src/security/redact.js` tanınan formatları `[gizlədildi]` ilə əvəz edir:
+- prefiksli açarlar: `sk-...`, Stripe (`sk_live_`), `Bearer ...`, Meta (`EAA...`), GitHub, Slack, AWS, Google API açarı, JWT, Telegram bot tokeni, Shopify tokeni;
+- etiketdən sonrakı dəyər: düz mətndə (`parol: ...`, `password is ...`, `api_key => ...`), JSON/config-də (`{"password":"..."}`, `'secret': '...'`), `Authorization:` və `Cookie:` başlıqları etiket ətrafında `**Password**:`, `<b>parol</b>:` kimi format işarələri, böyük hərflə `ŞİFRƏ:` və `SECRET_KEY=` tipli adlar da tanınır; etiket tanınıbsa dəyərin uzunluğundan asılı olmayaraq (1 simvol da) maskalanır;
+- URL-də `user:parol@host`, sorğu parametrləri (`?token=`, `&sig=`), şəxsi açar bloku (PEM);
+- e-poçt (yalnız adi rejimdə).
+
+**Əsas qaydalar:**
+- Parol tipli etiketdən (`parol`, `şifrə`, `пароль`, `password`, `passphrase`, `pwd`, `passcode`, `authorization`, `cookie`) sonrakı dəyər boşluqlu ola bilər: dırnaqlıdırsa dırnağa qədər, deyilsə həmin sətrin sonuna qədər maskalanır. Bu, sətrin qalan adi mətnini də örtə bilər, məxfilik üçün qəsdən seçilmiş güzəştdir. `token`, `secret`, `api key`, `açar` kimi etiketlərdə tək söz (JSON-da dırnaqlı dəyər) maskalanır.
+- **Uzunluq limiti yoxdur.** Limit olsaydı uzun secret-in quyruğu açıq qalardı. Başlanğıc yalnız söz sərhədində ola bilər və ya uyğunluq tapılanda sətrin sonuna qədər işlənir, ona görə iş xəttidir (`tests/redact-hardening.test.mjs` 200 000 simvollu pozucu mətnlərlə ölçür).
+- **Maskalama həmişə kəsmədən əvvəl aparılır** (bilik bazası başlıq/mətn/etiket, audit, təsdiq qeydi, qaralama). Kəsmə secret-in ortasına düşsə yarımçıq secret qalardı.
+- Mətn əvvəlcə kanonikləşdirilir: görünməz simvollar silinir və NFKC tətbiq olunur (tam enli `ｐａｓｓｗｏｒｄ` kimi yazılışlar tutulsun). Bu, saxlanan mətndəki uyğunluq simvollarını (məs. ligatur) adi formaya çevirə bilər.
+- `[gizlədildi]` mətni yazmaqla maskadan qaçmaq mümkün deyil: yalnız dəyərin özü tam maskadırsa "artıq maskalanıb" sayılır.
+- Şübhə olduqda daha çox maskalanır, heç vaxt az yox. İkinci keçid heç vaxt sirri açmır (bəzi dırnaqlı hallarda sətrin qalanını da örtə bilər).
+
+**Tətbiq olunur:** bilik bazası (başlıq, mətn, mənbə ünvanı, etiketlər; `redacted` sayı qeydə yazılır), söhbət tarixçəsi (model cavabı string olmasa da mətnə çevrilir), iş qeydləri (`/api/jobs`), son iş qeydi (`lastJob`), audit jurnalı (dəyərlər və obyekt açarları).
+
+**Secrets-only rejimi (e-poçt qalır):** təsdiq qeydləri (`action`, `content`, redaktə daxil) və təsdiq gözləyən qaralama (`state.pending.external/draft`). Fərid nəyi təsdiq edirsə onu görməlidir, müştəri e-poçtu qaralamanın qanuni hissəsi ola bilər, amma token və parol heç vaxt saxlanmır.
+
+**Tətbiq OLUNMUR (qəsdən):**
+- Cari sorğuda modelə gedən mətn və istifadəçiyə qaytarılan cavab: model istifadəçinin real mətnini alır, yalnız yaddaşa yazılan nüsxə maskalanır.
+- Maskalamadan əvvəl saxlanmış köhnə məlumat geriyə təmizlənmir.
+
+**Məhdudiyyətlər:** yalnız tanınan formatlar və etiketlər tutulur. Prefiksi və etiketi olmayan açarlar (məs. Cloudflare API tokeni), `parolum 12345` və ya `password abc` kimi ayırıcısız yazılış, dəyərin növbəti sətirdə olması (`password:\nabc`), PGP şəxsi açar bloku, `curl -u user:parol` və telefon nömrələri tutulmur (telefon sifariş üçün lazımdır). Naxışların prefiksləri hələ rəsmi sənədlərlə yoxlanmayıb (Issue #5, ChatGPT hissəsi).
+
+## Son iş qeydi (LAST_JOB)
+
+Hər tapşırıqdan sonra sistem `state.lastJob` yazır: status, hər alt tapşırığın sahibi və qısa (maskalanmış) təlimatı. Növbəti sorğuda lider modelin sistem təlimatına `LAST_JOB` bloku əlavə olunur. İş bölgüsü haqqında suallara yalnız bu qeyddən cavab verilir, qeyd yoxdursa "qeyd yoxdur" deyilir. Köməkçi modelin cavabı və xətalar bu qeydə yazılmır.
+
+Alt tapşırığın `id` və `depends` sahələri modeldən gəlir, ona görə iş qeydlərinə və son iş qeydinə yazılanda modelin id-si heç vaxt saxlanmır (qısa parol da id kimi gələ bilər), yalnız sıra nömrəsindən yaranan `t<N>` yazılır, `depends` yalnız qeyddəki tapşırıqlara yönələ bilər.
+
+Qeyddəki sərbəst mətn (əvvəlki sorğu, planın təlimatı) **etibarsız** sayılır, çünki istifadəçi kopyalanmış xarici mətn yaza bilər, plan təlimatı isə modeldən gəlir. Promptda yalnız qısa təhlükəsiz simvollu hissə (id, sahib, status, asılılıq) sistem məlumatı kimi verilir (başqa dəyər `invalid` olur). Sərbəst mətn `<external_content>` qutusuna qoyulur və `UNTRUSTED_RULE` əlavə olunur. Şübhəli təlimat izi (`detectInjection`) olan sətir göstərilmir. Yaddaşdakı qeyd dəyişmir, süzgəc yalnız promptda tətbiq olunur. Məhdudiyyət: naxış axtarışı aşıla bilər, əsas müdafiə etibarsız qutu qaydasıdır (bax yuxarıdakı bölmə).
+
 ## Bilinən boşluqlar
 
 - `.github/workflows/claude.yml` `@claude` ilə işə düşür və `ANTHROPIC_API_KEY` GitHub Secret-indən istifadə edir. Repo açıq olduğu üçün kimin bu workflow-u işə sala biləcəyi **hələ yoxlanmayıb**. Ayrıca baxılmalıdır.
