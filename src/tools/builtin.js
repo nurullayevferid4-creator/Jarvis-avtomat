@@ -43,7 +43,7 @@ export function createDefaultToolRegistry({ audit = null, approvals = null } = {
     timeoutMs: 8000,
     requiresApproval: false,
     async handler(input, ctx) {
-      return { items: await ctx.knowledge.search(input.query, { limit: input.limit || 5 }) };
+      return { items: await ctx.knowledge.search(input.query, { limit: input.limit || 5, ...(ctx.knowledgeWindow ? { window: ctx.knowledgeWindow } : {}) }) };
     },
   });
 

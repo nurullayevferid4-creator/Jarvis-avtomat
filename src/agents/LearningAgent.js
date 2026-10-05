@@ -112,6 +112,13 @@ export class LearningAgent {
 
   async getProposal(id) { return await this.storage.get("proposal-" + id); }
 
+  async listProposals({ limit = 50 } = {}) {
+    const { keys } = await this.storage.list({ prefix: "proposal-", limit });
+    const out = [];
+    for (const k of keys) { const r = await this.storage.get(k); if (r) out.push(r); }
+    return out;
+  }
+
   // Qayda yalnız Fərid-in təsdiqi yoxlanıb `true` qaytarılandan sonra "approved" olur. Standart yoxlama həmişə rədd edir.
   async approveProposal(id, { approvalId } = {}) {
     const p = await this.getProposal(id);

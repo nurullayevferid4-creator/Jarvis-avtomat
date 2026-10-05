@@ -112,7 +112,7 @@ export class ToolRegistry {
         action: tool.name,
         content: JSON.stringify(input),
         risk: tool.risk,
-        source: "tool",
+        source: typeof ctx.source === "string" && /^[a-z_]{2,20}$/.test(ctx.source) ? ctx.source : "tool",
         tool: tool.name,
         input,
         input_hash: await hashInput(input),
@@ -155,6 +155,7 @@ export class ToolRegistry {
     const name = tool.name;
     const started = Date.now();
     let lastError = "";
+    let lastCode = null;
     for (let attempt = 0; attempt <= retries; attempt++) {
       let timer;
       try {
@@ -171,6 +172,7 @@ export class ToolRegistry {
         return { ok: true, status: "done", output: out };
       } catch (e) {
         lastError = String((e && e.message) || e).slice(0, 200);
+        lastCode = e && typeof e.code === "string" && /^[a-z_]{3,40}$/.test(e.code) ? e.code : null;
         if (e && e.timeout) {
           await this._log("tool.timeout", { tool: name });
           return { ok: false, status: "timeout", error: lastError };
@@ -180,7 +182,7 @@ export class ToolRegistry {
         clearTimeout(timer);
       }
     }
-    await this._log("tool.error", { tool: name, error: lastError });
-    return { ok: false, status: "error", error: lastError };
+    await this._log("tool.error", { tool: name, error: lastError, code: lastCode });
+    return { ok: false, status: "error", error: lastError, ...(lastCode ? { code: lastCode } : {}) };
   }
 }

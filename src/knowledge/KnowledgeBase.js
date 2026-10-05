@@ -107,10 +107,11 @@ export class KnowledgeBase {
   }
 
   // Sadə açar söz axtarışı: başlıq > teq > mətn, sonra relevance və confidence.
-  async search(query, { limit = 5, type } = {}) {
+  // window (istəyə bağlı): neçə ən son qeydə baxılsın (standart 40). Orkestrator hər sorğuda axtardığı üçün KV alt sorğu limitinə görə kiçik pəncərə verir.
+  async search(query, { limit = 5, type, window = SEARCH_WINDOW } = {}) {
     const q = [...words(query)];
     if (!q.length) return [];
-    const docs = await this.store.listDocs("knowledge", SEARCH_WINDOW);
+    const docs = await this.store.listDocs("knowledge", Math.min(SEARCH_WINDOW, Math.max(1, window | 0)));
     const scored = [];
     for (const d of docs) {
       if (type && d.type !== type) continue;
