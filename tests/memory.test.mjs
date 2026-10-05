@@ -341,3 +341,66 @@ test("A (audit): JSON ilə göndərilən parol/api_key (uzun quyruqlu) tarixçə
   await talk(env, "necə böldün");
   assert.ok(!/hunter2x|k9k9|QUYRUQ9z/.test(leadCalls(calls).at(-1).body.system + JSON.stringify(leadCalls(calls).at(-1).body.messages)), "növbəti sorğuda secret promptda görünür");
 });
+
+// ---- PR #6 Codex raund 1/8: kəsmə maskalamadan SONRA (qaralama, xəta/qeyd, lead cavabı, alət xətası) ----
+
+const JWTP = "ey" + "J" + rep("a", 20) + "." + rep("b", 20) + "." + rep("c", 20);
+
+test("B: təsdiq qaralaması 4000 sərhədində secret-i kəsib açıq buraxmır (pending, təsdiq mərkəzi, 'Hə')", async () => {
+  for (const secret of [ANT, JWTP]) {
+    for (const pad of [3985, 3990, 3995, 3999]) {
+      const draft = rep("x", pad) + " " + secret + " son";
+      installFetch(mutableHandler({ mode: "task", subtasks: [task("t1", "claude", "Hazırla")], external_action: "Yaz" }, draft).handler);
+      _resetMemoryForTests();
+      const env = baseEnv();
+      await talk(env, "Müştəriyə yaz");
+      const state = await createStore(env).load();
+      const ap = await (await worker.fetch(new Request("https://x.dev/api/approvals?status=pending", { headers: { "x-passcode": "pw" } }), env)).json();
+      const all = JSON.stringify({ p: state.pending, a: ap.approvals });
+      assert.ok(!/sk-|Ab12Cd|eyJ|aaaaaaaa/.test(all.replace(/x{20,}/g, "")), "pad " + pad + ": yarımçıq secret qalıb");
+    }
+  }
+});
+
+test("B: tapşırıq xətası və yoxlama qeydi 200/175 sərhədində secret-i açıq buraxmır (iş qeydi və lastJob)", () => {
+  for (const pad of [170, 185, 190, 195, 199]) {
+    const tasks = [{ id: "t1", owner: "gpt", status: "failed", depends: [], instruction: "a", error: rep("e", pad) + " " + ANT }];
+    const persisted = JSON.stringify(ClaudeOrchestrator.persistedTasks(tasks));
+    assert.ok(!/sk-|Ab12Cd/.test(persisted), "xəta pad " + pad + ": " + persisted.slice(0, 80));
+    const notes = [{ id: "t1", owner: "gpt", status: "done", depends: [], instruction: "a", note: "Yoxlama qeydi: " + rep("n", pad - 20) + " " + ANT }];
+    assert.ok(!/sk-|Ab12Cd/.test(JSON.stringify(ClaudeOrchestrator.persistedTasks(notes))), "qeyd pad " + pad);
+  }
+  const pub = ClaudeOrchestrator.publicTasks([{ id: "t1", owner: "gpt", status: "failed", depends: [], instruction: "a", error: rep("e", 3000) }]);
+  assert.ok(String(pub[0].error).length <= 200 + 10, "istifadəçiyə qısa xəta göstərilir");
+});
+
+test("B: JSON olmayan lead cavabı 600 sərhədində secret-i açıq buraxmır", async () => {
+  for (const pad of [570, 590, 595, 599]) {
+    _resetMemoryForTests();
+    const raw = rep("y", pad) + " " + ANT + " son";
+    installFetch((u, body) => (u.includes("api.anthropic.com") ? claudeText(raw) : standardHandler({ plan: { mode: "chat", reply: "x" } })(u, body)));
+    const env = baseEnv();
+    const res = await (await talk(env, "salam")).json();
+    const { history } = await createStore(env).load();
+    assert.ok(!/sk-|Ab12Cd/.test(JSON.stringify(res) + JSON.stringify(history)), "pad " + pad);
+  }
+});
+
+test("B: alət xətası mesajı 200/300 sərhədində secret-i açıq buraxmır (audit)", async () => {
+  const { ToolRegistry } = await import("../src/tools/registry.js");
+  const OBJ = { type: "object", additionalProperties: false, properties: {} };
+  for (const pad of [150, 185, 195, 199, 295]) {
+    const store = createStore({});
+    const audit = createAudit(store);
+    const tools = new ToolRegistry({ audit });
+    tools.register({
+      name: "demo.tool", description: "demo", inputSchema: OBJ,
+      outputSchema: { type: "object", required: ["v"], properties: { v: { type: "integer" } } },
+      permissions: ["read.knowledge"], risk: "low", requiresApproval: false, retries: 0,
+      handler: async () => { throw new Error(rep("e", pad) + " " + ANT); },
+    });
+    const res = await tools.run("demo.tool", {}, { permissions: ["read.knowledge"] });
+    const all = JSON.stringify(res) + JSON.stringify(await audit.list(20));
+    assert.ok(!/sk-|Ab12Cd/.test(all), "pad " + pad + ": " + all.slice(0, 200));
+  }
+});

@@ -77,7 +77,7 @@ export class ClaudeOrchestrator {
           done[t.id] = g.text;
         } catch (e) {
           t.status = "error";
-          t.error = String((e && e.message) || e).slice(0, 200);
+          t.error = String((e && e.message) || e).slice(0, 4000); // 4000 yalnız CPU üçündür: yaddaşa yazılanda ƏVVƏL maskalanır, sonra kəsilir (persistedTasks)
         }
       }));
     }
@@ -112,17 +112,25 @@ export class ClaudeOrchestrator {
         t.flagged = t.flagged || g.flagged;
         t.web = out.web;
       } catch (e) { /* ilk cavab qalır */ }
-      t.note = "Yoxlama qeydi: " + String(i.problem).slice(0, 160);
+      t.note = "Yoxlama qeydi: " + String(i.problem).slice(0, 4000); // istifadəçiyə 175, yaddaşa maskalamadan sonra 175 simvol (publicTasks/persistedTasks)
     }
   }
 
   static publicTasks(tasks) {
-    return tasks.map((t) => ({ id: t.id, owner: t.owner, instruction: t.instruction, status: t.status, error: t.error || null, note: t.note || null }));
+    return tasks.map((t) => ({ id: t.id, owner: t.owner, instruction: t.instruction, status: t.status, error: t.error ? String(t.error).slice(0, 200) : null, note: t.note ? String(t.note).slice(0, 175) : null }));
   }
 
   // Yaddaşa (iş qeydlərinə) yazılan variant: məxfi məlumat maskalanır. İstifadəçiyə qaytarılan cavab dəyişmir.
   static persistedTasks(tasks) {
-    return ClaudeOrchestrator.publicTasks(tasks).map((t, i) => ({ ...t, id: safeTaskId(t.id, i), instruction: redactText(t.instruction), error: redactText(t.error), note: redactText(t.note) }));
+    // Xam tapşırıqlardan qurulur (publicTasks-dan yox): publicTasks mətni kəsir, kəsmə isə maskalamadan SONRA olmalıdır.
+    return tasks.map((t, i) => ({
+      id: safeTaskId(t.id, i),
+      owner: t.owner,
+      instruction: redactText(String(t.instruction === undefined || t.instruction === null ? "" : t.instruction)),
+      status: t.status,
+      error: t.error ? redactText(String(t.error)).slice(0, 200) : null,
+      note: t.note ? redactText(String(t.note)).slice(0, 175) : null,
+    }));
   }
 
   // Növbəti sorğuda lider modelə verilən "son iş" qeydi: kim hansı alt tapşırığı etdi.
@@ -158,7 +166,7 @@ export class ClaudeOrchestrator {
     const hist = state.history.slice(-8);
     const leadRaw = await this.lead.complete(buildLeadSystem(this.registry.helpers(), this.limits, state.lastJob), [...hist, { role: "user", content: text }], 1200, ctx);
     let plan;
-    try { plan = parseJson(leadRaw); } catch (e) { plan = { mode: "chat", reply: leadRaw.slice(0, 600) }; }
+    try { plan = parseJson(leadRaw); } catch (e) { plan = { mode: "chat", reply: redactText(leadRaw).slice(0, 600) }; }
 
     const remember = async (spoken) => {
       // Yaddaşa maskalanmış mətn yazılır. Cari sorğuda modelə isə istifadəçinin öz mətni gedir.
@@ -201,7 +209,7 @@ export class ClaudeOrchestrator {
     let status = ok === 0 ? "blocked" : ok < tasks.length ? "partial" : "achieved";
     if (plan.external_action && status === "achieved") status = "pending_approval";
 
-    const results = tasks.map((t) => "[" + t.id + " / " + t.owner + " / " + t.status + "]\n" + (t.status === "done" ? this._guard(t, t.result).text : "XƏTA: " + t.error)).join("\n\n");
+    const results = tasks.map((t) => "[" + t.id + " / " + t.owner + " / " + t.status + "]\n" + (t.status === "done" ? this._guard(t, t.result).text : "XƏTA: " + String(t.error).slice(0, 200))).join("\n\n");
     let spoken;
     let screen;
     try {
@@ -231,7 +239,8 @@ export class ClaudeOrchestrator {
       spoken += " «" + plan.external_action + "» üçün təsdiq lazımdır. İcra edim? Hə və ya yox de.";
       if (this.approvals) {
         try {
-          const ap = await this.approvals.create({ action: plan.external_action, content: screen.slice(0, 4000), risk: "medium", source: "orchestrator" });
+          // screen tam ötürülür: təsdiq mərkəzi ƏVVƏL maskalayır, sonra 4000-ə kəsir (kəsmə secret-in ortasına düşməsin)
+          const ap = await this.approvals.create({ action: plan.external_action, content: screen, risk: "medium", source: "orchestrator" });
           approvalId = ap.id;
         } catch (e) { /* qeyd açılmasa da söhbətdəki təsdiq qapısı işləyir */ }
       }
