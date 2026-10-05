@@ -40,7 +40,7 @@ Naxışlardakı bütün təkrarlar məhduddur və yoxlanan mətn 20 000 simvolla
 ## Əməliyyat qoruması
 
 - Paylaşım, mesaj göndərmə, pul, silmə, deploy, qiymət/stok dəyişikliyi, sifariş: `src/policy.js` bunları `APPROVAL_ONLY_PERMISSIONS` kimi saxlayır. Belə icazəsi olan alət `high` riskdə olmalı və təsdiq tələb etməlidir, yoxsa qeydiyyatdan keçmir.
-- Təsdiq tələb edən alət `run()` ilə **icra olunmur**, təsdiq qeydi açılır. İcra yalnız Fərid parol qorumalı UI/API-da təsdiq edəndən sonra, icazə təkrar yoxlanaraq və tək istifadəlik sübutla olur (bax `APPROVALS.md`). Real yazma hazırda yalnız Telegram `message.send` (allowlist çatına).
+- Təsdiq tələb edən alət `run()` ilə **icra olunmur**, təsdiq qeydi açılır. İcra yalnız Fərid parol qorumalı UI/API-da təsdiq edəndən sonra, icazə təkrar yoxlanaraq və tək istifadəlik sübutla olur (bax `APPROVALS.md`). Yazma alətləri (Instagram paylaşım/şərh/DM cavabı, TikTok paylaşım, YouTube video redaktəsi, Shopify məhsul redaktəsi, Telegram mesajı) yalnız bu yolla və gündəlik limitlərlə icra olunur; kütləvi/soyuq mesaj mexanizmi yoxdur (platforma da yalnız sənə yazmışa 24 saat ərzində cavaba icazə verir).
 
 ## Audit
 

@@ -30,6 +30,7 @@ export const LEAD_SCHEMA = {
     stage: { type: "string", enum: STAGES },
     consent: { type: "string", enum: CONSENT },
     notes: { type: "string", maxLength: 500 },
+    ig_scoped_id: { type: "string", minLength: 1, maxLength: 30 },
   },
   required: ["channel"],
   additionalProperties: false,
@@ -46,11 +47,13 @@ const bad = (errors) => new AgentError("invalid_input", "giriş düzgün deyil: 
 function checkLead(lead) {
   const v = validate(LEAD_SCHEMA, lead);
   if (!v.ok) throw bad(v.errors);
+  if (lead.ig_scoped_id !== undefined && !/^\d{1,30}$/.test(lead.ig_scoped_id)) throw bad(["ig_scoped_id yalnız rəqəmlərdən ibarət olmalıdır"]);
   return {
     name: scrub(lead.name || "", 80), handle: scrub(lead.handle || "", 60), channel: lead.channel, source: scrub(lead.source || "", 80),
     interests: (lead.interests || []).map((x) => scrub(x, 40)), budget_azn: lead.budget_azn ?? null,
     last_interaction_days: lead.last_interaction_days ?? null, followups_done: lead.followups_done ?? 0,
     stage: lead.stage || "new", consent: lead.consent || "unknown", notes: scrub(lead.notes || "", 500),
+    ...(lead.ig_scoped_id ? { ig_scoped_id: lead.ig_scoped_id } : {}),
   };
 }
 

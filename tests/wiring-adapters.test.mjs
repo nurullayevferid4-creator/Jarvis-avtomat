@@ -307,7 +307,7 @@ test("Shopify SSRF: domen allowlist yalnız konfiqurasiyadakı <ad>.myshopify.co
 
 test("credential olmadan: 5 platformanın hər oxuma əməliyyatı not_configured verir, şəbəkəyə çıxmır (saxta nəticə yoxdur)", async () => {
   const { request, r } = reg(() => J({}), {});
-  const inputs = { "videos.get": { video_ids: ["1"] }, "insights.get": { metrics: ["reach"] }, "video.get": { video_id: "abcDEF12345" }, "voice.get": { file_id: "f1" } };
+  const inputs = { "videos.get": { video_ids: ["1"] }, "insights.get": { metrics: ["reach"] }, "video.get": { video_id: "abcDEF12345" }, "voice.get": { file_id: "f1" }, "post.status": { publish_id: "p123" } };
   for (const id of r.list()) for (const op of r.get(id).status().readOperations) {
     const e = await err(r.run(id, op, inputs[op] || {}));
     assert.equal(e.code, "not_configured", id + "." + op);
@@ -319,10 +319,17 @@ test("hər endpoint-in sənəd mənbəyi başlıq şərhində göstərilib (veri
   const { readFileSync } = await import("node:fs");
   for (const f of ["instagram", "tiktok", "youtube", "telegram", "shopify"]) {
     const t = readFileSync("src/integrations/" + f + ".js", "utf8");
-    assert.match(t, /Rəsmi sənəd yoxlaması \(2026-10-05/, f);
+    assert.match(t, /(Rəsmi sənəd yoxlaması|rəsmi sənəd[^\n]*2026-10-05)/i, f);
   }
   const probe = createIntegrationRegistry({});
   for (const s of probe.statuses()) assert.ok(s.disabledWriteOperations.length + s.approvalOnlyWriteOperations.length >= 1, s.id + ": yazma interfeysləri mövcuddur");
   assert.deepEqual(probe.get("telegram").status().approvalOnlyWriteOperations, ["message.send"]);
-  for (const id of ["instagram", "tiktok", "youtube", "shopify"]) assert.deepEqual(probe.get(id).status().approvalOnlyWriteOperations, [], id + ": yoxlanmamış yazma endpoint-i icra oluna bilməz");
+  assert.deepEqual(probe.get("instagram").status().approvalOnlyWriteOperations.sort(), ["comments.reply", "container.publish", "media.publish", "messages.send"]);
+  assert.deepEqual(probe.get("tiktok").status().approvalOnlyWriteOperations, ["video.publish"]);
+  assert.deepEqual(probe.get("youtube").status().approvalOnlyWriteOperations, ["video.update"]);
+  assert.deepEqual(probe.get("shopify").status().approvalOnlyWriteOperations, ["product.update"]);
+  // Yoxlanmamış (endpoint-i yoxlanmamış) yazma əməliyyatları icra oluna bilməz
+  assert.deepEqual(probe.get("youtube").status().disabledWriteOperations.sort(), ["video.delete", "video.upload"]);
+  assert.deepEqual(probe.get("shopify").status().disabledWriteOperations.sort(), ["inventory.set", "price.change"]);
+  assert.deepEqual(probe.get("telegram").status().disabledWriteOperations, ["voice.send"]);
 });

@@ -12,6 +12,11 @@
 //  - Başlıq: "Authorization: Bearer <access_token>". Scope: youtube.readonly ("View your YouTube account"); metod üzrə ən az scope sənəddə birmənalı deyil.
 //  - Standart kvota: gündə 10 000 vahid (search.list və videos.insert 2026-06-01-dən ayrı kovalardadır).
 //  - "Testing" statuslu OAuth tətbiqində refresh token 7 gün sonra bitir: tətbiqi "In production" etmək lazımdır.
+//  - YAZMA (videos.update, rəsmi sənəd 2026-10-05, WebFetch xülasəsi): PUT https://www.googleapis.com/youtube/v3/videos?part=snippet, gövdə {id, snippet{title, categoryId, ...}};
+//    snippet yenilənəndə title və categoryId məcburidir və verilməyən dəyişdirilə bilən sahələr SİLİNİR. Ona görə əvvəl GET videos?part=snippet, sonra mövcud snippet ilə
+//    birləşdirilmiş tam snippet göndərilir (title, description, tags, categoryId, defaultLanguage). Scope: youtube və ya youtube.force-ssl (readonly YETMİR: refresh token
+//    yeni scope ilə yenidən alınmalıdır). Kvota: 50 vahid. YOXLANMAYIB: dəyişdirilə bilən snippet sahələrinin tam siyahısı (yuxarıdakı 5 sahə seçilib).
+//  - Yükləmə (videos.insert, resumable) və silmə kodlaşdırılmayıb: Worker-də böyük bayt axını/mənbə faylı və yoxlanmamış layihədə private məhdudiyyəti.
 //  - videos.insert: yoxlanmamış API layihələrində yüklənən videolar private olur (audit lazımdır). Bu əməliyyatlar alət kimi qeydə alınmır.
 
 import { IntegrationAdapter, PAGE_INPUT, EMPTY_INPUT, idSchema, pick } from "./Integration.js";
@@ -28,7 +33,7 @@ export const YOUTUBE_OPERATIONS = {
   "videos.list": { kind: "read", description: "Kanalın yüklənmiş videoları", input: PAGE_INPUT },
   "video.get": { kind: "read", description: "Bir videonun məlumatı", input: { type: "object", properties: { video_id: idSchema }, required: ["video_id"], additionalProperties: false } },
   "video.upload": { kind: "write", description: "Video yükləmə (hazırlanmayıb)", input: { type: "object", properties: { title: { type: "string", maxLength: 100 } }, additionalProperties: false } },
-  "video.update": { kind: "write", description: "Video redaktəsi (hazırlanmayıb)", input: { type: "object", properties: { video_id: idSchema, title: { type: "string", maxLength: 100 } }, additionalProperties: false } },
+  "video.update": { kind: "write", description: "Video redaktəsi: başlıq, təsvir, teqlər (mövcud snippet saxlanılır; kvota 50)", input: { type: "object", properties: { video_id: idSchema, title: { type: "string", minLength: 1, maxLength: 100 }, description: { type: "string", maxLength: 5000 }, tags: { type: "array", maxItems: 30, items: { type: "string", minLength: 1, maxLength: 60 } } }, required: ["video_id"], additionalProperties: false } },
   "video.delete": { kind: "write", description: "Video silmə (hazırlanmayıb)", input: { type: "object", properties: { video_id: idSchema }, additionalProperties: false } },
 };
 
@@ -85,13 +90,37 @@ const ENDPOINTS = {
       return { id: String(v.id || "").slice(0, 30), title: String((v.snippet && v.snippet.title) || "").slice(0, 300), published_at: String((v.snippet && v.snippet.publishedAt) || "").slice(0, 40), duration: String((v.contentDetails && v.contentDetails.duration) || "").slice(0, 30), statistics: stats(v.statistics) };
     },
   },
+  "video.update": {
+    verified: true,
+    async exec({ input, env, call }) {
+      const t = await accessToken({ env, call });
+      const cur = await api(call, t, "/videos", { part: "snippet", id: input.video_id });
+      const sn = cur && Array.isArray(cur.items) && cur.items[0] && cur.items[0].snippet;
+      if (!sn || typeof sn.title !== "string" || typeof sn.categoryId !== "string") throw new Error("no snippet");
+      const tags = input.tags !== undefined ? input.tags : Array.isArray(sn.tags) ? sn.tags : undefined;
+      const next = {
+        title: input.title !== undefined ? input.title : sn.title,
+        description: input.description !== undefined ? input.description : typeof sn.description === "string" ? sn.description : "",
+        categoryId: sn.categoryId,
+        ...(tags !== undefined ? { tags } : {}),
+        ...(typeof sn.defaultLanguage === "string" ? { defaultLanguage: sn.defaultLanguage } : {}),
+      };
+      const d = await call(YT_API + "/videos?part=snippet", { method: "PUT", headers: { authorization: "Bearer " + t, "content-type": "application/json" }, body: JSON.stringify({ id: input.video_id, snippet: next }) });
+      if (!d || typeof d !== "object" || d.error || typeof d.id !== "string") throw new Error("bad shape");
+      return { updated: true, id: d.id.slice(0, 30), title: String((d.snippet && d.snippet.title) || next.title).slice(0, 300) };
+    },
+  },
 };
 
 export class YouTubeAdapter extends IntegrationAdapter {
   constructor(opts = {}) {
-    super({ id: "youtube", label: "YouTube (yalnız oxuma)", operations: YOUTUBE_OPERATIONS, endpoints: ENDPOINTS, allowedHosts: ["www.googleapis.com", "oauth2.googleapis.com"], ...opts });
+    super({ id: "youtube", label: "YouTube (oxuma + təsdiqli video redaktəsi)", operations: YOUTUBE_OPERATIONS, endpoints: ENDPOINTS, allowedHosts: ["www.googleapis.com", "oauth2.googleapis.com"], ...opts });
   }
   _precheck(op, input, ctx) {
+    if (op === "video.update") {
+      if (!VIDEO_ID_RE.test(input.video_id)) throw new IntegrationError("invalid_input", "video id düzgün deyil", ctx);
+      if (input.title === undefined && input.description === undefined && input.tags === undefined) throw new IntegrationError("invalid_input", "heç bir dəyişiklik verilməyib", ctx);
+    }
     if (op === "video.get" && !VIDEO_ID_RE.test(input.video_id)) throw new IntegrationError("invalid_input", "video id düzgün deyil", ctx);
     if (op === "videos.list" && input.after !== undefined && !TOKEN_RE.test(input.after)) throw new IntegrationError("invalid_input", "after düzgün deyil", ctx);
   }
@@ -100,6 +129,7 @@ export class YouTubeAdapter extends IntegrationAdapter {
       "channel.get": () => ({ id: "mock_channel_1", title: "mock kanal", statistics: { videoCount: "1" } }),
       "videos.list": (i) => ({ items: [{ video_id: "mock_yt_1", title: "mock video" }].slice(0, i.limit || 25), next: null }),
       "video.get": (i) => ({ id: i.video_id, title: "mock video" }),
+      "video.update": (i) => ({ updated: true, id: i.video_id, title: i.title || "mock video" }),
     };
   }
 }

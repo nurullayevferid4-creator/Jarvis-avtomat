@@ -1,6 +1,6 @@
 # JARVIS wiring: orkestrator, alətlər, təsdiq, platformalar
 
-**Status: kod hazırdır və saxta (mock) API ilə testlə yoxlanıb. Heç bir platforma real hesabla sınanmayıb.** "Canlı inteqrasiya tamamdır" yalnız `npm run test:live:integrations` real credential ilə uğurla keçəndən sonra deyilə bilər.
+**Status: oxuma və təsdiqli yazma kodu hazırdır və saxta (mock) API ilə testlə yoxlanıb. Heç bir platforma real hesabla sınanmayıb.** "Canlı inteqrasiya tamamdır" yalnız `npm run test:live:integrations` real credential ilə uğurla keçəndən sonra deyilə bilər.
 
 ## Axın
 
@@ -29,20 +29,25 @@ Təsdiq → icra mərhələləri (`src/approval/executor.js`): `pending → appr
 | Qrup | Alətlər | Təsdiq |
 |---|---|---|
 | Instagram | `instagram.account.get`, `.media.list`, `.insights.get` | yox (oxuma) |
-| TikTok | `tiktok.account.get`, `.videos.list`, `.videos.get` | yox (oxuma) |
+| Instagram | `instagram.media.publish`, `.container.publish` (tək şəkil paylaşımı, gündə ≤ 5) | **hə** (`publish.social`) |
+| Instagram | `instagram.comments.reply` (gündə ≤ 20), `instagram.messages.send` (mesaj yazmış istifadəçiyə cavab, gündə ≤ 10, alıcı başına ≤ 1) | **hə** (`send.message`) |
+| TikTok | `tiktok.account.get`, `.videos.list`, `.videos.get`, `.post.status` | yox (oxuma) |
+| TikTok | `tiktok.video.publish` (PULL_FROM_URL, gündə ≤ 3) | **hə** (`publish.social`) |
 | YouTube | `youtube.channel.get`, `.videos.list`, `.video.get` | yox (oxuma) |
+| YouTube | `youtube.video.update` (başlıq/təsvir/teq, gündə ≤ 20) | **hə** (`edit.video`) |
 | Telegram | `telegram.bot.get`, `.updates.receive`, `.voice.get` | yox |
 | Telegram | `telegram.message.send` | **hə** (yalnız allowlist çatı) |
 | Shopify | `shopify.shop.get`, `.products.list`, `.orders.list` | yox |
 | Shopify | `shopify.customers.list` (şəxsi məlumat) | **hə** |
+| Shopify | `shopify.product.update` (ad, təsvir, status, teq, vendor, növ; gündə ≤ 20) | **hə** (`edit.product`) |
 | Storage | `storage.note.put/get/list` | yox (yalnız qeyd bölməsi) |
 | Bilik | `knowledge.search`, `knowledge.add` | yox (icazələr qorunur) |
 | Öyrənmə | `learning.record/analyze/propose/list` | yox |
 | Öyrənmə | `learning.apply_rule` | **hə** |
 | Satış | `lead.create/get/list`, `sales.pipeline` (yalnız qaralama) | yox |
-| Satış | `sales.message.send` (tək lead, gündə ≤ 5, lead başına ≤ 1) | **hə**; real göndərmə yoxdur (`manual_required`) |
+| Satış | `sales.message.send` (tək lead, gündə ≤ 5, lead başına ≤ 1) | **hə**; özü göndərmir: Instagram lead-i üçün `instagram.messages.send`-i göstərir, digər kanallar `manual_required` |
 
-Reyestrdə **olmayan** (endpoint-i yoxlanmayıb, interfeys kimi qalır): Instagram paylaşım/DM/şərh cavabı, TikTok paylaşım, YouTube yükləmə/idarəetmə, Shopify yazma, Telegram səs göndərmə. `social.publish` təsdiqdən sonra da icra olunmur.
+Reyestrdə **olmayan** (endpoint-i yoxlanmayıb və ya texniki mümkün deyil): YouTube video yükləmə/silmə (Worker-də böyük bayt axını və mənbə faylı lazımdır), TikTok FILE_UPLOAD və qaralama (inbox) yolu, Shopify qiymət/stok/sifariş dəyişikliyi (mutation sxemləri yoxlanmayıb), Telegram səs faylı yükləmə və səs göndərmə (yükləmə ünvanı rəsmi səhifədə kəsildiyi üçün yoxlana bilmədi), Instagram token yeniləməsi (yeni token Secret-ə yazıla bilməz). `social.publish` təsdiqdən sonra da icra olunmur.
 
 ## Doğrulama səviyyəsi (dürüst vəziyyət)
 
@@ -54,7 +59,7 @@ Reyestrdə **olmayan** (endpoint-i yoxlanmayıb, interfeys kimi qalır): Instagr
 | Telegram (Bot API) | hə (səhifə yarımçıq göründü) | **yox** |
 | Shopify (Admin GraphQL, 2026-07 pinli) | hə | **yox** |
 
-"Sənədlə oxunub" = WebFetch xülasəsi ilə yoxlanıb, bayt-bayt deyil. Açıq qalan suallar hər adapterin başlıq şərhində yazılıb (məs. Instagram: `/me` cavabında hansı sahə `<IG_ID>`-dir; Telegram: fayl yükləmə ünvanı; Shopify: şəxsi məlumat Level-2 tələbi). Canlı test bunları göstərəcək.
+Yazma endpoint-ləri də eyni səviyyədədir (2026-10-05, WebFetch xülasəsi). "Sənədlə oxunub" = bayt-bayt deyil. Yoxlanmayan konkret detallar: Instagram şərh cavabında parametrin JSON gövdədə getməsi (digər IG yazma endpoint-lərinə uyğun seçilib), TikTok creator_info sorğusu (privacy_level yoxlaması), YouTube dəyişdirilə bilən snippet sahələrinin tam siyahısı, Shopify status enum-unun tam siyahısı. Açıq qalan suallar hər adapterin başlıq şərhində yazılıb (məs. Instagram: `/me` cavabında hansı sahə `<IG_ID>`-dir; Telegram: fayl yükləmə ünvanı; Shopify: şəxsi məlumat Level-2 tələbi). Canlı test bunları göstərəcək.
 
 ## Hər platforma üçün SƏNİN etməli olduğun əməliyyatlar
 
@@ -72,6 +77,13 @@ Webhook secret yoxdursa `/telegram/webhook` bağlıdır (503). Naməlum çat: ca
 
 **Shopify** — YENİ admin-created custom app artıq yaradıla bilməz (sənəd). İki yol: köhnə mövcud Admin API tokeni (`SHOPIFY_ADMIN_TOKEN`) və ya Dev Dashboard tətbiqi (`SHOPIFY_CLIENT_ID` + `SHOPIFY_CLIENT_SECRET`; tətbiq və mağaza eyni təşkilatda olmalıdır). Variable: `SHOPIFY_STORE_DOMAIN` (`<ad>.myshopify.com`). Scope: `read_products`, `read_orders` (yalnız son 60 gün), `read_customers` (şəxsi məlumat üçün Shopify-ın əlavə tələbləri var).
 
+### Yazma əməliyyatları üçün əlavə şərtlər (sənin etməli olduğun)
+
+- **Instagram paylaşım:** token `instagram_business_content_publish` icazəsi ilə alınmalıdır; şəkil ictimai https ünvanda **JPEG** olmalıdır. **DM/şərh cavabı:** `instagram_business_manage_messages` və `instagram_business_manage_comments` icazələri. DM yalnız **sənə yazmış** istifadəçiyə, 24 saat ərzində mümkündür; alıcının IGSID-si Instagram messaging webhook-undan gəlir (bu repoda Instagram webhook yoxdur: IGSID-ni əl ilə `lead.create` ilə `ig_scoped_id` kimi verirsən). Token 60 gündən bir əl ilə yenilənir: `curl "https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=<TOKEN>"`, cavabdakı yeni token-i Secret-ə yaz (token ≥ 24 saat köhnə olmalıdır).
+- **TikTok paylaşım:** tətbiqdə `video.publish` scope-u, **video ünvanının domeninin (URL prefiksinin) TikTok-da sahibliyinin təsdiqi** (PULL_FROM_URL üçün məcburi) və tətbiq auditi; audit olmadan bütün paylaşımlar yalnız özünə görünür (`SELF_ONLY`). Access token əvəzinə üç Secret: `TIKTOK_REFRESH_TOKEN`, `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` (hər çağırışda təzə token alınır). TikTok refresh token-i rotasiya edərsə nəticədə `refresh_token_rotated` xəbərdarlığı çıxır: bu halda TikTok-dan yeni refresh token alıb Secret-i yenilə (Worker onu saxlaya bilməz).
+- **YouTube redaktə:** OAuth razılığı `youtube.force-ssl` (və ya `youtube`) scope-u ilə təkrar verilməli və yeni refresh token Secret-ə yazılmalıdır (`youtube.readonly` yazma üçün YETMİR). Hər redaktə 50 kvota vahididir.
+- **Shopify məhsul redaktəsi:** `write_products` scope-u (köhnə token və ya Dev Dashboard tətbiqinin scope-una əlavə).
+
 **Cloudflare KV** — bax `docs/KV_SETUP.md`.
 
 ## Telegram cavabı və təsdiq
@@ -82,5 +94,6 @@ Telegram cavabı (`replyToOwner`) Fərid-in öz çatına, onun öz mesajına cav
 
 - Cloudflare Free planında bir sorğuya 50 subrequest limiti var; bilik axtarışı pəncərəsi 10, öyrənmə qaydası 5 ilə məhdudlaşdırılıb.
 - KV atomik müqayisə-yaz (CAS) vermir: iki eyni anlı qərar yarışı nəzəri olaraq mümkündür (tək istifadəçi üçün qəbul edilən risk).
-- Instagram/TikTok tokeninin yenilənməsi kodlaşdırılmayıb: bitəndə yeni token lazımdır.
-- Satış mesajı real kanala göndərilmir (`manual_required`): kanal göndərmə endpoint-i yoxlanmayıb.
+- Instagram tokeninin yenilənməsi əl ilə (60 gün); TikTok refresh yalnız hər çağırışda təzə access token alır, rotasiya olunan refresh token Secret-ə yazıla bilmir.
+- Satış mesajı: yalnız Instagram DM cavabı mümkündür (`instagram.messages.send`, ayrıca təsdiqlə); digər kanallarda `manual_required`.
+- Yazma əməliyyatlarının gündəlik sayğacı və yarış: KV atomik deyil, eyni anda iki təsdiq limiti 1 dəfə aşa bilər (tək istifadəçi üçün qəbul edilən risk).
