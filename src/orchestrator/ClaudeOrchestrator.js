@@ -24,9 +24,9 @@ import { redactText } from "../security/redact.js";
 // başqa modelə verilərkən <external_content> qutusuna qoyulur, əmr kimi qəbul edilmir.
 const HELPER_MAX_CHARS = 20000;
 
-// Alt tapşırıq id-si yaddaşa yazılanda: ən çox 12 simvol (tanınan token formatları ən azı 13 simvoldur), yalnız hərf/rəqəm/_.-
-const SAFE_TASK_ID = /^[A-Za-z0-9_.-]{1,12}$/;
-const safeTaskId = (id, i) => (SAFE_TASK_ID.test(String(id)) ? String(id) : "t" + (i + 1));
+// Alt tapşırıq id-si modeldən gəlir və istifadəçi mətnindəki qısa parolu belə əks etdirə bilər. Uzunluq və simvol süzgəci bunu
+// tutmur. Ona görə yaddaşa (iş qeydi, lastJob) modelin id-si YAZILMIR, yalnız sıra nömrəsindən yaranan kanonik "t<N>" yazılır.
+const safeTaskId = (id, i) => "t" + (i + 1);
 
 export class ClaudeOrchestrator {
   // approvals (istəyə bağlı): təsdiq mərkəzi. Verilməsə köhnə davranış dəyişmir.
@@ -128,7 +128,7 @@ export class ClaudeOrchestrator {
   // Növbəti sorğuda lider modelə verilən "son iş" qeydi: kim hansı alt tapşırığı etdi.
   // Yalnız real icra nəticəsi (sahib, status, qısa təlimat) yazılır. Köməkçinin cavabı və xətalar yazılmır.
   static lastJobRecord(text, status, tasks) {
-    // id və depends modeldən gəlir (tanınan token ola bilər): yalnız qısa təhlükəsiz id qəbul olunur, depends yalnız bu id-lərə yönələ bilər.
+    // id və depends modeldən gəlir: modelin id-si saxlanmır, kanonik t<N> yazılır, depends yalnız qeyddəki tapşırıqlara yönələ bilər.
     const ids = new Map(tasks.map((t, i) => [t.id, safeTaskId(t.id, i)]));
     return {
       ts: new Date().toISOString(),

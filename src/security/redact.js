@@ -16,9 +16,10 @@
 export const MASK = "[gizlədildi]";
 
 // Parol tipli etiket: "parol: Abc123", "password=...". Dəyər BOŞLUQLU ola bilər ("parol: correct horse battery staple"),
-// ona görə dırnaqlıdırsa dırnağa qədər, deyilsə sətrin sonuna qədər (ən çox 200 simvol) maskalanır.
-// Bu, həmin sətrin qalan adi mətnini də örtə bilər: məxfilik üçün qəsdən seçilmiş güzəştdir.
-const PASS_LABEL_RE = /((?:parol|şifrə|sifre|password|passwd|passphrase|pwd|passcode)[ \t]{0,3}[:=][ \t]{0,3})(?:"([^"\n]{1,200})"|'([^'\n]{1,200})'|([^\n]{3,200}))/gi;
+// ona görə dırnaqlıdırsa (ən çox 200 simvol) dırnağa qədər, deyilsə sətrin SONUNA qədər (uzunluq limiti YOXDUR, yoxsa 200 simvoldan
+// sonrakı hissə açıq qalardı) maskalanır. Bu, həmin sətrin qalan adi mətnini də örtə bilər: məxfilik üçün qəsdən seçilmiş güzəştdir.
+// ReDoS yoxdur: etiket və boşluqlar məhduddur, sətrin qalanı tək simvol sinfidir, uyğunluq tapılanda sətrin sonuna qədər işlənir.
+const PASS_LABEL_RE = /((?:parol|şifrə|sifre|password|passwd|passphrase|pwd|passcode)[ \t]{0,3}[:=][ \t]{0,3})(?:"([^"\n]{1,200})"|'([^'\n]{1,200})'|([^\n]{3,}))/gi;
 // Açar tipli etiket: "token: ...", "api key=..." (tək söz).
 const KEY_LABEL_RE = /((?:token|secret|api[ _-]?key|açar)[ \t]{0,3}[:=][ \t]{0,3})(\S{3,200})/gi;
 

@@ -43,9 +43,30 @@ test("boşluqlu və dırnaqlı parol tam maskalanır, qalan mətn qorunur", () =
   assert.equal(redactText("pwd: 'iki söz parol' sonra"), "pwd: " + MASK + " sonra");
   assert.equal(redactText("passphrase=alpha beta gamma delta"), "passphrase=" + MASK);
   assert.equal(redactText("parol: bir iki üç\nsonrakı sətir adi mətndir"), "parol: " + MASK + "\nsonrakı sətir adi mətndir", "yalnız həmin sətir maskalanır");
-  // ən çox 200 simvol örtülür, çox uzun mətndə naxış sonsuz uzanmır
   const long = redactText("parol: " + "a ".repeat(500));
-  assert.ok(long.startsWith("parol: " + MASK) && long.length < 1000);
+  assert.equal(long, "parol: " + MASK, "uzun dəyər də tam maskalanır");
+});
+
+// Codex review raund 3 (PR #6, P2): 200 simvoldan uzun parol dəyərinin quyruğu açıq qalmamalıdır
+test("200 simvoldan uzun parol dəyəri (boşluqsuz, boşluqlu, dırnaqlı) tam maskalanır, növbəti sətir qalır", () => {
+  const TAIL = "QUYRUQ" + "Zz9";
+  const cases = {
+    boşluqsuz: "password: " + "A1b2".repeat(80) + TAIL,
+    boşluqlu: "parol: " + "kəlmə ".repeat(60) + TAIL,
+    dırnaqlıUzun: 'pwd="' + "x1".repeat(150) + TAIL + '" sonra',
+    təkDırnaq: "passphrase='" + "ab ".repeat(100) + TAIL + "'",
+  };
+  for (const [name, input] of Object.entries(cases)) {
+    const out = redactText(input);
+    assert.ok(!out.includes(TAIL), name + ": quyruq açıq qalıb");
+    assert.ok(!/A1b2|kəlmə|x1x1|ab ab/.test(out), name + ": dəyər açıq qalıb");
+    assert.ok(out.includes(MASK), name);
+    assert.ok(out.length < 100, name + ": çıxış " + out.length);
+  }
+  assert.equal(redactText("parol: " + "a".repeat(5000) + "\nsonrakı sətir adi mətndir"), "parol: " + MASK + "\nsonrakı sətir adi mətndir");
+  assert.equal(redactWithCount("password: " + "A1b2".repeat(80) + TAIL).count, 1);
+  const again = redactText(redactText(cases.boşluqsuz));
+  assert.equal(again, redactText(cases.boşluqsuz), "təkrar çağırışda dəyişmir");
 });
 
 test("maskalama təkrar çağırışda dəyişmir (idempotent), dırnaqlı halda da", () => {

@@ -225,6 +225,30 @@ test("B (Codex P1): task id və depends token ola bilməz, iş qeydində və son
   assert.deepEqual(j.tasks.map((t) => t.id), ["t1", "t2"]);
 });
 
+// Codex review raund 3 (PR #6, P1): uzunluq/simvol süzgəci qısa parolu (məs. "Vault123") id kimi buraxırdı. İndi modelin id-si heç vaxt saxlanmır.
+test("B (Codex P1): modelin id-si (qısa parol daxil) saxlanmır, yalnız kanonik t<N>, asılılıq düzgün qalır", async () => {
+  const PW = "Vault" + "123";
+  const sub = [
+    { id: PW, owner: "claude", instruction: "Birinci iş", depends: [] },
+    { id: "ikinci", owner: "claude", instruction: "İkinci iş", depends: [PW] },
+    { id: "üçüncü", owner: "claude", instruction: "Üçüncü iş", depends: [PW, "ikinci", "yoxdur"] },
+  ];
+  const m = mutableHandler({ mode: "task", subtasks: sub, external_action: null });
+  const calls = installFetch(m.handler);
+  const env = baseEnv();
+  await talk(env, "üç iş et, parol: " + PW);
+  const state = await createStore(env).load();
+  const stored = JSON.stringify({ lastJob: state.lastJob, jobs: await jobs(env), history: state.history });
+  assert.ok(!stored.includes(PW), "qısa parol id kimi yaddaşa düşüb");
+  assert.deepEqual(state.lastJob.tasks.map((t) => t.id), ["t1", "t2", "t3"]);
+  assert.deepEqual(state.lastJob.tasks.map((t) => t.depends), [[], ["t1"], ["t1", "t2"]], "depends kanonik id-lərə çevrilir, naməlum atılır");
+  assert.deepEqual((await jobs(env))[0].tasks.map((t) => t.id), ["t1", "t2", "t3"]);
+  // növbəti sorğuda lider promptu da yalnız kanonik id-ləri görür
+  m.cur.plan = { mode: "chat", reply: "ok" };
+  await talk(env, "necə böldün");
+  assert.ok(!leadCalls(calls).at(-1).body.system.includes(PW), "növbəti lider promptunda qısa parol var");
+});
+
 test("B (Codex P1): adi qısa id-lər və asılılıq dəyişmir", () => {
   const t = [{ id: "t1", owner: "gpt", status: "done", depends: [], instruction: "a" }, { id: "t2", owner: "claude", status: "done", depends: ["t1"], instruction: "b" }];
   const rec = ClaudeOrchestrator.lastJobRecord("x", "achieved", t);
