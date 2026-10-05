@@ -183,7 +183,7 @@ function decideComment({ pr, event }, state, cfg) {
   return out("skip", "unrelated_comment", state);
 }
 
-function decideReview({ repo, pr, event, files, filesTruncated, inlineComments }, state, cfg) {
+function decideReview({ repo, pr, event, files, filesTruncated, inlineComments, fixAvailable }, state, cfg) {
   const r = event.review;
   if (!r || !isBot(r.user, cfg.bot_login)) return out("skip", "untrusted_actor", state);
   if (r.state === "APPROVED" || r.state === "DISMISSED") return out("skip", "not_findings", state);
@@ -205,6 +205,8 @@ function decideReview({ repo, pr, event, files, filesTruncated, inlineComments }
   if (sensitive.length) return out("stop", "sensitive_paths", stopState(state, "sensitive_paths"), { paths: sensitive.slice(0, 10), findings: actionable });
   if (actionable.some((f) => suspicious(f.text))) return out("stop", "injection_suspected", stopState(state, "injection_suspected"));
 
+  // Düzəliş edə biləcək hissə (ANTHROPIC_API_KEY) yoxdursa raund sərf edilmir və state dəyişmir: açar əlavə olunandan sonra eyni dövr itkisiz davam edir.
+  if (fixAvailable === false) return out("skip", "fix_unavailable_no_api_key", state, { notify: "Real P1/P2 tapıntı var, amma workflow-da Claude düzəlişi üçün ANTHROPIC_API_KEY yoxdur. Raund sərf edilmədi. Claude sessiyasında davam edin (gate.mjs decide --use-gh) və ya açar əlavə edildikdən sonra yeni review istəyin." });
   const picked = actionable.slice(0, cfg.max_findings);
   const next = withState(state, {
     rounds: state.rounds + 1,
@@ -352,6 +354,7 @@ export async function main(argv) {
     const m = /^(review|comment):(\d{1,15})$/.exec(ev);
     const eventRef = m ? { kind: m[1], id: Number(m[2]) } : ev === "dispatch" ? { kind: "dispatch", reset: argv.includes("--reset") } : { kind: "latest" };
     const input = await collect(api, { repo, prNumber: pr, eventRef }, cfg);
+    input.fixAvailable = arg(argv, "fix-available") !== "false";
     result = input.event.kind === "none" ? out("skip", "no_codex_event", null) : decide(input, cfg);
   } else if (cmd === "verify") {
     const before = arg(argv, "before");

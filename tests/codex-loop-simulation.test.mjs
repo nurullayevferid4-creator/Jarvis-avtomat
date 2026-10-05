@@ -284,3 +284,51 @@ test("saxta api yalnız oxuyur: gate heç bir yazma/merge/close çağırışı e
   assert.ok(seen.length > 0 && seen.every((p) => typeof p === "string" && p.startsWith("/repos/" + REPO + "/")));
   assert.ok(!seen.some((p) => /merge|close/.test(p)));
 });
+
+// ---------- ANTHROPIC_API_KEY yoxdur: fix əlçatan deyil ----------
+
+test("açar yoxdur: real P2 → raund sərf edilmir, state dəyişmir, fix yoxdur, bildiriş var", () => {
+  const input = deepFreeze(base({ fixAvailable: false }));
+  const r = decide(input, cfg);
+  assert.equal(r.action, "skip");
+  assert.equal(r.reason, "fix_unavailable_no_api_key");
+  assert.deepEqual(r.nextState, defaultState());
+  assert.ok(!r.prompt && r.notify);
+});
+
+test("açar yoxdur: qoruyucu dayanmalar (P0, .github/, həssas yol) yenə dayanır, yalnız sıradan P1/P2 skip olur", () => {
+  const p0 = decide(base({ fixAvailable: false, event: { kind: "review", review: review({ body: reviewBody("P0") }) } }), cfg);
+  assert.equal(p0.reason, "p0");
+  const wf = decide(base({ fixAvailable: false, files: [{ filename: ".github/workflows/x.yml" }] }), cfg);
+  assert.equal(wf.reason, "workflows_changed");
+  const sens = decide(base({ fixAvailable: false, files: [{ filename: "src/security/redact.js" }] }), cfg);
+  assert.equal(sens.reason, "sensitive_paths");
+});
+
+test("açar sonradan əlavə olunsa eyni review itkisiz işlənir (raund 0-dan 1-ə)", () => {
+  const off = decide(base({ fixAvailable: false }), cfg);
+  const on = decide(base({ fixAvailable: true, issueComments: [stateComment(off.nextState)] }), cfg);
+  assert.equal(on.action, "fix");
+  assert.equal(on.round, 1);
+  assert.equal(decide(base({ issueComments: [stateComment(off.nextState)] }), cfg).action, "fix", "fixAvailable verilməyibsə (Claude sessiyası yolu) fix mümkündür");
+});
+
+test("açar yoxdur: 5 təkrar çatdırılma raund yandırmır", () => {
+  let comments = [];
+  for (let i = 0; i < 5; i++) {
+    const r = decide(base({ fixAvailable: false, issueComments: comments }), cfg);
+    assert.equal(r.reason, "fix_unavailable_no_api_key");
+    assert.equal(r.nextState.rounds, 0);
+  }
+});
+
+test("workflow açar mövcudluğunu (secret dəyərini yox) gate-ə ötürür və xəbərdarlıq addımı var", async () => {
+  const { readFileSync } = await import("node:fs");
+  for (const f of [".github/workflows/claude-codex-loop.yml", ".github/workflow-drafts/claude-codex-loop.yml"]) {
+    const y = readFileSync(f, "utf8").split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
+    assert.match(y, /FIX_AVAILABLE: \$\{\{ secrets\.ANTHROPIC_API_KEY != '' \}\}/);
+    assert.match(y, /--fix-available "\$FIX_AVAILABLE"/);
+    assert.match(y, /fix_unavailable_no_api_key/);
+    assert.ok(!/echo[^\n]*ANTHROPIC_API_KEY\}?\}/.test(y), "secret echo edilmir");
+  }
+});
