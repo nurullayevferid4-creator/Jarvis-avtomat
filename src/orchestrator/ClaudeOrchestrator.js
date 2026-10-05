@@ -18,6 +18,7 @@ import { resolvePending } from "../approval/gate.js";
 import { CallBudget } from "../guards/budget.js";
 import { buildLeadSystem, FINAL_SYSTEM, FACT_CHECK_SYSTEM } from "../prompts.js";
 import { wrapExternal } from "../security/sanitize.js";
+import { redactText } from "../security/redact.js";
 
 // Köməkçi modelin (məs. veb axtarışlı OpenAI) cavabı xarici məzmun sayılır:
 // başqa modelə verilərkən <external_content> qutusuna qoyulur, əmr kimi qəbul edilmir.
@@ -115,6 +116,22 @@ export class ClaudeOrchestrator {
     return tasks.map((t) => ({ id: t.id, owner: t.owner, instruction: t.instruction, status: t.status, error: t.error || null, note: t.note || null }));
   }
 
+  // Yaddaşa (iş qeydlərinə) yazılan variant: məxfi məlumat maskalanır. İstifadəçiyə qaytarılan cavab dəyişmir.
+  static persistedTasks(tasks) {
+    return ClaudeOrchestrator.publicTasks(tasks).map((t) => ({ ...t, instruction: redactText(t.instruction), error: redactText(t.error), note: redactText(t.note) }));
+  }
+
+  // Növbəti sorğuda lider modelə verilən "son iş" qeydi: kim hansı alt tapşırığı etdi.
+  // Yalnız real icra nəticəsi (sahib, status, qısa təlimat) yazılır. Köməkçinin cavabı və xətalar yazılmır.
+  static lastJobRecord(text, status, tasks) {
+    return {
+      ts: new Date().toISOString(),
+      status,
+      request: redactText(text).slice(0, 200),
+      tasks: tasks.map((t) => ({ id: t.id, owner: t.owner, status: t.status, depends: t.depends || [], instruction: redactText(t.instruction).slice(0, 160) })),
+    };
+  }
+
   async handle(text) {
     const budget = new CallBudget(this.limits.maxModelCalls);
     const ctx = { budget, timeoutMs: this.limits.callTimeoutMs };
@@ -133,12 +150,13 @@ export class ClaudeOrchestrator {
     }
 
     const hist = state.history.slice(-8);
-    const leadRaw = await this.lead.complete(buildLeadSystem(this.registry.helpers(), this.limits), [...hist, { role: "user", content: text }], 1200, ctx);
+    const leadRaw = await this.lead.complete(buildLeadSystem(this.registry.helpers(), this.limits, state.lastJob), [...hist, { role: "user", content: text }], 1200, ctx);
     let plan;
     try { plan = parseJson(leadRaw); } catch (e) { plan = { mode: "chat", reply: leadRaw.slice(0, 600) }; }
 
     const remember = async (spoken) => {
-      state.history.push({ role: "user", content: text }, { role: "assistant", content: spoken });
+      // Yaddaşa maskalanmış mətn yazılır. Cari sorğuda modelə isə istifadəçinin öz mətni gedir.
+      state.history.push({ role: "user", content: redactText(text) }, { role: "assistant", content: redactText(spoken) });
       state.history = state.history.slice(-12);
       await this.store.save(state);
     };
@@ -209,10 +227,12 @@ export class ClaudeOrchestrator {
           approvalId = ap.id;
         } catch (e) { /* qeyd açılmasa da söhbətdəki təsdiq qapısı işləyir */ }
       }
-      state.pending = { goal: text, external: plan.external_action, draft: screen.slice(0, 4000), approval_id: approvalId };
+      // external və draft təsdiq qeydi ilə eyni məzmundur, maskalanmır: Fərid nəyi təsdiq edirsə onu görməlidir.
+      state.pending = { goal: redactText(text), external: plan.external_action, draft: screen.slice(0, 4000), approval_id: approvalId };
     }
+    state.lastJob = ClaudeOrchestrator.lastJobRecord(text, status, tasks);
     await remember(spoken);
-    await this.store.saveJob({ ts: new Date().toISOString(), request: text, status, spoken, tasks: ClaudeOrchestrator.publicTasks(tasks) });
+    await this.store.saveJob({ ts: new Date().toISOString(), request: redactText(text), status, spoken: redactText(spoken), tasks: ClaudeOrchestrator.persistedTasks(tasks) });
     const result = { status, spoken, screen, tasks: ClaudeOrchestrator.publicTasks(tasks) };
     if (approvalId) result.approval_id = approvalId;
     return result;

@@ -4,14 +4,14 @@
 // yoxsa bot hücumu KV yazma limitini doldura bilərdi.
 
 import { makeId } from "../state/store.js";
+import { redactText } from "../security/redact.js";
 
 const SECRET_KEY =/(key|token|secret|pass|authorization|cookie|bearer)/i;
-const SECRET_VALUE = /(sk-[A-Za-z0-9_-]{10,}|bearer\s+[A-Za-z0-9._-]{10,})/gi;
 const AUDIT_TTL_SECONDS = 60 * 60 * 24 * 30;
 
 export function redact(value, depth = 0) {
   if (value === null || value === undefined) return value;
-  if (typeof value === "string") return value.slice(0, 2000).replace(SECRET_VALUE, "[gizlədildi]").slice(0, 300);
+  if (typeof value === "string") return redactText(value.slice(0, 2000)).slice(0, 300);
   if (typeof value === "number" || typeof value === "boolean") return value;
   if (depth >= 4) return "[çox dərin]";
   if (Array.isArray(value)) return value.slice(0, 20).map((v) => redact(v, depth + 1));

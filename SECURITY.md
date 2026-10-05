@@ -46,6 +46,23 @@ Naxışlardakı bütün təkrarlar məhduddur və yoxlanan mətn 20 000 simvolla
 
 Təsdiq addımları, alət çağırışları (ad, status, müddət; giriş məzmunu yox), söhbət sorğuları (status, simvol sayı) `/api/audit` ilə görünür. Jurnal 30 gün saxlanır. Jurnal yazılmasa əsas iş dayanmır.
 
+## Yaddaşda məxfi məlumat (maskalama)
+
+`src/security/redact.js` tanınan formatları `[gizlədildi]` ilə əvəz edir: `sk-...`, `Bearer ...`, Meta (`EAA...`), GitHub, Slack, AWS, Google API açarı, JWT, `parol: ...` / `password=...` kimi etiketdən sonrakı dəyər və e-poçt.
+
+**Tətbiq olunur:** bilik bazası (başlıq, mətn, mənbə ünvanı; `redacted` sayı qeydə yazılır), söhbət tarixçəsi, iş qeydləri (`/api/jobs`), son iş qeydi (`lastJob`), audit jurnalı.
+
+**Tətbiq OLUNMUR (qəsdən):**
+- Təsdiq qeydləri və təsdiq gözləyən qaralama (`state.pending`): Fərid nəyi təsdiq edirsə, onu olduğu kimi görməlidir.
+- Cari sorğuda modelə gedən mətn: model istifadəçinin real mətnini alır, yalnız yaddaşa yazılan nüsxə maskalanır.
+- Maskalamadan əvvəl saxlanmış köhnə məlumat geriyə təmizlənmir.
+
+**Məhdudiyyətlər:** yalnız tanınan formatlar tutulur. Prefiksi olmayan açarlar (məs. Cloudflare API tokeni) və telefon nömrələri tutulmur. Naxışların prefiksləri hələ rəsmi sənədlərlə yoxlanmayıb (Issue #5, ChatGPT hissəsi).
+
+## Son iş qeydi (LAST_JOB)
+
+Hər tapşırıqdan sonra sistem `state.lastJob` yazır: status, hər alt tapşırığın sahibi və qısa (maskalanmış) təlimatı. Növbəti sorğuda lider modelin sistem təlimatına `LAST_JOB` bloku əlavə olunur. İş bölgüsü haqqında suallara yalnız bu qeyddən cavab verilir, qeyd yoxdursa "qeyd yoxdur" deyilir. Köməkçi modelin cavabı və xətalar bu qeydə yazılmır.
+
 ## Bilinən boşluqlar
 
 - `.github/workflows/claude.yml` `@claude` ilə işə düşür və `ANTHROPIC_API_KEY` GitHub Secret-indən istifadə edir. Repo açıq olduğu üçün kimin bu workflow-u işə sala biləcəyi **hələ yoxlanmayıb**. Ayrıca baxılmalıdır.

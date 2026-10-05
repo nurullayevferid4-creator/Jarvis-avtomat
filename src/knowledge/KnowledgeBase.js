@@ -12,6 +12,7 @@
 import { makeId, isValidId } from "../state/store.js";
 import { normalize } from "../util.js";
 import { wrapExternal } from "../security/sanitize.js";
+import { redactWithCount } from "../security/redact.js";
 
 export const KNOWLEDGE_TYPES = ["source", "document", "transcript", "summary", "fact", "concept", "procedure", "lesson", "decision", "experiment", "proposal"];
 const NEAR_DUPLICATE = 0.85;
@@ -61,13 +62,20 @@ export class KnowledgeBase {
   async add(item = {}) {
     const type = String(item.type || "");
     if (!KNOWLEDGE_TYPES.includes(type)) return { ok: false, error: "type düzgün deyil" };
-    const title = String(item.title || "").trim().slice(0, 200);
+    const rawTitle = String(item.title || "").trim().slice(0, 200);
     const rawText = String(item.text || "").trim();
-    if (!title) return { ok: false, error: "başlıq boşdur" };
+    if (!rawTitle) return { ok: false, error: "başlıq boşdur" };
     if (!rawText) return { ok: false, error: "mətn boşdur" };
     const trust = item.trust === "external" ? "external" : "owner";
     const wrapped = wrapExternal(rawText, { source: item.source_url || "knowledge", maxLen: 8000 });
-    const text = rawText.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g, "").slice(0, 8000);
+    const cleanedText = rawText.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g, "").slice(0, 8000);
+    // Məxfi məlumat (token, parol, e-poçt) yaddaşa yazılmazdan əvvəl maskalanır (bax src/security/redact.js).
+    const rTitle = redactWithCount(rawTitle);
+    const rText = redactWithCount(cleanedText);
+    const title = rTitle.text;
+    const text = rText.text;
+    const rUrl = redactWithCount(item.source_url);
+    const redacted = rTitle.count + rText.count + rUrl.count;
     const tags = (Array.isArray(item.tags) ? item.tags : []).map((t) => normalize(t).slice(0, 40)).filter(Boolean).slice(0, 10);
 
     const hash = await sha256Hex(normalize(title + " " + text));
@@ -87,17 +95,18 @@ export class KnowledgeBase {
       type,
       title,
       text,
-      source_url: httpUrlOrNull(item.source_url),
+      source_url: httpUrlOrNull(rUrl.text),
       tags,
       confidence: clamp01(item.confidence, 0.5),
       relevance: clamp01(item.relevance, 0.5),
       trust,
       flagged: wrapped.flagged,
       findings: wrapped.findings,
+      redacted,
       hash,
     };
     await this.store.putDoc("knowledge", id, rec, TTL_SECONDS);
-    if (this.audit) await this.audit.log("knowledge.add", { id, type, trust, flagged: rec.flagged });
+    if (this.audit) await this.audit.log("knowledge.add", { id, type, trust, flagged: rec.flagged, redacted });
     return { ok: true, status: "added", id };
   }
 
