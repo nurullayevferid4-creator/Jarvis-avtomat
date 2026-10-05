@@ -41,12 +41,12 @@ const JSON_KV_RE = new RegExp(
 
 // 2) Parol tipli etiket düz mətndə: "parol: ...", "password = ...", "password is ...", "parol budur - ..."
 const PASS_PLAIN_RE = new RegExp(
-  String.raw`(${PASS_NAME}[ \t]{0,3}(?:=>|[:=]|[ \t]{1,3}(?:is|budur|—|–|-)[ \t]{1,3})[ \t]{0,3})(?:${DQ}|${SQ}|([^\n]{3,}))`,
+  String.raw`(${PASS_NAME}[ \t]{0,3}(?:=>|[:=]|[ \t]{1,3}(?:is|budur|—|–|-)[ \t]{1,3})[ \t]{0,3})(?:${DQ}|${SQ}|([^\s][^\n]*))`,
   "giu"
 );
 
 // 3) Açar tipli etiket: "token: ...", "api key=...", "secret => ..." (tək söz, & işarəsinə qədər)
-const KEY_PLAIN_RE = new RegExp(String.raw`(${KEY_NAME}[ \t]{0,3}(?:=>|[:=])[ \t]{0,3})(?:${DQ}|${SQ}|([^\s&]{3,}))`, "giu");
+const KEY_PLAIN_RE = new RegExp(String.raw`(${KEY_NAME}[ \t]{0,3}(?:=>|[:=])[ \t]{0,3})(?:${DQ}|${SQ}|([^\s&]+))`, "giu");
 
 // 4) URL sorğu parametrləri: ?token=..., &api_key=..., &sig=...
 const QUERY_RE = /([?&][\w.%-]{0,30}?(?:key|token|secret|passw(?:or)?d|pwd|signature|sig|auth)[\w.%-]{0,10}=)([^&\s#"'<>]+)/gi;

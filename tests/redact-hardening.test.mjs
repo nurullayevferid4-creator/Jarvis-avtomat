@@ -190,3 +190,18 @@ test("CPU: yeni naxışlar 200 000 simvollu pozucu mətndə iş xəttidir", () =
     assert.ok(ms < 1500, name + " üçün " + ms + " ms çəkdi");
   }
 });
+
+test("etiketdən sonra çox qısa dəyər (1-2 simvol) də maskalanır, boş dəyər və yalnız boşluq yox", () => {
+  for (const input of ["password: x", "parol = 1", "Şifrəm: ab", "token: z", "api_key=9", "secret => q", "passcode is 7", "Authorization: x", "Cookie: a", "{'pwd': 'x'}", '{"token":"y"}']) {
+    const out = redactText(input);
+    assert.ok(out.includes(MASK), input + " => " + out);
+    assert.ok(!/[:=>]\s*[xz9q7ab1y]\s*$/.test(out.replace(MASK, "")) || out.includes(MASK), input);
+  }
+  assert.equal(redactText("password: x"), "password: " + MASK);
+  assert.equal(redactText("token: z sonra"), "token: " + MASK + " sonra", "açar tipli etiket tək sözü örtür");
+  assert.equal(redactText("parol: z sonra"), "parol: " + MASK, "parol tipli etiket sətrin sonuna qədər");
+  assert.equal(redactText("password:"), "password:");
+  assert.equal(redactText("password:   "), "password:   ");
+  assert.equal(redactText("token:\nabc"), "token:\nabc", "növbəti sətirə keçmir");
+  assert.equal(redactText("password: " + MASK), "password: " + MASK);
+});
