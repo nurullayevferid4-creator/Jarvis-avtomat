@@ -122,3 +122,12 @@ Mənbələr: `anthropics/claude-code-action` `main` budağının `action.yml`, `
 ## Məhdudiyyətlər və yoxlanılmayanlar
 
 Ətraflı siyahı yuxarıdakı "Pre-activation audit" bölməsindədir (A sübut edilmiş, B nəzəri). Qısa: workflow Actions-da işləməyib; `contents: write` tokeni qorunmayan `main`-ə texniki olaraq push edə bilər (qadağa alət siyahısı, `pull-requests: read` və `verify`-dəki `main` SHA yoxlaması ilə qoyulub, branch protection qədər möhkəm deyil); `pull_request_review`-da workflow faylı versiyası, bot run-larında secret əlçatanlığı və Codex-in `github-actions[bot]` şərhinə cavabı canlı yoxlanmayıb; PR #6 `src/security/` və `src/approval/`-a toxunur və bu dövr onu qəsdən avtomatik düzəltməz; Codex "clean" siqnalının formatı bir PR-da (#7) müşahidə olunub, mətn dəyişərsə regex-lər yenilənməlidir; badge-siz tapıntı `no_actionable` sayılır (inline şərhdirsə `unparsed_findings` ilə dayanır).
+
+## Aktivləşdirmə PR-ı (yekun)
+- Aktiv fayl: `.github/workflows/claude-codex-loop.yml` (qaralama ilə eyni gövdə, `tests/codex-loop-activation.test.mjs`). Ayrıca PR-dadır, PR #8-in budağı üzərindədir (yalnız bu fayl + test + bu bölmə fərqlidir). `claude.yml`-ə, PR #6/#7-yə toxunulmayıb.
+- **Sıra (Fərid-in təsdiqi ilə):** (1) PR #8 merge; (2) aktivləşdirmə PR-ı merge. Sıra pozulsa gate addımı `gate.mjs` tapmayıb xəta verir, Claude işə düşmür (fail-closed).
+- **Lazım olan secret-lər:** `ANTHROPIC_API_KEY` (fix job; mövcudluğu mənə məlum deyil, mən yaratmıram/dəyişmirəm). İstəyə bağlı: `CODEX_TRIGGER_TOKEN` (yalnız `GITHUB_TOKEN` şərhini Codex qəbul etməsə). Başqa secret yoxdur.
+- **Sübut olunmayıb:** workflow Actions-da heç vaxt işləməyib; `github-actions[bot]` `@codex review` şərhinə Codex-in cavabı; bot tərəfindən başlayan run-da secret əlçatanlığı; `claude-code-action@v1` input-larının tag-da eyni olması; `pull_request_review`-da hansı workflow faylı versiyasının işlədiyi; concurrency növbəsində hadisə itkisi.
+- **Səssiz dayanma:** Codex cavab verməzsə dövr heç nə etmir və bildiriş də yoxdur (watchdog yoxdur). Təhlükəsizdir, amma səssizdir.
+- **PR #6 üçün:** `src/security/` və `src/approval/`-a toxunduğu üçün gate onu `sensitive_paths` ilə dayandırır (stop şərhi düşər); PR #6 yalnız əl ilə (Claude sessiyası) aparılır.
+- **Gecikmə riski:** push-dan dərhal sonra `pulls/N` `head.sha` bir neçə saniyə köhnə qala bilər; `verify` onu "dəyişiklik yoxdur" kimi oxuyub dayana bilər (səhv istiqamət yox, yalnız lazımsız dayanma).
