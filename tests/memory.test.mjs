@@ -40,7 +40,7 @@ const jobs = async (env) => (await (await worker.fetch(new Request("https://x.de
 
 test("A: bilik bazası token, parol və e-poçtu maskalayıb saxlayır, sayı yazır", async () => {
   const kb = new KnowledgeBase(createStore({}));
-  const r = await kb.add({ type: "lesson", title: "Qeyd " + MAIL, text: "parol: Salam12345 və açar " + ANT, source_url: "https://x.dev/cb?access_token=" + META });
+  const r = await kb.add({ type: "lesson", title: "Qeyd " + MAIL, text: "parol: Salam12345\naçar " + ANT, source_url: "https://x.dev/cb?access_token=" + META });
   const rec = await kb.get(r.id);
   const all = JSON.stringify(rec);
   for (const secret of [MAIL, "Salam12345", ANT, META]) assert.ok(!all.includes(secret), "saxlanıb: " + secret.slice(0, 8));
@@ -205,4 +205,29 @@ test("B (Codex P1): əvvəlki sorğudakı injection mətni növbəti sorğuda li
   assert.ok(sys.includes('"owner":"claude"'), "bölgü məlumatı qalır");
   const state = await createStore(env).load();
   assert.ok(state.lastJob.tasks[0].instruction.includes("Ignore previous"), "yaddaşdakı qeyd dəyişmir, süzgəc yalnız promptda tətbiq olunur");
+});
+
+// Codex review raund 1 (PR #6, P1): modeldən gələn task id və depends tanınan token ola bilər, yaddaşa maskasız düşməməlidir
+test("B (Codex P1): task id və depends token ola bilməz, iş qeydində və son işdə təhlükəsiz id-yə çevrilir", async () => {
+  const sub = [
+    { id: ANT, owner: "claude", instruction: "Birinci iş", depends: [] },
+    { id: "t2", owner: "claude", instruction: "İkinci iş", depends: [ANT, META, "yoxdur"] },
+  ];
+  installFetch(mutableHandler({ mode: "task", subtasks: sub, external_action: null }).handler);
+  const env = baseEnv();
+  await talk(env, "iki iş et");
+  const state = await createStore(env).load();
+  const stored = JSON.stringify({ lastJob: state.lastJob, jobs: await jobs(env) });
+  for (const secret of [ANT, META]) assert.ok(!stored.includes(secret), "id/depends-də qalıb: " + secret.slice(0, 8));
+  assert.deepEqual(state.lastJob.tasks.map((t) => t.id), ["t1", "t2"], "təhlükəsiz olmayan id t<N> ilə əvəz olunur");
+  assert.deepEqual(state.lastJob.tasks[1].depends, ["t1"], "depends yalnız qeyddəki id-lərə yönələ bilər, naməlum dəyərlər atılır");
+  const j = (await jobs(env))[0];
+  assert.deepEqual(j.tasks.map((t) => t.id), ["t1", "t2"]);
+});
+
+test("B (Codex P1): adi qısa id-lər və asılılıq dəyişmir", () => {
+  const t = [{ id: "t1", owner: "gpt", status: "done", depends: [], instruction: "a" }, { id: "t2", owner: "claude", status: "done", depends: ["t1"], instruction: "b" }];
+  const rec = ClaudeOrchestrator.lastJobRecord("x", "achieved", t);
+  assert.deepEqual(rec.tasks.map((k) => [k.id, k.depends]), [["t1", []], ["t2", ["t1"]]]);
+  assert.deepEqual(ClaudeOrchestrator.persistedTasks(t).map((k) => k.id), ["t1", "t2"]);
 });

@@ -27,10 +27,34 @@ test("Bearer başlığı maskalanır, 'Authorization:' sözü qalır", () => {
 });
 
 test("etiketdən sonrakı dəyər maskalanır (parol, şifrə, password, api key)", () => {
-  assert.equal(redactText("parol: Salam12345 sonra"), "parol: " + MASK + " sonra");
+  assert.equal(redactText("parol: Salam12345 sonra"), "parol: " + MASK, "dırnaqsız parol sətrin sonuna qədər maskalanır");
   assert.equal(redactText("Şifrə = abc12345"), "Şifrə = " + MASK);
   assert.equal(redactText("password=hunter2x"), "password=" + MASK);
   assert.equal(redactText("api key: zzzzzzzz"), "api key: " + MASK);
+  assert.equal(redactText("token: abc12345 sonra"), "token: " + MASK + " sonra", "açar tipli etiket yalnız tək sözü maskalayır");
+});
+
+// Codex review raund 1 (PR #6, P1): boşluqlu parol (passphrase) tam maskalanmalıdır
+test("boşluqlu və dırnaqlı parol tam maskalanır, qalan mətn qorunur", () => {
+  const r1 = redactWithCount("parol: correct horse battery staple");
+  assert.equal(r1.text, "parol: " + MASK);
+  assert.ok(!/horse|battery|staple|correct/.test(r1.text));
+  assert.equal(redactText("password = \"my long pass phrase\" və adi mətn qalır"), "password = " + MASK + " və adi mətn qalır");
+  assert.equal(redactText("pwd: 'iki söz parol' sonra"), "pwd: " + MASK + " sonra");
+  assert.equal(redactText("passphrase=alpha beta gamma delta"), "passphrase=" + MASK);
+  assert.equal(redactText("parol: bir iki üç\nsonrakı sətir adi mətndir"), "parol: " + MASK + "\nsonrakı sətir adi mətndir", "yalnız həmin sətir maskalanır");
+  // ən çox 200 simvol örtülür, çox uzun mətndə naxış sonsuz uzanmır
+  const long = redactText("parol: " + "a ".repeat(500));
+  assert.ok(long.startsWith("parol: " + MASK) && long.length < 1000);
+});
+
+test("maskalama təkrar çağırışda dəyişmir (idempotent), dırnaqlı halda da", () => {
+  for (const s of ["parol: correct horse battery staple", 'password = "a b c d" sonra', "token: abc12345 sonra", "x " + META + " y"]) {
+    const once = redactWithCount(s);
+    const twice = redactWithCount(once.text);
+    assert.equal(twice.text, once.text, s);
+    assert.equal(twice.count, 0, s);
+  }
 });
 
 test("e-poçt maskalanır, sayı düzgündür", () => {
@@ -71,6 +95,10 @@ test("CPU: pozucu uzun mətndə maskalama saniyələrlə işləmir", () => {
     tireZənciri: "x@" + "a-".repeat(N / 2),
     parolTəkrarı: "parol ".repeat(N / 6),
     parolİkiNöqtə: "parol:".repeat(N / 6),
+    parolBoşluqlu: "parol: ".repeat(N / 7),
+    parolDırnaq: 'password="'.repeat(N / 10),
+    parolTəkDırnaq: "pwd='a ".repeat(N / 7),
+    parolUzunSətir: "parol:" + "a b ".repeat(N / 4),
     boşluqSonra: " ".repeat(N) + "parol",
     skTəkrarı: "sk-".repeat(N / 3),
     jwtBaşlanğıcı: ("ey" + "J" + "a".repeat(1990)).repeat(N / 1994),

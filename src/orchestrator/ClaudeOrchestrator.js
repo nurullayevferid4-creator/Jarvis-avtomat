@@ -24,6 +24,10 @@ import { redactText } from "../security/redact.js";
 // başqa modelə verilərkən <external_content> qutusuna qoyulur, əmr kimi qəbul edilmir.
 const HELPER_MAX_CHARS = 20000;
 
+// Alt tapşırıq id-si yaddaşa yazılanda: ən çox 12 simvol (tanınan token formatları ən azı 13 simvoldur), yalnız hərf/rəqəm/_.-
+const SAFE_TASK_ID = /^[A-Za-z0-9_.-]{1,12}$/;
+const safeTaskId = (id, i) => (SAFE_TASK_ID.test(String(id)) ? String(id) : "t" + (i + 1));
+
 export class ClaudeOrchestrator {
   // approvals (istəyə bağlı): təsdiq mərkəzi. Verilməsə köhnə davranış dəyişmir.
   constructor({ env, registry, limits, store, approvals = null }) {
@@ -118,17 +122,19 @@ export class ClaudeOrchestrator {
 
   // Yaddaşa (iş qeydlərinə) yazılan variant: məxfi məlumat maskalanır. İstifadəçiyə qaytarılan cavab dəyişmir.
   static persistedTasks(tasks) {
-    return ClaudeOrchestrator.publicTasks(tasks).map((t) => ({ ...t, instruction: redactText(t.instruction), error: redactText(t.error), note: redactText(t.note) }));
+    return ClaudeOrchestrator.publicTasks(tasks).map((t, i) => ({ ...t, id: safeTaskId(t.id, i), instruction: redactText(t.instruction), error: redactText(t.error), note: redactText(t.note) }));
   }
 
   // Növbəti sorğuda lider modelə verilən "son iş" qeydi: kim hansı alt tapşırığı etdi.
   // Yalnız real icra nəticəsi (sahib, status, qısa təlimat) yazılır. Köməkçinin cavabı və xətalar yazılmır.
   static lastJobRecord(text, status, tasks) {
+    // id və depends modeldən gəlir (tanınan token ola bilər): yalnız qısa təhlükəsiz id qəbul olunur, depends yalnız bu id-lərə yönələ bilər.
+    const ids = new Map(tasks.map((t, i) => [t.id, safeTaskId(t.id, i)]));
     return {
       ts: new Date().toISOString(),
       status,
       request: redactText(text).slice(0, 200),
-      tasks: tasks.map((t) => ({ id: t.id, owner: t.owner, status: t.status, depends: t.depends || [], instruction: redactText(t.instruction).slice(0, 160) })),
+      tasks: tasks.map((t) => ({ id: ids.get(t.id), owner: t.owner, status: t.status, depends: (t.depends || []).map((d) => ids.get(d)).filter(Boolean), instruction: redactText(t.instruction).slice(0, 160) })),
     };
   }
 

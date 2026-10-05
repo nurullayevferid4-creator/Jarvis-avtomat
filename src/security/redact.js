@@ -15,8 +15,12 @@
 
 export const MASK = "[gizlədildi]";
 
-// Etiketdən sonrakı dəyər: "parol: Abc123", "password=...", "api key: ...".
-const LABEL_RE = /((?:parol|şifrə|sifre|password|passwd|pwd|passcode|token|secret|api[ _-]?key|açar)[ \t]{0,3}[:=][ \t]{0,3})(\S{3,200})/gi;
+// Parol tipli etiket: "parol: Abc123", "password=...". Dəyər BOŞLUQLU ola bilər ("parol: correct horse battery staple"),
+// ona görə dırnaqlıdırsa dırnağa qədər, deyilsə sətrin sonuna qədər (ən çox 200 simvol) maskalanır.
+// Bu, həmin sətrin qalan adi mətnini də örtə bilər: məxfilik üçün qəsdən seçilmiş güzəştdir.
+const PASS_LABEL_RE = /((?:parol|şifrə|sifre|password|passwd|passphrase|pwd|passcode)[ \t]{0,3}[:=][ \t]{0,3})(?:"([^"\n]{1,200})"|'([^'\n]{1,200})'|([^\n]{3,200}))/gi;
+// Açar tipli etiket: "token: ...", "api key=..." (tək söz).
+const KEY_LABEL_RE = /((?:token|secret|api[ _-]?key|açar)[ \t]{0,3}[:=][ \t]{0,3})(\S{3,200})/gi;
 
 // Prefiksi məlum olan açarlar. Hamısı məhduddur.
 const VALUE_PATTERNS = [
@@ -41,8 +45,14 @@ export function redactWithCount(value) {
     count++;
     return MASK;
   };
-  let s = value.replace(LABEL_RE, (m, head, val) => {
-    if (val === MASK) return m; // artıq maskalanıb
+  let s = value.replace(PASS_LABEL_RE, (m, head, q1, q2, bare) => {
+    const val = q1 !== undefined ? q1 : q2 !== undefined ? q2 : bare;
+    if (val.startsWith(MASK)) return m; // artıq maskalanıb (təkrar çağırışda dəyişmir)
+    count++;
+    return head + MASK;
+  });
+  s = s.replace(KEY_LABEL_RE, (m, head, val) => {
+    if (val === MASK) return m;
     count++;
     return head + MASK;
   });
