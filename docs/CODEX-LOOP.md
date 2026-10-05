@@ -35,7 +35,7 @@ Nəticə: yalnız `pull_request_review` kifayət etmir. Təmiz nəticə və limi
 
 | Fayl | Rol | Vəziyyət |
 |---|---|---|
-| `scripts/codex-loop/gate.mjs` | bütün qərarlar (təmiz funksiyalar) + `decide` / `verify` CLI | yazılıb, 54 testlə yoxlanıb (24 vahid + 30 simulyasiya), PR #6/#7 üzərində oxuma rejimində işlədilib |
+| `scripts/codex-loop/gate.mjs` | bütün qərarlar (təmiz funksiyalar) + `decide` / `verify` CLI | yazılıb, 61 testlə yoxlanıb (31 vahid/statik + 30 simulyasiya), PR #6/#7 üzərində oxuma rejimində işlədilib |
 | `scripts/codex-loop/config.json` | bot adı, budaq prefiksi, raund limiti, həssas/workflow yolları | hazır |
 | `.github/workflow-drafts/claude-codex-loop.yml` | workflow qaralaması | **aktiv deyil**, YAML sintaksisi parse olunur, Actions-da işləməyib |
 | `tests/codex-loop.test.mjs` | gate + qaralamanın statik təhlükəsizlik yoxlamaları | `npm test`-ə daxildir |
@@ -57,7 +57,7 @@ Mövcud `.github/workflows/claude.yml`-ə toxunulmayıb (yalnız `@claude` ilə 
 | 11 | review mətni etibarsızdır | `<external_content trust="untrusted">` qutusu; ümumi və dövrə xas injection izi (`gh pr merge`, `--force`, `.github/workflows`, açar adları…) tapılsa `injection_suspected` və insan | test |
 | 12 | P0 / həssas dəyişiklik | P0 → stop; PR-da `src/security/`, `src/approval/`, `src/guards/`, `src/audit/`, `SECURITY.md`, `wrangler.toml`, `package.json`, `AGENTS/CLAUDE/TEAM.md`, `scripts/codex-loop/` varsa avtomatik düzəliş yox | test |
 | 13 | `.github/` dəyişiklikləri | gate-də stop və düzəlişdən sonra `verify`-də stop | test |
-| 14-15 | merge hüququ yox, qərar Fərid-də | workflow-da merge addımı yoxdur; Claude-a `gh pr merge/close`, force push, `main`-ə push qadağandır (`--disallowedTools`); təmiz rəy yalnız "dayan" deməkdir | statik test; **icra səviyyəsində zəmanət yoxdur**, bax "Məhdudiyyətlər" |
+| 14-15 | merge hüququ yox, qərar Fərid-də | workflow-da merge addımı yoxdur; Claude-a `gh pr merge/close`, force push, `main`-ə push qadağandır (`--disallowedTools`); təmiz rəy yalnız "dayan" deməkdir | statik test + `verify` guard-ı; **icra səviyyəsində zəmanət yoxdur**, bax "Pre-activation audit" |
 | 16 | concurrency | `concurrency: codex-loop-pr-<N>`, `cancel-in-progress: false` | statik test; Actions-da yoxlanmayıb |
 | 17 | review ID + SHA saxlanması | PR-dakı gizli state şərhi (`<!-- codex-loop-state:v1 {...} -->`), yalnız `github-actions[bot]` tərəfindən yazılanı qəbul olunur, pozulmuş state → stop | test |
 | 18 | limitdən sonra mövcud PR-lar | `workflow_dispatch` (pr_number); `codex_limit` şərhi dövrü `waiting_limit`-ə qoyur və yeni sorğu yazmır | test |
@@ -76,6 +76,34 @@ Simulyasiyanın tapdığı və düzəldilən 3 boşluq: (1) `claude/` ilə başl
 
 Bilinən sərhəd: Claude-un düzəliş işi yarımçıq qalsa, həmin commit üçün gələn yeni review `sha_already_handled` ilə buraxılır (sonsuz dövr yoxdur, amma dövr irəliləmir). Davam etmək üçün yeni commit (əl ilə düzəliş) lazımdır.
 
+## Pre-activation audit (70dcb93 üzərindən)
+
+Mənbələr: `anthropics/claude-code-action` `main` budağının `action.yml`, `docs/usage.md`, `docs/security.md`, `src/github/validation/{actor,permissions}.ts`, `src/github/token.ts`, `src/modes/detector.ts` (WebFetch ilə oxunub, xülasə şəklində; action icra edilməyib); GitHub sənədləri (events, triggering a workflow, concurrency); repo-nun real Actions run siyahısı.
+
+### A) Sübut edilmiş (sənəd və ya real məlumatla)
+- Action input-ları `prompt`, `claude_args`, `anthropic_api_key`, `github_token`, `allowed_bots` `action.yml`-də mövcuddur. `claude_args` sənədi `--max-turns`, `--allowedTools`, `--disallowedTools` nümunələrini göstərir. Qaralamada başqa input yoxdur (test bunu yoxlayır).
+- **Düzəldilən problem 1:** action default olaraq botları rədd edir ("Workflow initiated by non-human actor … Add bot to allowed_bots"). Bizdə actor Codex botudur, ona görə `allowed_bots: chatgpt-codex-connector` əlavə olundu ("*" yox). Müqayisə `[bot]` şəkilçisini və hərf registrini nəzərə almır.
+- **Düzəldilən problem 2:** `id-token: write` və Claude App OIDC yolu lazımsız idi. `github_token` verildikdə action OIDC mübadiləsini atlayır (`OVERRIDE_GITHUB_TOKEN`). `github_token: ${{ github.token }}` verildi, `id-token` silindi.
+- `prompt` verildikdə `issue_comment`/`pull_request_review`-da action agent rejiminə keçir və `@claude` tələb etmir (`detector.ts`).
+- **Codex botunun hadisələri workflow run yaradır:** real run siyahısında `actor=chatgpt-codex-connector[bot]` ilə `issue_comment` (limit şərhi, 12:47Z) və `pull_request_review_comment` run-ları var (`skipped`, çünki `claude.yml`-in `if` şərti ödənmir). Approval-required vəziyyəti görünmür.
+- Codex-in üç nəticə forması (review, adi şərh kimi təmiz nəticə, adi şərh kimi limit) PR #6/#7-dən oxunub və testlərdə eyni formada işlənir.
+- **GITHUB_TOKEN rekursiyası:** GitHub sənədi: `GITHUB_TOKEN` ilə törədilən hadisələr yeni workflow run yaratmır (istisna: `workflow_dispatch`, `repository_dispatch`, `pull_request` opened/synchronize/reopened approval-required halda). Nəticə: workflow-un state/bildiriş şərhləri, `@codex review` şərhi və Claude-un push-u (`GITHUB_TOKEN`) yeni run başlatmır, öz-özünə dövr mümkün deyil. Bu, sənəd əsaslıdır; canlıda yoxlanmayıb. `CODEX_TRIGGER_TOKEN` (PAT/App) verilərsə, onun şərhi `issue_comment` run-ı yarada bilər: `if` süzgəci (yalnız Codex botu) onu dayandırır.
+- `issue_comment` və `workflow_dispatch` workflow faylı default branch-dan götürülür və orada mövcud olmalıdır. `issue_comment` payload-ında PR-ın head məlumatı yoxdur: gate onu API-dən oxuyur (payload-a etibar edilmir).
+- **Fork:** sənəd: fork-dan gələn hadisədə secret-lər ötürülmür və `GITHUB_TOKEN` yalnız oxuyur. Qaralamada fork PR üç səviyyədə bloklanır: gate job `if`, gate.mjs `eligibility` (`fork_or_unknown_head`) və fix job `if` (`head.repo.full_name == github.repository` + yalnız `pull_request_review`). Fork üçün fix heç vaxt işləmir.
+- Permission-lar minimuma endirildi: workflow default `contents: read`; gate `issues: write` (state/bildiriş şərhi); fix `contents: write` + `pull-requests: read` + `issues: read`; post `issues: write`. **`contents: write` niyə:** Claude düzəlişi PR budağına `git push origin HEAD` ilə göndərir, bunun başqa yolu yoxdur. `pull-requests: write` heç yerdə yoxdur (statik test).
+- **Merge guard-ları (qatlar):** (1) workflow-da merge addımı yoxdur; (2) Claude-a `gh pr merge/close`, force push, `main`-ə push qadağandır, icazə siyahısı dardır; (3) fix job tokeni `pull-requests: read`; (4) `verify` Claude-dan sonra PR-ın açıq və merge olunmamış olduğunu, `main`-in SHA-sının dəyişmədiyini (gate job-da yazılan SHA ilə) və dəyişikliyin xətti, ≤3 commit, `.github/`/həssas yola toxunmayan olduğunu yoxlayır; pozulubsa `@codex review` yazılmır və dövr dayanır. Hamısı statik və simulyasiya testlərindədir.
+- `.github/`, həssas fayl, P0, `unparsed_findings`, injection izi, raund limiti, təkrar review ID/SHA, köhnə review: hamısı `gate.mjs`-də (61 test) və workflow-da yalnız gate-in `fix`/`request_review` qərarı ilə icra olunur; fix job `needs.gate.outputs.action == 'fix'` olmadan başlamır; state fix-dən əvvəl yazılır.
+- gate.mjs yalnız `trusted/` (default branch) checkout-dan işləyir; qaralamada PR budağından işləyən heç bir `node …gate.mjs` yoxdur (statik test).
+
+### B) Hələ nəzəri / sübut olunmayan
+- Action heç vaxt icra olunmayıb. İnput-lar `main` budağında yoxlanıb; `@v1` etiketinin eyni olduğu yoxlanmayıb. `github_token` + `allowed_bots` + agent rejimi `pull_request_review`-da birlikdə canlı yoxlanmayıb.
+- Codex `github-actions[bot]` tərəfindən yazılan `@codex review` şərhinə cavab verəcəkmi: **bilinmir** (açıq risk). Əvvəlki sorğular sənin hesabınla yazılıb.
+- Bot tərəfindən başladılan eyni-repo run-larında secret-lərin (`ANTHROPIC_API_KEY`) əlçatanlığı: GitHub sənədi yalnız fork və Dependabot üçün məhdudiyyət göstərir; üçüncü tərəf App hadisəsi üçün canlı yoxlanmayıb.
+- `pull_request_review` hadisəsində hansı workflow faylı versiyasının işləməsi: sənəd xülasəsi "base repo default branch versiyası" deyir, mən əvvəl PR merge commit-i fərz etmişdim. Hər iki halda gate trusted checkout-dandır; birincidirsə, workflow yalnız `main`-ə merge olunandan sonra işləyir.
+- Merge API-nin tələb etdiyi dəqiq token icazəsi (`pull-requests: write` + `contents: write`) sənəddən çıxarıla bilmədi (səhifə kəsildi). `pull-requests: read` guard-ı gözlənilən, amma canlıda sınanmayıb.
+- **Concurrency:** GitHub sənədi: qrupda eyni anda 1 icra və 1 gözləyən ola bilər, yeni gələn gözləyəni **ləğv edib əvəz edir**. Fix işləyərkən (dəqiqələr) bir-birinin ardınca 2+ hadisə gəlsə, aralarındakı hadisə itə bilər. Normal axında Codex yeni review-nu yalnız bizim `@codex review`-dan sonra verir, ona görə nadirdir, amma istisna deyil. İtmiş hadisəni `workflow_dispatch` ilə bərpa etmək olar.
+- `ANTHROPIC_API_KEY` secret-inin mövcudluğu mənə görünmür.
+
 ## Limit açıldıqdan sonra
 
 1. Fərid dashboard-da limitin açıldığını görür.
@@ -86,17 +114,11 @@ Bilinən sərhəd: Claude-un düzəliş işi yarımçıq qalsa, həmin commit ü
 ## Manual addımlar (Fərid-in icazəsi olmadan edilmir)
 
 1. Workflow-u aktivləşdirmək: qaralamanı `.github/workflows/claude-codex-loop.yml` olaraq köçürmək (ayrıca PR, Fərid baxır).
-2. `ANTHROPIC_API_KEY` repo secret-i (Actions rejimi üçün; hazırda yoxdur, mövcud `claude.yml` bu səbəbdən uğursuz olub). B rejimi bunu tələb etmir.
+2. `ANTHROPIC_API_KEY` repo secret-i (Actions rejimi üçün). Vəziyyəti mən görə bilmirəm: `claude.yml`-in 04.10 run-ı auth səbəbindən uğursuz olub, sonrakı run-larda action addımı "success" göstərir, amma log-lar əlçatan deyil (proxy bloklayır), ona görə bunun real işlədiyini bilmirəm. B rejimi bunu tələb etmir.
 3. İstəyə görə `CODEX_TRIGGER_TOKEN` (fine-grained PAT və ya GitHub App tokeni, yalnız bu repo, yalnız PR/Issue şərh yazma). Səbəb: `@codex review` şərhini `GITHUB_TOKEN` yazarsa (`github-actions[bot]`), Codex-in ona cavab verib-verməyəcəyi **yoxlanılmayıb**.
 4. Tövsiyə: `main` üçün branch protection (PR + review tələbi). Hazırda `main` qorunmur.
 5. Tövsiyə: üçüncü tərəf action-ları commit SHA-ya pin etmək.
 
 ## Məhdudiyyətlər və yoxlanılmayanlar
 
-- Workflow Actions-da bir dəfə də işləməyib. `anthropics/claude-code-action@v1`-in `prompt` / `claude_args` giriş adları və sintaksisi ilk işə salmada yoxlanmalıdır.
-- `contents: write` tokeni texniki olaraq qorunmayan `main`-ə push/merge edə bilər. Qadağa alət siyahısı (`--disallowedTools`) və `verify` ilə qoyulub, bu, branch protection qədər möhkəm deyil.
-- `pull_request_review` hadisəsində workflow faylı PR-ın merge commit-indən götürülür. Yazma icazəsi olan biri `claude/*` budağında workflow-u dəyişə bilər; fork PR-lar `if` ilə kənarlaşdırılıb. Yazma icazəsi olan şəxs qorunmayan repo-da onsuz da hər şeyi edə bilər.
-- Bot tərəfindən başladılan run-larda secret-lərin əlçatan olması yoxlanılmayıb.
-- PR #6 `src/security/` və `src/approval/`-a toxunur: bu dövr onu **qəsdən avtomatik düzəltməz** (`sensitive_paths`), insan nəzarətli axın davam edir.
-- Codex "clean" siqnalının formatı bir PR-da (#7) müşahidə olunub; Codex mətni dəyişərsə regex-lər yenilənməlidir.
-- Naxışlar P0-P3 badge formatına əsaslanır; badge-siz tapıntı "no_actionable" sayılır (səssiz buraxılmaz, `skip` səbəbi PR-a yazılmır, workflow log-undadır).
+Ətraflı siyahı yuxarıdakı "Pre-activation audit" bölməsindədir (A sübut edilmiş, B nəzəri). Qısa: workflow Actions-da işləməyib; `contents: write` tokeni qorunmayan `main`-ə texniki olaraq push edə bilər (qadağa alət siyahısı, `pull-requests: read` və `verify`-dəki `main` SHA yoxlaması ilə qoyulub, branch protection qədər möhkəm deyil); `pull_request_review`-da workflow faylı versiyası, bot run-larında secret əlçatanlığı və Codex-in `github-actions[bot]` şərhinə cavabı canlı yoxlanmayıb; PR #6 `src/security/` və `src/approval/`-a toxunur və bu dövr onu qəsdən avtomatik düzəltməz; Codex "clean" siqnalının formatı bir PR-da (#7) müşahidə olunub, mətn dəyişərsə regex-lər yenilənməlidir; badge-siz tapıntı `no_actionable` sayılır (inline şərhdirsə `unparsed_findings` ilə dayanır).

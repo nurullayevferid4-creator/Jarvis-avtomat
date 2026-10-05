@@ -255,10 +255,13 @@ export function buildPrompt({ repo, pr, findings, round, cfg }) {
 
 // ---------- düzəlişdən sonrakı yoxlama ----------
 
-// input: { state, before_sha, after_sha, compare:{status, ahead_by, behind_by, files} }
+// input: { state, before_sha, after_sha, compare:{status, ahead_by, behind_by, files}, pr_open?, pr_merged?, base_before?, base_after? }
 export function verifyFix(input, cfg) {
   const { state, before_sha: before, after_sha: after, compare } = input;
   if (!HEX.test(before || "") || !HEX.test(after || "")) return out("stop", "post_check_failed:bad_sha", stopState(state, "post_check_bad_sha"));
+  // Merge/bağlanma və baza budağının hərəkəti: dövr merge etmir, ona görə bunlar baş veribsə dayanır (fail-closed; insan merge-i də dayandırır).
+  if (input.pr_open === false || input.pr_merged === true) return out("stop", "post_check_failed:pr_not_open", stopState(state, "post_check_pr_state"));
+  if (input.base_before && input.base_after && input.base_before !== input.base_after) return out("stop", "post_check_failed:base_moved", stopState(state, "post_check_base_moved"), { notify: "Fix zamanı baza budağı (main) dəyişib. Dövr dayandı; qərar Fərid-dədir." });
   if (before === after) return out("stop", "no_change_needs_human", stopState(state, "no_change"), { notify: "Claude kodda dəyişiklik etmədi (tapıntını əsassız saydı və ya düzəldə bilmədi). Qərar Fərid-dədir." });
   if (!compare || compare.status !== "ahead" || compare.behind_by !== 0) return out("stop", "post_check_failed:not_linear", stopState(state, "post_check_not_linear"));
   if (!Number.isInteger(compare.ahead_by) || compare.ahead_by < 1 || compare.ahead_by > cfg.max_fix_commits) return out("stop", "post_check_failed:commit_count", stopState(state, "post_check_commits"));
@@ -359,7 +362,14 @@ export async function main(argv) {
     else {
       const after = prData.head.sha;
       const compare = await api("/repos/" + repo + "/compare/" + before + "..." + after);
-      result = verifyFix({ state, before_sha: before, after_sha: after, compare: { status: compare.status, ahead_by: compare.ahead_by, behind_by: compare.behind_by, files: compare.files || [] } }, cfg);
+      const baseBefore = arg(argv, "base-before");
+      let baseAfter;
+      if (baseBefore) baseAfter = (await api("/repos/" + repo + "/git/ref/heads/" + cfg.base_branch)).object.sha;
+      result = verifyFix({
+        state, before_sha: before, after_sha: after,
+        compare: { status: compare.status, ahead_by: compare.ahead_by, behind_by: compare.behind_by, files: compare.files || [] },
+        pr_open: prData.state === "open", pr_merged: prData.merged === true, base_before: baseBefore, base_after: baseAfter,
+      }, cfg);
     }
   } else {
     throw new Error("komanda: decide | verify");

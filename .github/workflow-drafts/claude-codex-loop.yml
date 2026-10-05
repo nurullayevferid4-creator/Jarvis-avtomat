@@ -54,6 +54,7 @@ jobs:
       reason: ${{ steps.decide.outputs.reason }}
       head_ref: ${{ steps.decide.outputs.head_ref }}
       head_sha: ${{ steps.decide.outputs.head_sha }}
+      base_sha: ${{ steps.decide.outputs.base_sha }}
       prompt: ${{ steps.decide.outputs.prompt }}
     steps:
       - name: Trusted checkout (default branch)
@@ -74,6 +75,7 @@ jobs:
           REVIEW_ID: ${{ github.event.review.id }}
           COMMENT_ID: ${{ github.event.comment.id }}
           RESET: ${{ inputs.reset }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
           case "$EVENT_NAME" in
@@ -88,14 +90,17 @@ jobs:
           REASON="$(jq -r '.reason' decision.json)"
           HEAD_REF="$(gh api "repos/$REPO/pulls/$PR" --jq '.head.ref')"
           HEAD_SHA="$(gh api "repos/$REPO/pulls/$PR" --jq '.head.sha')"
+          BASE_SHA="$(gh api "repos/$REPO/git/ref/heads/$DEFAULT_BRANCH" --jq '.object.sha')"
           # Budaq adı kənardan gəlir: şəkil və uzunluq yoxlanır
           [[ "$HEAD_REF" =~ ^claude/[A-Za-z0-9._/-]{1,100}$ ]] || { ACTION=skip; REASON=bad_head_ref; }
           [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || { ACTION=skip; REASON=bad_head_sha; }
+          [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { ACTION=skip; REASON=bad_base_sha; }
           {
             echo "action=$ACTION"
             echo "reason=$REASON"
             echo "head_ref=$HEAD_REF"
             echo "head_sha=$HEAD_SHA"
+            echo "base_sha=$BASE_SHA"
           } >> "$GITHUB_OUTPUT"
           if [ "$ACTION" = "fix" ] && [ -s prompt.txt ]; then
             D="PROMPT_$(openssl rand -hex 8)"
@@ -114,7 +119,7 @@ jobs:
           set -euo pipefail
           STATE="$(jq -r '.state_comment // empty' decision.json)"
           if [ -n "$STATE" ]; then
-            EXISTING="$(gh api "repos/$REPO/issues/$PR/comments?per_page=100" --paginate --jq '[.[] | select(.user.login=="github-actions[bot]" and (.body | contains("codex-loop-state:v1")))] | last | .id // empty')"
+            EXISTING="$(gh api "repos/$REPO/issues/$PR/comments?per_page=100" --paginate --jq '[.[] | select(.user.login=="github-actions[bot]" and (.body | contains("codex-loop-state:v1")))] | last | .id // empty' | tail -n1)"
             if [ -n "$EXISTING" ]; then
               gh api --method PATCH "repos/$REPO/issues/comments/$EXISTING" -f body="$STATE" > /dev/null
             else
@@ -139,14 +144,20 @@ jobs:
 
   fix:
     needs: gate
-    if: needs.gate.outputs.action == 'fix'
+    # Düzəliş YALNIZ review hadisəsində və eyni repo-nun budağında mümkündür (fork PR-da heç vaxt işləmir).
+    if: >-
+      needs.gate.outputs.action == 'fix' &&
+      github.event_name == 'pull_request_review' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Minimum icazə. contents: write YALNIZ PR budağına push üçündür (git push origin HEAD).
+    # pull-requests/issues yalnız oxuma: bu token ilə PR merge/bağlama və şərh yazma mümkün olmamalıdır.
+    # id-token: write lazım deyil: github_token verildiyi üçün action OIDC/Claude App yolunu atlayır.
     permissions:
       contents: write
-      pull-requests: write
-      issues: write
-      id-token: write
+      pull-requests: read
+      issues: read
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@v4
@@ -165,6 +176,9 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ github.token }}
+          # Actor Codex botudur: action default olaraq botları rədd edir. Yalnız bu bot icazəlidir ("*" yox).
+          allowed_bots: chatgpt-codex-connector
           prompt: ${{ needs.gate.outputs.prompt }}
           claude_args: >-
             --max-turns 25
@@ -196,14 +210,15 @@ jobs:
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
           BEFORE: ${{ needs.gate.outputs.head_sha }}
+          BASE_BEFORE: ${{ needs.gate.outputs.base_sha }}
         run: |
           set -euo pipefail
-          node trusted/scripts/codex-loop/gate.mjs verify --repo "$REPO" --pr "$PR" --before "$BEFORE" --out verify.json
+          node trusted/scripts/codex-loop/gate.mjs verify --repo "$REPO" --pr "$PR" --before "$BEFORE" --base-before "$BASE_BEFORE" --out verify.json
           ACTION="$(jq -r '.action' verify.json)"
           REASON="$(jq -r '.reason' verify.json)"
           STATE="$(jq -r '.state_comment // empty' verify.json)"
           if [ -n "$STATE" ]; then
-            EXISTING="$(GH_TOKEN="$READ_TOKEN" gh api "repos/$REPO/issues/$PR/comments?per_page=100" --paginate --jq '[.[] | select(.user.login=="github-actions[bot]" and (.body | contains("codex-loop-state:v1")))] | last | .id // empty')"
+            EXISTING="$(GH_TOKEN="$READ_TOKEN" gh api "repos/$REPO/issues/$PR/comments?per_page=100" --paginate --jq '[.[] | select(.user.login=="github-actions[bot]" and (.body | contains("codex-loop-state:v1")))] | last | .id // empty' | tail -n1)"
             if [ -n "$EXISTING" ]; then GH_TOKEN="$READ_TOKEN" gh api --method PATCH "repos/$REPO/issues/comments/$EXISTING" -f body="$STATE" > /dev/null; fi
           fi
           if [ "$ACTION" = "request_review" ]; then

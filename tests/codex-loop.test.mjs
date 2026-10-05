@@ -322,3 +322,104 @@ test("etibarsız mətn: ümumi injection nümunələri də dövrü dayandırır;
   }
   assert.equal(decide(input({ event: { kind: "review", review: review({ body: bodyWith("P2", "src/a.js", 3, "Dırnaqlı sətirdə kəsmə maskalamadan əvvəl aparılır, bu sızma yaradır.") }) } }), cfg).action, "fix");
 });
+
+// ---- pre-activation audit: workflow səviyyəsində guard-lar (statik) ----
+
+const draftText = () => readFileSync(DRAFT, "utf8");
+const jobBlock = (name) => {
+  const y = draftText();
+  const start = y.search(new RegExp("^  " + name + ":\\s*$", "m"));
+  assert.ok(start >= 0, name + " job tapılmadı");
+  const rest = y.slice(start + 1);
+  const next = rest.search(/^  [a-z_]+:\s*$/m);
+  return y.slice(start, next < 0 ? undefined : start + 1 + next);
+};
+
+test("workflow: permission-lar minimumdur; yalnız fix job contents:write alır, merge üçün lazım olan pull-requests:write heç yerdə yoxdur", () => {
+  const y = draftText().replace(/^\s*#.*$/gm, ""); // şərhlər çıxarılır: yalnız real konfiqurasiya yoxlanır
+  assert.ok(!/pull-requests:\s*write/.test(y), "pull-requests: write yoxdur (token ilə PR merge/bağlama mümkün olmamalıdır)");
+  assert.ok(!/id-token:\s*write/.test(y), "id-token lazım deyil (github_token verilir)");
+  assert.ok(!/permissions:\s*write-all|contents:\s*write-all/.test(y));
+  assert.match(y, /^permissions:\s*\n  contents: read/m, "workflow səviyyəsində default yalnız oxuma");
+  for (const j of ["gate", "post", "on_failure"]) assert.ok(!/contents:\s*write/.test(jobBlock(j)), j + " contents:write almır");
+  const fix = jobBlock("fix");
+  assert.match(fix, /contents: write/);
+  assert.match(fix, /pull-requests: read/);
+  assert.match(fix, /issues: read/);
+  assert.match(fix, /contents: write[^\n]*\n|YALNIZ PR budağına push/, "contents:write səbəbi sənədləşdirilib");
+  assert.match(draftText(), /contents: write YALNIZ PR budağına push/);
+});
+
+test("workflow: fix job yalnız gate 'fix' dedikdə, yalnız review hadisəsində və yalnız eyni repo-nun budağında işləyir (fork bloklanır)", () => {
+  const fix = jobBlock("fix");
+  assert.match(fix, /needs\.gate\.outputs\.action == 'fix'/);
+  assert.match(fix, /github\.event_name == 'pull_request_review'/);
+  assert.match(fix, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
+  assert.match(fix, /needs: gate/);
+  const gate = jobBlock("gate");
+  assert.match(gate, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/, "gate job-da da fork süzgəci var");
+  assert.ok(!/pull_request_target/.test(draftText()));
+});
+
+test("workflow: action input-ları sənədləşdirilmiş adlardır; github_token və allowed_bots (yalnız Codex botu) verilir, '*' yoxdur", () => {
+  const fix = jobBlock("fix");
+  const withBlock = fix.slice(fix.indexOf("with:", fix.indexOf("claude-code-action")));
+  const names = [...withBlock.matchAll(/^          ([a-z_]+):/gm)].map((m) => m[1]);
+  // anthropics/claude-code-action action.yml-də mövcud olduğu yoxlanan adlar (bax docs/CODEX-LOOP.md)
+  const KNOWN = new Set(["prompt", "claude_args", "anthropic_api_key", "github_token", "allowed_bots"]);
+  assert.ok(names.length >= 5);
+  for (const n of names) assert.ok(KNOWN.has(n), "naməlum input: " + n);
+  assert.match(withBlock, /allowed_bots: chatgpt-codex-connector\s*$/m);
+  assert.ok(!/allowed_bots:\s*['"]?\*/.test(withBlock) && !/allowed_non_write_users/.test(withBlock));
+  assert.match(withBlock, /github_token: \$\{\{ github\.token \}\}/);
+  assert.match(withBlock, /--max-turns \d+/);
+});
+
+test("workflow: merge/bağlama/force push qadağan siyahısındadır və icazə siyahısında yoxdur", () => {
+  const fix = jobBlock("fix");
+  const allowed = /--allowedTools "([^"]+)"/.exec(fix)[1];
+  const denied = /--disallowedTools "([^"]+)"/.exec(fix)[1];
+  assert.ok(!/gh |merge|--force| -f|git push origin main|HEAD:/.test(allowed.replace(/Bash\(git push origin HEAD\)/, "")), "icazə siyahısında təhlükəli əmr yoxdur: " + allowed);
+  assert.ok(/Bash\(git push origin HEAD\)/.test(allowed));
+  for (const d of ["gh pr merge", "gh pr close", "git push --force", "git push -f", "git push origin main", "git push origin HEAD:main"]) assert.ok(denied.includes(d), d);
+  assert.ok(!/gh pr merge|gh api[^\n]*merge|pulls\/[^\n]*\/merge/.test(draftText().replace(/--disallowedTools[^\n]*/g, "").replace(/#[^\n]*/g, "")), "workflow-da merge addımı yoxdur");
+});
+
+test("workflow: gate qərarlarının hamısı workflow-da icra olunur (guard-lar atlana bilmir)", () => {
+  const y = draftText();
+  // fix yalnız action=='fix'; request_review yalnız gate-dən (dispatch) və ya verify-dən; stop səbəbi PR-a yazılır
+  assert.match(jobBlock("gate"), /steps\.decide\.outputs\.action == 'request_review'/);
+  assert.match(jobBlock("gate"), /if \[ "\$ACTION" = "stop" \]/);
+  assert.match(jobBlock("post"), /needs\.fix\.result == 'success'/);
+  assert.match(jobBlock("post"), /if \[ "\$ACTION" = "request_review" \]/);
+  assert.match(jobBlock("post"), /--base-before "\$BASE_BEFORE"/);
+  assert.match(jobBlock("fix"), /Stale guard/);
+  // state fix-dən ƏVVƏL (gate job-da) yazılır
+  assert.ok(y.indexOf("Save state and notify") < y.indexOf("  fix:"));
+  // gate.mjs həmişə trusted checkout-dan
+  assert.equal((y.match(/node trusted\/scripts\/codex-loop\/gate\.mjs/g) || []).length, 2);
+  assert.ok(!/node (?!trusted)[^\n]*gate\.mjs/.test(y));
+  // concurrency: PR başına
+  assert.match(y, /group: codex-loop-pr-\$\{\{ github\.event\.pull_request\.number \|\| github\.event\.issue\.number \|\| inputs\.pr_number \}\}/);
+});
+
+test("workflow: öz yazdığı şərhlər dövr yaratmır (bot süzgəci) və @codex yalnız iki yerdə, yalnız request_review ilə yazılır", () => {
+  const y = draftText();
+  const posts = [...y.matchAll(/body="@codex review"/g)];
+  assert.equal(posts.length, 2, "yalnız dispatch və verify addımları");
+  assert.ok(!/@codex(?! review")/.test(y.replace(/^#.*$/gm, "")), "başqa @codex xatırlatması yoxdur");
+  assert.match(y, /github\.event\.comment\.user\.login == 'chatgpt-codex-connector\[bot\]'/);
+  assert.match(y, /github\.event\.review\.user\.login == 'chatgpt-codex-connector\[bot\]'/);
+});
+
+// ---- verify: merge / baza budağı guard-ı ----
+
+test("verifyFix: PR bağlanıb/merge olunubsa və ya main fix zamanı dəyişibsə dayanır", () => {
+  const ok = { state: st({ rounds: 1, status: "fixing" }), before_sha: SHA, after_sha: SHA2, compare: { status: "ahead", ahead_by: 1, behind_by: 0, files: [{ filename: "src/a.js" }] }, pr_open: true, pr_merged: false, base_before: "a".repeat(40), base_after: "a".repeat(40) };
+  assert.equal(verifyFix(ok, cfg).action, "request_review");
+  assert.equal(verifyFix({ ...ok, pr_merged: true }, cfg).reason, "post_check_failed:pr_not_open");
+  assert.equal(verifyFix({ ...ok, pr_open: false }, cfg).reason, "post_check_failed:pr_not_open");
+  const moved = verifyFix({ ...ok, base_after: "b".repeat(40) }, cfg);
+  assert.deepEqual([moved.action, moved.reason, moved.nextState.status], ["stop", "post_check_failed:base_moved", "stopped"]);
+  assert.equal(verifyFix({ ...ok, base_before: undefined, base_after: undefined }, cfg).action, "request_review", "baza SHA verilməyibsə yoxlama atlanır (CLI həmişə verir)");
+});
