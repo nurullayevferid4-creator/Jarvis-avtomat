@@ -1,0 +1,26 @@
+{
+  "bot_login": "chatgpt-codex-connector[bot]",
+  "state_author": "github-actions[bot]",
+  "branch_prefix": "claude/",
+  "base_branch": "main",
+  "max_rounds": 8,
+  "max_findings": 10,
+  "max_finding_chars": 1500,
+  "max_fix_commits": 3,
+  "workflow_paths": [".github/"],
+  "sensitive_paths": [
+    "src/security/",
+    "src/approval/",
+    "src/guards/",
+    "src/audit/",
+    "SECURITY.md",
+    "APPROVALS.md",
+    "wrangler.toml",
+    "package.json",
+    "package-lock.json",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "TEAM.md",
+    "scripts/codex-loop/"
+  ]
+}
