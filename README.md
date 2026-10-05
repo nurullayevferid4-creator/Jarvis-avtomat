@@ -154,3 +154,4 @@ Böyük plan 4 mərhələyə bölünüb, hər biri ayrı PR və ayrı test ilə 
 - Shopify, Instagram, Telegram inteqrasiyaları hələ yoxdur. Paylaşım tapşırıqlarında yalnız qaralama hazırlanır.
 - Real API ilə sınaq hələ keçirilməyib (yuxarıya bax).
 - API açarlarını heç vaxt bu repo-ya yazma. Repo açıqdırsa hər kəs görür.
+Üçlü komanda testi: Fərid + Claude + ChatGPT
