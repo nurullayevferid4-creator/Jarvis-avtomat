@@ -231,7 +231,7 @@ test("foundation yığımı: mövcud sistemə qoşulmayıb (wired:false), status
   assert.equal(st.storage.persistent, false);
   assert.ok(!JSON.stringify(st).includes("TESTTOKEN"));
   assert.equal(st.integrations.find((i) => i.id === "instagram").configured, true);
-  assert.equal(st.integrations.find((i) => i.id === "instagram").liveReady, false);
+  assert.equal(st.integrations.find((i) => i.id === "instagram").liveReady, true, "credential + sənədlə yoxlanmış endpoint; canlı sınaq ayrıca");
   assert.ok(f.agents.learning instanceof LearningAgent && f.agents.sales instanceof SalesAgent);
   const { id } = await f.leads.create({ channel: "other" });
   assert.ok(await f.leads.get(id));

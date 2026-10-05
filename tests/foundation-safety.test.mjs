@@ -62,6 +62,6 @@ test("credential olmadan bütün oxuma/yazma/agent çağırışlarında şəbək
 });
 
 test("hazır modullar dəyişməyib: yalnız yeni fayllar əlavə olunub (src/ altında mövcud fayl siyahısı sabitdir)", () => {
-  const known = new Set(["adapters", "approval", "audit", "config.js", "guards", "index.js", "knowledge", "orchestrator", "policy.js", "prompts.js", "security", "state", "tools", "ui", "util.js", "validate.js", "storage", "integrations", "agents", "foundation"]);
+  const known = new Set(["adapters", "approval", "audit", "config.js", "guards", "index.js", "knowledge", "orchestrator", "policy.js", "prompts.js", "security", "state", "tools", "ui", "util.js", "validate.js", "storage", "integrations", "agents", "foundation", "telegram", "wiring.js"]);
   for (const n of readdirSync("src")) assert.ok(known.has(n), "gözlənilməyən src girişi: " + n);
 });

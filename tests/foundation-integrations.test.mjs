@@ -14,11 +14,11 @@ import { ShopifyAdapter, normalizeShopDomain } from "../src/integrations/shopify
 const TOKEN = "TESTTOKEN-ABCDEF-1234567890";
 const FULL_ENV = {
   IG_FNPARFUM_TOKEN: TOKEN, TIKTOK_ACCESS_TOKEN: TOKEN, YOUTUBE_CLIENT_ID: TOKEN + "1", YOUTUBE_CLIENT_SECRET: TOKEN + "2", YOUTUBE_REFRESH_TOKEN: TOKEN + "3",
-  TELEGRAM_BOT_TOKEN: TOKEN, TELEGRAM_ALLOWED_CHAT_IDS: "111,-222", SHOPIFY_ADMIN_TOKEN: TOKEN, SHOPIFY_STORE_DOMAIN: "demo-shop.myshopify.com",
+  TELEGRAM_BOT_TOKEN: "123456789:" + TOKEN, TELEGRAM_ALLOWED_CHAT_IDS: "111,-222", SHOPIFY_ADMIN_TOKEN: TOKEN, SHOPIFY_STORE_DOMAIN: "demo-shop.myshopify.com",
 };
 const counter = () => { const c = { n: 0, calls: [] }; c.fn = async (url, init) => { c.n++; c.calls.push({ url, init }); throw new Error("şəbəkə çağırılmamalı idi"); }; return c; };
 const err = async (p) => { try { await p; return null; } catch (e) { return e; } };
-const SAMPLE_INPUT = { "account.get": {}, "channel.get": {}, "bot.get": {}, "shop.get": {}, "media.list": {}, "videos.list": {}, "products.list": {}, "orders.list": {}, "customers.list": {}, "updates.receive": {}, "insights.get": { metrics: ["reach"] }, "video.get": { video_id: "v1" }, "voice.get": { file_id: "f1" } };
+const SAMPLE_INPUT = { "account.get": {}, "channel.get": {}, "bot.get": {}, "shop.get": {}, "media.list": {}, "videos.list": {}, "products.list": {}, "orders.list": {}, "customers.list": {}, "updates.receive": {}, "insights.get": { metrics: ["reach"] }, "video.get": { video_id: "abcDEF12345" }, "voice.get": { file_id: "f1" }, "videos.get": { video_ids: ["1"] } };
 
 test("registry: 5 inteqrasiya, interfeys müqaviləsi, naməlum inteqrasiya rədd edilir", async () => {
   const reg = createIntegrationRegistry({});
@@ -30,7 +30,7 @@ test("registry: 5 inteqrasiya, interfeys müqaviləsi, naməlum inteqrasiya rəd
 
 test("siyasət dəyişməzdir və yazma/DM/kütləvi göndərmə söndürülüdür", () => {
   assert.ok(Object.isFrozen(INTEGRATION_POLICY));
-  assert.deepEqual({ ...INTEGRATION_POLICY }, { writesEnabled: false, directMessagesEnabled: false, bulkMessagingEnabled: false });
+  assert.deepEqual({ ...INTEGRATION_POLICY }, { writesEnabled: false, approvedWritesEnabled: true, directMessagesEnabled: false, bulkMessagingEnabled: false });
   assert.throws(() => { INTEGRATION_POLICY.writesEnabled = true; }, TypeError);
 });
 
@@ -51,16 +51,16 @@ test("status: credential olmadan 'unconfigured', çatışan adlar görünür; cr
     assert.equal(s.mode, "unconfigured");
     assert.equal(s.configured, false);
     assert.equal(s.liveReady, false);
-    assert.equal(s.readOnly, true);
+    assert.equal(s.readOnly, s.id !== "telegram", "yalnız Telegram-da təsdiqli yazma (message.send) var");
     assert.equal(s.writesEnabled, false);
     assert.ok(s.missing.length >= 1);
-    assert.deepEqual(s.verifiedEndpoints, []);
+    assert.ok(s.verifiedEndpoints.length >= 1, s.id + ": sənədlə yoxlanmış oxuma endpoint-i olmalıdır");
   }
   const full = createIntegrationRegistry(FULL_ENV).statuses();
   for (const s of full) {
     assert.equal(s.configured, true, s.id);
     assert.equal(s.mode, "live");
-    assert.equal(s.liveReady, false, "endpoint yoxlanmayıb: canlıya hazır deyil");
+    assert.equal(s.liveReady, true, "credential + sənədlə yoxlanmış endpoint var (canlı sınaq ayrıca, bax tests/live-integrations.test.mjs)");
   }
   const dump = JSON.stringify(full);
   assert.ok(!dump.includes("TESTTOKEN"), "status dəyər göstərməməlidir");
@@ -86,19 +86,20 @@ test("credential olmadan: hər oxuma əməliyyatı not_configured verir və şə
   assert.equal(c.n, 0);
 });
 
-test("credential var, amma endpoint yoxlanmayıb: not_implemented, şəbəkəyə çıxmır ('integration completed' yoxdur)", async () => {
+test("credential var, amma endpoint yoxlanmayıb (endpoints boş): not_implemented, şəbəkəyə çıxmır ('integration completed' yoxdur)", async () => {
   const c = counter();
-  const reg = createIntegrationRegistry(FULL_ENV, { request: c.fn });
-  for (const id of reg.list()) {
-    for (const op of reg.get(id).status().readOperations) {
-      const e = await err(reg.run(id, op, SAMPLE_INPUT[op]));
+  for (const [id, Cls] of Object.entries(ADAPTER_CLASSES)) {
+    const a = new Cls({ env: FULL_ENV, endpoints: {}, request: c.fn });
+    assert.equal(a.status().liveReady, false, id);
+    for (const op of a.status().readOperations) {
+      const e = await err(a.run(op, SAMPLE_INPUT[op]));
       assert.equal(e && e.code, "not_implemented", id + " " + op);
     }
   }
   assert.equal(c.n, 0);
 });
 
-test("yazma əməliyyatları HƏMİŞƏ disabled: credential ilə, mock ilə, doğru girişlə də; şəbəkə yoxdur", async () => {
+test("yazma əməliyyatları run() ilə HƏMİŞƏ disabled: credential ilə, mock ilə, doğru girişlə də; şəbəkə yoxdur", async () => {
   const WRITES = {
     instagram: [["media.publish", { caption: "x" }], ["comments.reply", { comment_id: "c1", text: "t" }], ["messages.send", { recipient_id: "u1", text: "t" }]],
     tiktok: [["video.publish", { title: "x" }]],
@@ -110,8 +111,9 @@ test("yazma əməliyyatları HƏMİŞƏ disabled: credential ilə, mock ilə, do
     const c = counter();
     const reg = createIntegrationRegistry(FULL_ENV, { mock, request: c.fn });
     for (const [id, ops] of Object.entries(WRITES)) {
-      assert.deepEqual(reg.get(id).status().disabledWriteOperations.sort(), ops.map((o) => o[0]).sort());
-      for (const [op, input] of ops) assert.equal((await err(reg.run(id, op, input))).code, "disabled", id + " " + op + " mock=" + mock);
+      const st = reg.get(id).status();
+      assert.deepEqual([...st.disabledWriteOperations, ...st.approvalOnlyWriteOperations].sort(), ops.map((o) => o[0]).sort());
+      for (const [op, input] of ops) assert.equal((await err(reg.run(id, op, input))).code, "disabled", id + " " + op + " mock=" + mock + ": run() ilə yazma həmişə söndürülüb");
     }
     assert.equal(c.n, 0);
   }
@@ -157,7 +159,7 @@ test("mock nəticələri aşkar saxta və deterministikdir", async () => {
   const m = await reg.run("instagram", "media.list", { limit: 1 });
   assert.equal(m.data.items.length, 1);
   const ins = await reg.run("instagram", "insights.get", { metrics: ["reach", "likes"], period: "week" });
-  assert.deepEqual(Object.keys(ins.data.metrics), ["reach", "likes"]);
+  assert.deepEqual(ins.data.metrics.map((m) => m.name), ["reach", "likes"]);
 });
 
 // ---- Maşın (yoxlanmış endpoint ilə) testləri: yalnız saxta endpoint cədvəli ilə, real URL yoxdur ----
@@ -173,7 +175,7 @@ const fakeEndpoints = (extra = {}) => ({
 test("yoxlanmış endpoint: token yalnız sorğu başlığında, nəticədə və obyektdə yox; nəticə 'untrusted'", async () => {
   const seen = [];
   const request = async (url, init, timeout) => { seen.push({ url, init, timeout }); return { ok: true, status: 200, data: { username: "x", secret_echo: TOKEN } }; };
-  const ig = new InstagramAdapter({ env: FULL_ENV, endpoints: fakeEndpoints(), request });
+  const ig = new InstagramAdapter({ env: FULL_ENV, endpoints: fakeEndpoints(), allowedHosts: ["example.invalid"], request });
   assert.equal(ig.status().liveReady, true);
   const r = await ig.run("account.get", {});
   assert.equal(seen.length, 1);
@@ -187,23 +189,23 @@ test("yoxlanmış endpoint: token yalnız sorğu başlığında, nəticədə və
 });
 
 test("platforma xətası və şəbəkə istisnası: sabit mesaj, token/cavab mətni sızmır", async () => {
-  const bad = new InstagramAdapter({ env: FULL_ENV, endpoints: fakeEndpoints(), request: async () => ({ ok: false, status: 401, data: "Bearer " + TOKEN + " rədd edildi" }) });
+  const bad = new InstagramAdapter({ env: FULL_ENV, endpoints: fakeEndpoints(), allowedHosts: ["example.invalid"], request: async () => ({ ok: false, status: 401, data: "Bearer " + TOKEN + " rədd edildi" }) });
   const e1 = await err(bad.run("account.get", {}));
   assert.equal(e1.code, "upstream_error");
   assert.equal(e1.status, 401);
   assert.ok(!e1.message.includes("TESTTOKEN") && !e1.message.includes("rədd"));
-  const thrower = new InstagramAdapter({ env: FULL_ENV, endpoints: fakeEndpoints(), request: async () => { throw new Error("fetch failed: Bearer " + TOKEN); } });
+  const thrower = new InstagramAdapter({ env: FULL_ENV, endpoints: fakeEndpoints(), allowedHosts: ["example.invalid"], request: async () => { throw new Error("fetch failed: Bearer " + TOKEN); } });
   const e2 = await err(thrower.run("account.get", {}));
   assert.equal(e2.code, "upstream_error");
   assert.ok(!e2.message.includes("TESTTOKEN"));
-  const timeoutErr = new InstagramAdapter({ env: FULL_ENV, endpoints: fakeEndpoints(), request: async () => { const t = new Error("x"); t.name = "TimeoutError"; throw t; } });
+  const timeoutErr = new InstagramAdapter({ env: FULL_ENV, endpoints: fakeEndpoints(), allowedHosts: ["example.invalid"], request: async () => { const t = new Error("x"); t.name = "TimeoutError"; throw t; } });
   assert.match((await err(timeoutErr.run("account.get", {}))).message, /TimeoutError/);
 });
 
 test("endpoint 'verified: true' deyilsə (məs. false/'yes') sorğu göndərilmir", async () => {
   for (const flag of [false, "yes", 1, undefined]) {
     const c = counter();
-    const ig = new InstagramAdapter({ env: FULL_ENV, endpoints: fakeEndpoints({ verified: flag }), request: c.fn });
+    const ig = new InstagramAdapter({ env: FULL_ENV, endpoints: fakeEndpoints({ verified: flag }), allowedHosts: ["example.invalid"], request: c.fn });
     assert.equal((await err(ig.run("account.get", {}))).code, "not_implemented");
     assert.equal(c.n, 0);
   }
@@ -243,7 +245,7 @@ test("Telegram adapteri: allowlist env-dən oxunur; TELEGRAM_ALLOWED_CHAT_IDS ol
   assert.deepEqual(tg.allowedChatIds, ["111", "-222"]);
   assert.equal(tg.parseUpdate({ message: { message_id: 1, chat: { id: 111 }, text: "a" } }).ok, true);
   assert.equal(tg.parseUpdate({ message: { message_id: 1, chat: { id: 5 }, text: "a" } }).ok, false);
-  const noList = new TelegramAdapter({ env: { TELEGRAM_BOT_TOKEN: TOKEN } });
+  const noList = new TelegramAdapter({ env: { TELEGRAM_BOT_TOKEN: "123456789:" + TOKEN } });
   assert.deepEqual(noList.status().missing, ["TELEGRAM_ALLOWED_CHAT_IDS"]);
   assert.equal(noList.parseUpdate({ message: { message_id: 1, chat: { id: 111 }, text: "a" } }).ok, false);
 });
