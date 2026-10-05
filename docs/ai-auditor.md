@@ -73,16 +73,19 @@ Aşağıdakılar Kimi-nin rəsmi sənədindən (`platform.kimi.ai/docs/api/chat`
 
 - `POST https://api.moonshot.ai/v1/chat/completions`
 - `Authorization: Bearer <açar>`
-- Gövdə: `model`, `messages`, `max_completion_tokens`
+- Gövdə: `model`, `messages`, `max_completion_tokens` (8000), `reasoning_effort` (`low`; `kimi-k3` həmişə düşünür, sənəd defoltu `max`-dır), `response_format: {"type":"json_object"}` (JSON Mode; sənəd promptda JSON sahələrinin təsvirini tələb edir, `AUDITOR_SYSTEM` bunu edir)
 - Cavab: `choices[0].message.content`
 - Sənəddəki nümunə model: `kimi-k3`
 
-**Hələ təsdiqlənməyib:**
+**Format sənədlə təsdiqlənib** (endpoint, Bearer, `kimi-k3`, `max_completion_tokens`, `reasoning_effort`, `response_format`).
+
+**Hələ təsdiqlənməyib (real açarla sınaq gözləyir):**
 
 - Real `KIMI_API_KEY` ilə **heç bir real sorğu göndərilməyib**. Bütün mock testlər yalnız adapterin nə göndərdiyini yoxlayır. Real uyğunluğu yalnız `tests/kimi-auditor.live.test.mjs` göstərə bilər.
+- Reasoning tokenlərinin `max_completion_tokens`-ə daxil olub-olmadığı sənəddə yazılmayıb. 8000 limiti və `low` səviyyəsi bu risk üçün ehtiyatdır; cavab yenə də kəsilərsə hesabat `unparsed` olur.
+- `reasoning_effort` sənəddə yalnız `kimi-k3` üçündür. `KIMI_MODEL` ilə başqa model seçilsə sorğu 400 ilə rədd oluna bilər.
 - Sənəddə yalnız 400, 401, 500 xəta kodları yazılıb. 403 və 429 ehtiyat üçün ayrıca işlənir.
-- Model adı və `max_completion_tokens` limiti açarla yoxlanmalıdır. Lazım olsa `KIMI_MODEL` ilə dəyişir, kod dəyişmir.
-- Sənədi oxuyarkən ikinci dərəcəli alətdən istifadə olunub, mətn sətir-sətir müqayisə edilməyib. Açar gələndə ilk canlı sınaq bunu da yoxlayacaq.
+- Tapıntılar 10-la məhdudlanır (`maxFindings`).
 
 ## Məhdudiyyətlər
 

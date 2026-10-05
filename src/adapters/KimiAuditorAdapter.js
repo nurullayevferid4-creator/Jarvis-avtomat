@@ -18,10 +18,12 @@
 // API (rəsmi sənəd: platform.kimi.ai/docs/api/chat, 2026-10-05-də oxunub):
 //   POST https://api.moonshot.ai/v1/chat/completions
 //   Authorization: Bearer <KIMI_API_KEY>
-//   gövdə: model, messages, max_completion_tokens. Cavab: choices[0].message.content.
-// TODO(təsdiq gözləyir): bu format real KIMI_API_KEY ilə hələ sınanmayıb. Sənəddə yalnız 400/401/500
-//   xəta kodları yazılıb; 429 və 403 ehtiyat üçün ayrıca işlənir. Model adı (kimi-k3) KIMI_MODEL ilə
-//   dəyişdirilə bilir. Canlı yoxlama: tests/kimi-auditor.live.test.mjs (açarsız ATLANIR).
+//   gövdə: model, messages, max_completion_tokens, reasoning_effort, response_format. Cavab: choices[0].message.content.
+// Format sənədlə TƏSDİQLƏNİB (endpoint, Bearer, kimi-k3, max_completion_tokens, reasoning_effort, response_format).
+// TODO(təsdiq gözləyir): real KIMI_API_KEY ilə sınaq hələ keçirilməyib (tests/kimi-auditor.live.test.mjs açarsız ATLANIR).
+//   Sənəddə yalnız 400/401/500 yazılıb; 403/429 ehtiyat üçün işlənir. Reasoning tokenlərinin
+//   max_completion_tokens-ə daxil olub-olmadığı sənəddə YAZILMAYIB, real sınaqda yoxlanmalıdır.
+//   Model KIMI_MODEL ilə dəyişir; reasoning_effort yalnız kimi-k3 üçün sənədləşib (başqa modeldə 400 ola bilər).
 
 import { httpRequest, TimeoutError } from "../guards/http.js";
 import { CallBudget } from "../guards/budget.js";
@@ -36,7 +38,7 @@ export const REPORT_KIND = "auditreport"; // src/state/store.js DOC_KINDS içind
 const REPORT_TTL_SECONDS = 60 * 60 * 24 * 30;
 
 // Kimi-yə göndərilən hissələrin ölçü limitləri (simvol). Xarici API-yə lazımsız çox kod getməsin.
-const LIMITS = { task: 4000, diff: 60000, tests: 20000, summary: 2000, finding: 1500, rawText: 6000, maxFindings: 30 };
+const LIMITS = { task: 4000, diff: 60000, tests: 20000, summary: 2000, finding: 1500, rawText: 6000, maxFindings: 10 };
 
 const VERDICTS = new Set(["no_issues", "concerns", "blocking_concerns"]);
 const SEVERITIES = new Set(["info", "low", "medium", "high", "critical"]);
@@ -68,6 +70,9 @@ const SECRET_PATTERNS = [
   /\bBearer\s{1,5}[A-Za-z0-9._~+/=-]{10,500}/gi,
   /\bgh[pousr]_[A-Za-z0-9]{20,100}/g,
   /\bAKIA[0-9A-Z]{16}\b/g,
+  /\bxox[baprs]-[A-Za-z0-9-]{10,100}/g,
+  /\bAIza[0-9A-Za-z_-]{35}/g,
+  /\beyJ[A-Za-z0-9_-]{10,500}\.[A-Za-z0-9_-]{10,500}\.[A-Za-z0-9_-]{0,500}\b/g,
   /\b[A-Za-z][A-Za-z0-9_]{0,40}(?:KEY|TOKEN|SECRET|PASSCODE|PASSWORD)[ \t]{0,3}[=:][ \t]{0,3}[^\s'"`]{4,200}/gi,
 ];
 
@@ -197,7 +202,9 @@ export class KimiAuditorAdapter {
           headers: { "content-type": "application/json", authorization: "Bearer " + this.env.KIMI_API_KEY.trim() },
           body: JSON.stringify({
             model,
-            max_completion_tokens: 4000,
+            max_completion_tokens: 8000,
+            reasoning_effort: "low", // kimi-k3 həmişə düşünür, sənəd defoltu "max"-dır
+            response_format: { type: "json_object" }, // JSON Mode; AUDITOR_SYSTEM sahələri təsvir edir (sənəd bunu tələb edir)
             messages: [
               { role: "system", content: AUDITOR_SYSTEM },
               { role: "user", content: userMsg },

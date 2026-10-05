@@ -83,8 +83,11 @@ test("MOCK: sorğu rəsmi sənəddəki formada gedir (url, Bearer, model, max_co
   assert.equal(c.init.method, "POST");
   assert.equal(c.init.headers.authorization, "Bearer " + KEY);
   assert.equal(c.init.headers["content-type"], "application/json");
-  assert.deepEqual(Object.keys(c.body).sort(), ["max_completion_tokens", "messages", "model"]);
+  assert.deepEqual(Object.keys(c.body).sort(), ["max_completion_tokens", "messages", "model", "reasoning_effort", "response_format"]);
   assert.equal(c.body.model, KIMI_DEFAULT_MODEL);
+  assert.equal(c.body.max_completion_tokens, 8000);
+  assert.equal(c.body.reasoning_effort, "low");
+  assert.equal(c.body.response_format.type, "json_object");
   assert.equal(c.body.messages[0].role, "system");
   assert.equal(c.body.messages[0].content, AUDITOR_SYSTEM);
   const user = c.body.messages[1].content;
@@ -189,6 +192,37 @@ test("MOCK: diff-dəki açar kimi mətnlər Kimi-yə göndərilmir ([REDACTED])"
   for (const secret of [sk, gh, "c".repeat(30), "abcd1234efgh"]) assert.equal(sent.includes(secret), false, "göndərilməməli: " + secret.slice(0, 6));
   assert.ok(sent.includes("[REDACTED]"));
   assert.ok((await adapter.getAuditReport(r.auditId)).input.redactions >= 4);
+});
+
+test("MOCK: diff-dəki Slack, Google API açarı və JWT Kimi-yə göndərilmir ([REDACTED])", async () => {
+  const slack = "xox" + "b-" + "1".repeat(12) + "-" + "a".repeat(12);
+  const google = "AI" + "za" + "A".repeat(35);
+  const jwt = "ey" + "J" + "a".repeat(20) + "." + "b".repeat(20) + "." + "c".repeat(20);
+  const calls = installFetch(() => kimiOk(GOOD));
+  const { adapter } = mkAdapter();
+  const r = await adapter.submitForAudit({ taskSummary: "t", codeDiff: ["+ " + slack, "+ " + google, "+ " + jwt].join("\n") });
+  const sent = JSON.stringify(calls[0].body);
+  for (const secret of [slack, google, jwt]) assert.equal(sent.includes(secret), false, "göndərilməməli: " + secret.slice(0, 6));
+  assert.ok((await adapter.getAuditReport(r.auditId)).input.redactions >= 3);
+});
+
+test("MOCK: JSON Mode sorğusu: response_format json_object + promptda JSON sahələri təsvir olunub, eyni fixture parse olunur", async () => {
+  const calls = installFetch(() => kimiOk(GOOD));
+  const { adapter } = mkAdapter();
+  const r = await adapter.submitForAudit(INPUT);
+  assert.deepEqual(calls[0].body.response_format, { type: "json_object" });
+  const sys = calls[0].body.messages[0].content;
+  for (const field of ["verdict", "summary", "findings", "severity", "issue", "suggestion"]) assert.ok(sys.includes(field), "sistem promptda yoxdur: " + field);
+  assert.equal((await adapter.getAuditReport(r.auditId)).parse_ok, true);
+});
+
+test("MOCK: tapıntılar 10-la məhdudlanır", async () => {
+  const many = JSON.stringify({ verdict: "concerns", summary: "s", findings: Array.from({ length: 15 }, (_, i) => ({ severity: "low", location: "f" + i, issue: "i", suggestion: "s" })) });
+  installFetch(() => kimiOk(many));
+  const { adapter } = mkAdapter();
+  const r = await adapter.submitForAudit(INPUT);
+  assert.equal(r.findingCount, 10);
+  assert.equal((await adapter.getAuditReport(r.auditId)).findings.length, 10);
 });
 
 test("MOCK: scrubSecrets patoloji girişdə sürətli işləyir (ReDoS yoxdur)", () => {
