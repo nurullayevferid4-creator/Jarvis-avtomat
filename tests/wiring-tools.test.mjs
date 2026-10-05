@@ -26,12 +26,19 @@ test("reyestrdə bütün platforma, storage, öyrənmə, satış və bilik alət
   for (const n of need) assert.ok(have.has(n), "alət yoxdur: " + n);
 });
 
-test("yoxlanmamış endpoint-lər alət kimi qeydə alınmayıb: Instagram publish/DM/şərh, TikTok/YouTube yazma, Shopify yazma", () => {
+test("yazma alətləri yalnız sənədlə yoxlanmış endpoint-lər üçündür və hamısı təsdiq tələb edir; yoxlanmamışlar (upload, delete, qiymət, stok, voice.send) alət deyil", () => {
   const h = runtime();
-  for (const n of names(h)) {
-    assert.ok(!/^(instagram|tiktok|youtube|shopify)\..*(publish|send|reply|upload|create|update|delete|manage)/.test(n), "yazma alət kimi açılıb: " + n);
+  const WRITE = ["instagram.media.publish", "instagram.container.publish", "instagram.comments.reply", "instagram.messages.send", "tiktok.video.publish", "youtube.video.update", "shopify.product.update", "telegram.message.send"];
+  for (const n of WRITE) {
+    const t = h.rt.tools.list().find((x) => x.name === n);
+    assert.ok(t, "alət yoxdur: " + n);
+    assert.equal(t.requiresApproval, true, n);
+    assert.equal(t.risk, "high", n);
   }
-  assert.ok(!names(h).includes("instagram.messages.send"));
+  for (const n of ["youtube.video.upload", "youtube.video.delete", "shopify.price.change", "shopify.inventory.set", "telegram.voice.send", "tiktok.video.upload"]) assert.ok(!names(h).includes(n), "yoxlanmamış əməliyyat alət kimi açılıb: " + n);
+  // Platforma adlı alətlərdən yalnız bunlar yazma xarakterlidir
+  const writeLike = names(h).filter((n) => /^(instagram|tiktok|youtube|shopify|telegram)\..*(publish|send|reply|upload|\.update|delete)/.test(n)).sort();
+  assert.deepEqual(writeLike, [...WRITE].sort());
 });
 
 test("hər alətin giriş və çıxış schema-sı var, açıq obyekt (additionalProperties) məhdudlaşdırılıb", () => {

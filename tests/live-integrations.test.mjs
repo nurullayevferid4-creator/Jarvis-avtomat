@@ -15,14 +15,15 @@ import { resetAll } from "./wiring-helpers.mjs";
 import { missingEnv, INTEGRATION_ENV } from "../src/integrations/secrets.js";
 
 const WANT_LIVE = process.env.RUN_LIVE_TESTS === "1";
-const NAMES = [...new Set([...Object.values(INTEGRATION_ENV).flatMap((s) => [...s.secrets, ...s.vars]), "TELEGRAM_WEBHOOK_SECRET", "SHOPIFY_CLIENT_ID", "SHOPIFY_CLIENT_SECRET", "SHOPIFY_API_VERSION"])];
+const NAMES = [...new Set([...Object.values(INTEGRATION_ENV).flatMap((s) => [...s.secrets, ...s.vars]), "TELEGRAM_WEBHOOK_SECRET", "SHOPIFY_CLIENT_ID", "SHOPIFY_CLIENT_SECRET", "SHOPIFY_API_VERSION", "TIKTOK_REFRESH_TOKEN", "TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET"])];
 const liveEnv = () => Object.fromEntries(NAMES.filter((n) => process.env[n]).map((n) => [n, process.env[n]]));
 
 // YouTube üçün 3 secret də lazımdır; Shopify üçün SHOPIFY_ADMIN_TOKEN və ya CLIENT_ID+SECRET (missingEnv yalnız birincini yoxlayır)
 function skipReason(id) {
   if (!WANT_LIVE) return "RUN_LIVE_TESTS=1 verilməyib";
   const env = liveEnv();
-  const missing = id === "shopify" && !env.SHOPIFY_ADMIN_TOKEN && env.SHOPIFY_CLIENT_ID && env.SHOPIFY_CLIENT_SECRET
+  const ttRefresh = id === "tiktok" && !env.TIKTOK_ACCESS_TOKEN && env.TIKTOK_REFRESH_TOKEN && env.TIKTOK_CLIENT_KEY && env.TIKTOK_CLIENT_SECRET;
+  const missing = ttRefresh ? [] : id === "shopify" && !env.SHOPIFY_ADMIN_TOKEN && env.SHOPIFY_CLIENT_ID && env.SHOPIFY_CLIENT_SECRET
     ? missingEnv({ ...env, SHOPIFY_ADMIN_TOKEN: "x".repeat(8) }, id)
     : missingEnv(env, id);
   return missing.length ? "credential yoxdur: " + missing.join(", ") : false;

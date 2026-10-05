@@ -18,7 +18,7 @@ const FULL_ENV = {
 };
 const counter = () => { const c = { n: 0, calls: [] }; c.fn = async (url, init) => { c.n++; c.calls.push({ url, init }); throw new Error("şəbəkə çağırılmamalı idi"); }; return c; };
 const err = async (p) => { try { await p; return null; } catch (e) { return e; } };
-const SAMPLE_INPUT = { "account.get": {}, "channel.get": {}, "bot.get": {}, "shop.get": {}, "media.list": {}, "videos.list": {}, "products.list": {}, "orders.list": {}, "customers.list": {}, "updates.receive": {}, "insights.get": { metrics: ["reach"] }, "video.get": { video_id: "abcDEF12345" }, "voice.get": { file_id: "f1" }, "videos.get": { video_ids: ["1"] } };
+const SAMPLE_INPUT = { "account.get": {}, "channel.get": {}, "bot.get": {}, "shop.get": {}, "media.list": {}, "videos.list": {}, "products.list": {}, "orders.list": {}, "customers.list": {}, "updates.receive": {}, "insights.get": { metrics: ["reach"] }, "video.get": { video_id: "abcDEF12345" }, "voice.get": { file_id: "f1" }, "videos.get": { video_ids: ["1"] }, "post.status": { publish_id: "p123" } };
 
 test("registry: 5 inteqrasiya, interfeys müqaviləsi, naməlum inteqrasiya rədd edilir", async () => {
   const reg = createIntegrationRegistry({});
@@ -51,7 +51,7 @@ test("status: credential olmadan 'unconfigured', çatışan adlar görünür; cr
     assert.equal(s.mode, "unconfigured");
     assert.equal(s.configured, false);
     assert.equal(s.liveReady, false);
-    assert.equal(s.readOnly, s.id !== "telegram", "yalnız Telegram-da təsdiqli yazma (message.send) var");
+    assert.equal(s.readOnly, false, s.id + ": təsdiqli yazma əməliyyatı var (yalnız runApproved ilə)");
     assert.equal(s.writesEnabled, false);
     assert.ok(s.missing.length >= 1);
     assert.ok(s.verifiedEndpoints.length >= 1, s.id + ": sənədlə yoxlanmış oxuma endpoint-i olmalıdır");
@@ -101,12 +101,13 @@ test("credential var, amma endpoint yoxlanmayıb (endpoints boş): not_implement
 
 test("yazma əməliyyatları run() ilə HƏMİŞƏ disabled: credential ilə, mock ilə, doğru girişlə də; şəbəkə yoxdur", async () => {
   const WRITES = {
-    instagram: [["media.publish", { caption: "x" }], ["comments.reply", { comment_id: "c1", text: "t" }], ["messages.send", { recipient_id: "u1", text: "t" }]],
-    tiktok: [["video.publish", { title: "x" }]],
-    youtube: [["video.upload", { title: "x" }], ["video.update", { video_id: "v1", title: "y" }], ["video.delete", { video_id: "v1" }]],
+    instagram: [["media.publish", { image_url: "https://example.com/a.jpg" }], ["container.publish", { container_id: "123" }], ["comments.reply", { comment_id: "1", text: "t" }], ["messages.send", { recipient_id: "1", text: "t" }]],
+    tiktok: [["video.publish", { video_url: "https://example.com/v.mp4", privacy_level: "SELF_ONLY" }]],
+    youtube: [["video.upload", { title: "x" }], ["video.update", { video_id: "abcDEF12345", title: "y" }], ["video.delete", { video_id: "v1" }]],
     telegram: [["message.send", { chat_id: "111", text: "x" }], ["voice.send", { chat_id: "111" }]],
-    shopify: [["product.update", { product_id: "p1" }], ["price.change", { product_id: "p1", price: 1 }], ["inventory.set", { item_id: "i1", quantity: 1 }]],
+    shopify: [["product.update", { product_id: "gid://shopify/Product/1", title: "x" }], ["price.change", { product_id: "p1", price: 1 }], ["inventory.set", { item_id: "i1", quantity: 1 }]],
   };
+
   for (const mock of [false, true]) {
     const c = counter();
     const reg = createIntegrationRegistry(FULL_ENV, { mock, request: c.fn });

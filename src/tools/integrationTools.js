@@ -34,12 +34,56 @@ export function grantedPermissions(env = {}) {
 }
 
 const OBJ = { type: "object" };
-const RESULT_SCHEMA = { type: "object", required: ["mock", "integration", "op", "data"], properties: { mock: { type: "boolean" }, integration: { type: "string" }, op: { type: "string" }, data: OBJ } };
+const RESULT_SCHEMA = { type: "object", required: ["mock", "integration", "op", "data"], properties: { mock: { type: "boolean" }, integration: { type: "string" }, op: { type: "string" }, data: OBJ, warning: { type: "string" } } };
 
 // Əməliyyat -> alətin icazəsi, riski. Dəqiq siyahı: yeni əməliyyat avtomatik "açıq" olmur.
+// Yazma əməliyyatları: APPROVAL_ONLY icazələr (publish.social, send.message, edit.video, edit.product) -> risk "high" + təsdiq məcburidir.
 const INTEGRATION_TOOL_META = {
   "shopify.customers.list": { permissions: ["read.shopify.pii"], risk: "medium", requiresApproval: true },
+  "instagram.media.publish": { permissions: ["publish.social"] },
+  "instagram.container.publish": { permissions: ["publish.social"] },
+  "tiktok.video.publish": { permissions: ["publish.social"] },
+  "instagram.comments.reply": { permissions: ["send.message"] },
+  "instagram.messages.send": { permissions: ["send.message"] },
+  "youtube.video.update": { permissions: ["edit.video"] },
+  "shopify.product.update": { permissions: ["edit.product"] },
 };
+
+// Gündəlik yazma limitləri (spam/sui-istifadə qarşısı). Təsdiqli olsa belə aşıla bilməz. Sayğac "integrations" bölməsində, UTC gün üzrə.
+export const WRITE_DAILY_CAPS = Object.freeze({
+  "instagram.media.publish": 5,
+  "instagram.container.publish": 5,
+  "instagram.comments.reply": 20,
+  "instagram.messages.send": 10,
+  "tiktok.video.publish": 3,
+  "youtube.video.update": 20,
+  "shopify.product.update": 20,
+  "telegram.message.send": 30,
+});
+const DM_PER_RECIPIENT_PER_DAY = 1;
+
+async function writeGuard(ctx, name, input) {
+  const cap = WRITE_DAILY_CAPS[name];
+  if (!cap) return;
+  if (!ctx.storage) throw new IntegrationError("rate_limited", "limit sayğacı (storage) qoşulmayıb, yazma icra olunmadı", { integration: name.split(".")[0], op: name });
+  const st = ctx.storage.scope("integrations");
+  const day = new Date().toISOString().slice(0, 10);
+  const key = "writes-" + name.replace(/\./g, "-") + "-" + day;
+  const c = (await st.get(key)) || { n: 0 };
+  if (c.n >= cap) throw new IntegrationError("rate_limited", "gündəlik limit dolub (" + cap + ")", { integration: name.split(".")[0], op: name });
+  if (name === "instagram.messages.send") {
+    // Bir alıcıya gündə ≤ 1; razılığı "denied" olan və ya bağlanmış lead-ə mesaj yoxdur
+    const rKey = "dm-" + String(input.recipient_id).slice(0, 30) + "-" + day;
+    if (await st.get(rKey)) throw new IntegrationError("rate_limited", "bu alıcıya bu gün artıq mesaj təsdiqlənib", { integration: "instagram", op: "messages.send" });
+    if (ctx.leads) {
+      for (const l of await ctx.leads.list({ limit: 50 })) {
+        if (l && l.ig_scoped_id === input.recipient_id && (l.consent === "denied" || l.stage === "won" || l.stage === "lost")) throw new IntegrationError("forbidden_target", "lead əlaqəyə razılıq verməyib və ya bağlanıb", { integration: "instagram", op: "messages.send" });
+      }
+    }
+    await st.put(rKey, { ts: new Date().toISOString() }, { ttlSeconds: 2 * 86400 });
+  }
+  await st.put(key, { n: c.n + 1 }, { ttlSeconds: 2 * 86400 });
+}
 
 function integrationTools(reg) {
   for (const [id, Cls] of Object.entries(ADAPTER_CLASSES)) {
@@ -49,7 +93,7 @@ function integrationTools(reg) {
       if (!verified.has(op)) continue; // yoxlanmamış endpoint: alət yoxdur
       const name = id + "." + op;
       const isWrite = def.kind === "write";
-      const meta = INTEGRATION_TOOL_META[name] || (isWrite ? { permissions: ["send.message"], risk: "high", requiresApproval: true } : { permissions: ["read." + id], risk: "low", requiresApproval: false });
+      const meta = { ...(isWrite ? { permissions: ["send.message"], risk: "high", requiresApproval: true } : { permissions: ["read." + id], risk: "low", requiresApproval: false }), ...(INTEGRATION_TOOL_META[name] || {}) };
       reg.register({
         name,
         description: def.description + " [" + id + "]",
@@ -58,13 +102,14 @@ function integrationTools(reg) {
         permissions: meta.permissions,
         risk: meta.risk,
         requiresApproval: meta.requiresApproval,
-        timeoutMs: 20000,
+        timeoutMs: 25000,
         retries: 0,
         async handler(input, ctx) {
           const adapter = ctx.integrations && ctx.integrations.get(id);
           if (!adapter) throw new IntegrationError("not_configured", "inteqrasiya reyestri qoşulmayıb", { integration: id, op });
+          if (isWrite) await writeGuard(ctx, name, input);
           const r = isWrite ? await adapter.runApproved(op, input, ctx.approvalProof) : await adapter.run(op, input);
-          return { mock: r.mock === true, integration: id, op, data: r.data && typeof r.data === "object" ? r.data : { value: r.data } };
+          return { mock: r.mock === true, integration: id, op, data: r.data && typeof r.data === "object" ? r.data : { value: r.data }, ...(r.warning ? { warning: String(r.warning).slice(0, 60) } : {}) };
         },
       });
     }
@@ -280,7 +325,8 @@ function salesTools(reg) {
       if (counter.n >= SALES_SEND_PER_DAY) throw new AgentError("rate_limited", "gündəlik mesaj limiti dolub");
       await store.put(lastKey, { ts: new Date(now).toISOString() }, { ttlSeconds: 2 * 86400 });
       await store.put(dayKey, { n: counter.n + 1 }, { ttlSeconds: 2 * 86400 });
-      return { sent: false, delivery: "manual_required", channel: lead.channel, reason: "kanal göndərmə endpoint-i rəsmi sənədlə yoxlanmayıb; təsdiqlənmiş mətni özün göndər" };
+      if (lead.channel === "instagram" && lead.ig_scoped_id) return { sent: false, delivery: "use_instagram_messages_send", channel: lead.channel, reason: "bu alət göndərmir; Instagram cavabı üçün instagram.messages.send alətini (recipient_id = lead-in ig_scoped_id) ayrıca təsdiqlə. Platforma yalnız sənə yazmış istifadəçiyə 24 saat ərzində cavaba icazə verir" };
+      return { sent: false, delivery: "manual_required", channel: lead.channel, reason: "bu kanal üçün göndərmə endpoint-i yoxdur/yoxlanmayıb; təsdiqlənmiş mətni özün göndər" };
     },
   });
 }

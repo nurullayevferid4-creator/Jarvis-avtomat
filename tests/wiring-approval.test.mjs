@@ -35,6 +35,13 @@ test("bütün təsdiq tələb edən alətlər run() ilə yalnız pending_approva
   const h = runtime({}, fakeRequest());
   const inputs = {
     "social.publish": { platform: "instagram", caption: "x" },
+    "instagram.media.publish": { image_url: "https://example.com/a.jpg" },
+    "instagram.container.publish": { container_id: "123" },
+    "instagram.comments.reply": { comment_id: "123", text: "təşəkkür" },
+    "instagram.messages.send": { recipient_id: "123", text: "salam" },
+    "tiktok.video.publish": { video_url: "https://example.com/v.mp4", privacy_level: "SELF_ONLY" },
+    "youtube.video.update": { video_id: "abcDEF12345", title: "yeni" },
+    "shopify.product.update": { product_id: "gid://shopify/Product/1", title: "yeni" },
     "telegram.message.send": SEND,
     "shopify.customers.list": {},
     "learning.apply_rule": { proposal_id: "1234567890123-abcdef" },

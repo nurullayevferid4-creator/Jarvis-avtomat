@@ -23,6 +23,8 @@ export const APPROVAL_ONLY_PERMISSIONS = [
   "change.price",
   "change.stock",
   "place.order",
+  "edit.video",
+  "edit.product",
 ];
 
 // Heç bir alətə verilmir: JARVIS özü açarı oxuya və ya dəyişə bilməz.

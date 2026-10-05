@@ -21,6 +21,7 @@ import { INTEGRATION_POLICY } from "./policy.js";
 import { missingEnv } from "./secrets.js";
 import { useProof } from "../approval/proof.js";
 
+const defaultSleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const OP_NAME = /^[a-z]+(\.[a-z]+)?$/;
 
 // Platforma xəta cavabından qısa, təhlükəsiz kod çıxarır (mətn yox).
@@ -39,7 +40,7 @@ export class IntegrationAdapter {
   // endpoints: { "media.list": { verified: true|false, build(input, env) -> { url, method?, headers?, body? }, parse(data) }
   //             və ya { verified, exec({ input, env, call }) -> data } (çoxaddımlı) }
   // allowedHosts: sorğuya icazə verilən host-lar (massiv və ya (env) => massiv)
-  constructor({ id, label, operations, endpoints = {}, allowedHosts = [], env = {}, mock = false, request = httpRequest, timeoutMs = 25000 }) {
+  constructor({ id, label, operations, endpoints = {}, allowedHosts = [], env = {}, mock = false, request = httpRequest, timeoutMs = 25000, sleep = defaultSleep }) {
     if (!/^[a-z]+$/.test(id || "")) throw new Error("integration id düzgün deyil");
     for (const [name, op] of Object.entries(operations || {})) {
       if (!OP_NAME.test(name) || !["read", "write"].includes(op.kind) || !op.input) throw new Error("əməliyyat tərifi düzgün deyil: " + name);
@@ -52,6 +53,7 @@ export class IntegrationAdapter {
     // Gizli (enumerable olmayan) sahələr: adapter JSON.stringify/console.log ilə çıxarılsa belə token sızmasın.
     Object.defineProperty(this, "_env", { value: env || {}, enumerable: false });
     Object.defineProperty(this, "_request", { value: request, enumerable: false });
+    Object.defineProperty(this, "_sleep", { value: sleep, enumerable: false });
     Object.defineProperty(this, "_allowedHosts", { value: allowedHosts, enumerable: false });
     this.timeoutMs = timeoutMs;
   }
@@ -161,20 +163,25 @@ export class IntegrationAdapter {
     return res;
   }
 
+  // Adapterə xas qısa ömürlü token mübadiləsi üçün qarmaq (məs. TikTok refresh). Defolt: env olduğu kimi.
+  async _resolveEnv(ctx) { return this._env; } // eslint-disable-line no-unused-vars
+
   async _send(op, spec, input, ctx) {
     let data;
     try {
+      const env = await this._resolveEnv(ctx);
       if (typeof spec.exec === "function") {
         data = await spec.exec({
           input,
-          env: this._env,
+          env,
+          sleep: (ms) => this._sleep(Math.min(Number(ms) || 0, 3000)),
           call: async (url, init) => (await this._call(url, init || {}, ctx)).data,
           fail: (message, reason) => { throw new IntegrationError("upstream_error", String(message).slice(0, 120), { ...ctx, reason }); },
         });
       } else {
-        const r = spec.build(input, this._env);
+        const r = spec.build(input, env);
         const res = await this._call(r.url, { method: r.method || "GET", headers: r.headers || {}, body: r.body }, ctx);
-        data = spec.parse(res.data, this._env);
+        data = spec.parse(res.data, env);
       }
     } catch (e) {
       if (e instanceof IntegrationError) throw e;
