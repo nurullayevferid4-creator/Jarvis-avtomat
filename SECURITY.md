@@ -40,7 +40,7 @@ Naxışlardakı bütün təkrarlar məhduddur və yoxlanan mətn 20 000 simvolla
 ## Əməliyyat qoruması
 
 - Paylaşım, mesaj göndərmə, pul, silmə, deploy, qiymət/stok dəyişikliyi, sifariş: `src/policy.js` bunları `APPROVAL_ONLY_PERMISSIONS` kimi saxlayır. Belə icazəsi olan alət `high` riskdə olmalı və təsdiq tələb etməlidir, yoxsa qeydiyyatdan keçmir.
-- Təsdiq tələb edən alət **icra olunmur**, təsdiq qeydi açılır. Təsdiqdən sonra da sistem icra etmir, çünki real inteqrasiya yoxdur (bax `APPROVALS.md`).
+- Təsdiq tələb edən alət `run()` ilə **icra olunmur**, təsdiq qeydi açılır. İcra yalnız Fərid parol qorumalı UI/API-da təsdiq edəndən sonra, icazə təkrar yoxlanaraq və tək istifadəlik sübutla olur (bax `APPROVALS.md`). Real yazma hazırda yalnız Telegram `message.send` (allowlist çatına).
 
 ## Audit
 
@@ -50,3 +50,11 @@ Təsdiq addımları, alət çağırışları (ad, status, müddət; giriş məzm
 
 - `.github/workflows/claude.yml` `@claude` ilə işə düşür və `ANTHROPIC_API_KEY` GitHub Secret-indən istifadə edir. Repo açıq olduğu üçün kimin bu workflow-u işə sala biləcəyi **hələ yoxlanmayıb**. Ayrıca baxılmalıdır.
 - Real Claude/OpenAI/səs sınağı hələ keçirilməyib. Bütün testlər saxta API ilə işləyir.
+
+## Platforma inteqrasiyaları
+
+- Secret-lər yalnız Cloudflare Secrets-də; kod və cavablarda, auditdə, xətalarda yoxdur (testlə yoxlanır).
+- SSRF: hər adapter yalnız öz host allowlist-inə, https/443, credential-sız URL-ə, `redirect:"manual"` ilə sorğu göndərir. Shopify domeni yalnız `<ad>.myshopify.com`.
+- Telegram: webhook secret ilə autentifikasiya (yoxdursa bağlı), `TELEGRAM_ALLOWED_CHAT_IDS` fail-closed, naməlum çat emal olunmur.
+- İxtiyari alət icrası yoxdur: alətlər reyestrdədir, planlayıcı yalnız kataloqdan seçə bilər, giriş schema ilə yoxlanır.
+- Doğrulama səviyyəsi: adapterlər sənədlə oxunub, canlı sınanmayıb (`docs/WIRING.md`).

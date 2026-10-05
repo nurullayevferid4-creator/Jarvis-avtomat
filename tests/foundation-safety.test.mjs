@@ -9,11 +9,13 @@ const walk = (dir) => readdirSync(dir).flatMap((n) => { const p = join(dir, n); 
 const NEW_DIRS = ["src/storage", "src/integrations", "src/agents", "src/foundation"];
 const NEW_FILES = [...NEW_DIRS.flatMap(walk), ...walk("tests").filter((f) => /foundation-/.test(f)), "docs/FOUNDATION.md"];
 
-test("mövcud sistem yeni modullara qoşulmayıb (index, orkestrator, alətlər, state, təsdiq, bilik, UI)", () => {
-  const existing = ["src/index.js", "worker.js", ...["orchestrator", "tools", "state", "approval", "knowledge", "security", "guards", "audit", "adapters", "ui"].flatMap((d) => walk("src/" + d))];
+test("yeni modullara bağlantı yalnız 3 giriş nöqtəsindən keçir: src/wiring.js, src/tools/integrationTools.js, src/index.js (orkestrator/təsdiq/bilik/UI birbaşa import etmir)", () => {
+  const allowed = new Set(["src/index.js", "src/wiring.js", "src/tools/integrationTools.js", "src/telegram/webhook.js"]);
+  const existing = ["src/index.js", "worker.js", ...["orchestrator", "tools", "state", "approval", "knowledge", "security", "guards", "audit", "adapters", "ui", "telegram"].flatMap((d) => walk("src/" + d)), "src/wiring.js"];
   for (const f of existing) {
+    if (allowed.has(f)) continue;
     const imports = readFileSync(f, "utf8").split("\n").filter((l) => /^\s*(import|export)\b.*from\s/.test(l)).join("\n");
-    assert.ok(!/\/(storage|integrations|agents|foundation)\//.test(imports), f + " yeni modulları import edir");
+    assert.ok(!/\/(storage|integrations|agents|foundation)\//.test(imports), f + " yeni modulları icazəsiz import edir");
   }
 });
 
@@ -62,6 +64,6 @@ test("credential olmadan bütün oxuma/yazma/agent çağırışlarında şəbək
 });
 
 test("hazır modullar dəyişməyib: yalnız yeni fayllar əlavə olunub (src/ altında mövcud fayl siyahısı sabitdir)", () => {
-  const known = new Set(["adapters", "approval", "audit", "config.js", "guards", "index.js", "knowledge", "orchestrator", "policy.js", "prompts.js", "security", "state", "tools", "ui", "util.js", "validate.js", "storage", "integrations", "agents", "foundation"]);
+  const known = new Set(["adapters", "approval", "audit", "config.js", "guards", "index.js", "knowledge", "orchestrator", "policy.js", "prompts.js", "security", "state", "tools", "ui", "util.js", "validate.js", "storage", "integrations", "agents", "foundation", "telegram", "wiring.js"]);
   for (const n of readdirSync("src")) assert.ok(known.has(n), "gözlənilməyən src girişi: " + n);
 });

@@ -18,6 +18,11 @@ export function createStorage(env = {}, { isolated = false, now } = {}) {
   return shared;
 }
 
+// Testlər üçün: paylaşılan yaddaş backend-ini sıfırlayır.
+export function _resetSharedStorageForTests() {
+  shared = null;
+}
+
 // Açar/dəyər göstərmir, yalnız hansı backend olduğunu.
 export function describeStorage(env = {}) {
   const kv = !!(env && env.JARVIS_KV);

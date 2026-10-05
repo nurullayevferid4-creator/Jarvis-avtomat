@@ -32,7 +32,16 @@ Bütün yollar parol tələb edir (`x-passcode-b64`, bax `SECURITY.md`). Bayraq:
 
 ## Məhdudiyyətlər
 
-- Telefon səhifəsində (UI) təsdiq düymələri hələ yoxdur. Hazırda yalnız API var. UI 4-cü mərhələdədir.
+- Telefon səhifəsində "Təsdiqlər" paneli var: gözləyən qeydlər, risk, icazələr, icra olunacaq giriş, "Təsdiq et" / "Rədd et". Parol mövcud `x-passcode-b64` ilə gedir.
 - Tək istifadəçi üçündür. Eyni anda iki qərarın yarışına qarşı kilid yoxdur.
 - KV olmadan qeydlər Worker yenidən başlayanda itir.
 - KV son-nəticəli (eventually consistent) saxlanışdır: qərardan dərhal sonra başqa Cloudflare məntəqəsindən oxuma qısa müddət köhnə vəziyyət göstərə bilər. Tək istifadəçi üçün bu qəbul edilən riskdir. Güclü zəmanət (iki qərarın toqquşmaması) üçün sonradan D1 və ya Durable Object lazımdır.
+
+## Təsdiq → icra (alət çağırışları)
+
+`kind: "tool_call"` qeydləri: `pending → approved (execution: awaiting) → running → done|failed`; rədd → `not_executed`.
+- Qərar yalnız `via:"api"` (parol qorumalı UI/API) ilə verilir. Söhbətdə "hə", səs və Telegram bu qeydi təsdiqləyə bilməz (`api_required`, 403).
+- Redaktə olunmur: təsdiq edilən giriş (sha256 heşi qeydlə birlikdə saxlanır) icradan əvvəl yenidən yoxlanır.
+- İcra yalnız `ApprovalExecutor` tərəfindən: icazələr təkrar yoxlanır (`REVOKED_PERMISSIONS` daxil), tək istifadəlik sübut verilir, retries=0, 15 dəqiqəlik pəncərə.
+- Audit giriş məzmunu olmadan `execution.done` / `execution.failed` yazır.
+Ətraflı: `docs/WIRING.md`.
