@@ -48,18 +48,29 @@ Təsdiq addımları, alət çağırışları (ad, status, müddət; giriş məzm
 
 ## Yaddaşda məxfi məlumat (maskalama)
 
-`src/security/redact.js` tanınan formatları `[gizlədildi]` ilə əvəz edir: `sk-...`, `Bearer ...`, Meta (`EAA...`), GitHub, Slack, AWS, Google API açarı, JWT, `parol: ...` / `password=...` kimi etiketdən sonrakı dəyər və e-poçt.
+`src/security/redact.js` tanınan formatları `[gizlədildi]` ilə əvəz edir:
+- prefiksli açarlar: `sk-...`, Stripe (`sk_live_`), `Bearer ...`, Meta (`EAA...`), GitHub, Slack, AWS, Google API açarı, JWT, Telegram bot tokeni, Shopify tokeni;
+- etiketdən sonrakı dəyər: düz mətndə (`parol: ...`, `password is ...`, `api_key => ...`), JSON/config-də (`{"password":"..."}`, `'secret': '...'`), `Authorization:` və `Cookie:` başlıqları;
+- URL-də `user:parol@host`, sorğu parametrləri (`?token=`, `&sig=`), şəxsi açar bloku (PEM);
+- e-poçt (yalnız adi rejimdə).
 
-Parol tipli etiketdən (`parol`, `şifrə`, `password`, `passphrase`, `pwd`, `passcode`) sonrakı dəyər boşluqlu ola bilər: dırnaqlıdırsa dırnağa qədər, deyilsə həmin sətrin sonuna qədər (uzunluq limiti olmadan) maskalanır. Bu, sətrin qalan adi mətnini də örtə bilər, məxfilik üçün qəsdən seçilmiş güzəştdir. `token`, `secret`, `api key`, `açar` etiketlərində yalnız tək söz maskalanır.
+**Əsas qaydalar:**
+- Parol tipli etiketdən (`parol`, `şifrə`, `пароль`, `password`, `passphrase`, `pwd`, `passcode`, `authorization`, `cookie`) sonrakı dəyər boşluqlu ola bilər: dırnaqlıdırsa dırnağa qədər, deyilsə həmin sətrin sonuna qədər maskalanır. Bu, sətrin qalan adi mətnini də örtə bilər, məxfilik üçün qəsdən seçilmiş güzəştdir. `token`, `secret`, `api key`, `açar` kimi etiketlərdə tək söz (JSON-da dırnaqlı dəyər) maskalanır.
+- **Uzunluq limiti yoxdur.** Limit olsaydı uzun secret-in quyruğu açıq qalardı. Başlanğıc yalnız söz sərhədində ola bilər və ya uyğunluq tapılanda sətrin sonuna qədər işlənir, ona görə iş xəttidir (`tests/redact-hardening.test.mjs` 200 000 simvollu pozucu mətnlərlə ölçür).
+- **Maskalama həmişə kəsmədən əvvəl aparılır** (bilik bazası başlıq/mətn/etiket, audit, təsdiq qeydi, qaralama). Kəsmə secret-in ortasına düşsə yarımçıq secret qalardı.
+- Mətn əvvəlcə kanonikləşdirilir: görünməz simvollar silinir və NFKC tətbiq olunur (tam enli `ｐａｓｓｗｏｒｄ` kimi yazılışlar tutulsun). Bu, saxlanan mətndəki uyğunluq simvollarını (məs. ligatur) adi formaya çevirə bilər.
+- `[gizlədildi]` mətni yazmaqla maskadan qaçmaq mümkün deyil: yalnız dəyərin özü tam maskadırsa "artıq maskalanıb" sayılır.
+- Şübhə olduqda daha çox maskalanır, heç vaxt az yox. İkinci keçid heç vaxt sirri açmır (bəzi dırnaqlı hallarda sətrin qalanını da örtə bilər).
 
-**Tətbiq olunur:** bilik bazası (başlıq, mətn, mənbə ünvanı, etiketlər; `redacted` sayı qeydə yazılır), söhbət tarixçəsi, iş qeydləri (`/api/jobs`), son iş qeydi (`lastJob`), audit jurnalı.
+**Tətbiq olunur:** bilik bazası (başlıq, mətn, mənbə ünvanı, etiketlər; `redacted` sayı qeydə yazılır), söhbət tarixçəsi (model cavabı string olmasa da mətnə çevrilir), iş qeydləri (`/api/jobs`), son iş qeydi (`lastJob`), audit jurnalı (dəyərlər və obyekt açarları).
+
+**Secrets-only rejimi (e-poçt qalır):** təsdiq qeydləri (`action`, `content`, redaktə daxil) və təsdiq gözləyən qaralama (`state.pending.external/draft`). Fərid nəyi təsdiq edirsə onu görməlidir, müştəri e-poçtu qaralamanın qanuni hissəsi ola bilər, amma token və parol heç vaxt saxlanmır.
 
 **Tətbiq OLUNMUR (qəsdən):**
-- Təsdiq qeydləri və təsdiq gözləyən qaralama (`state.pending`): Fərid nəyi təsdiq edirsə, onu olduğu kimi görməlidir.
-- Cari sorğuda modelə gedən mətn: model istifadəçinin real mətnini alır, yalnız yaddaşa yazılan nüsxə maskalanır.
+- Cari sorğuda modelə gedən mətn və istifadəçiyə qaytarılan cavab: model istifadəçinin real mətnini alır, yalnız yaddaşa yazılan nüsxə maskalanır.
 - Maskalamadan əvvəl saxlanmış köhnə məlumat geriyə təmizlənmir.
 
-**Məhdudiyyətlər:** yalnız tanınan formatlar tutulur. Prefiksi olmayan açarlar (məs. Cloudflare API tokeni) və telefon nömrələri tutulmur. Naxışların prefiksləri hələ rəsmi sənədlərlə yoxlanmayıb (Issue #5, ChatGPT hissəsi).
+**Məhdudiyyətlər:** yalnız tanınan formatlar və etiketlər tutulur. Prefiksi və etiketi olmayan açarlar (məs. Cloudflare API tokeni), `parolum 12345` kimi etiketsiz yazılış və telefon nömrələri tutulmur (telefon sifariş üçün lazımdır). Naxışların prefiksləri hələ rəsmi sənədlərlə yoxlanmayıb (Issue #5, ChatGPT hissəsi).
 
 ## Son iş qeydi (LAST_JOB)
 

@@ -6,6 +6,8 @@ import { createStore, _resetMemoryForTests } from "../src/state/store.js";
 import { _resetLoginMemoryForTests } from "../src/guards/login.js";
 import { KnowledgeBase } from "../src/knowledge/KnowledgeBase.js";
 import { MASK } from "../src/security/redact.js";
+import { ApprovalCenter } from "../src/approval/center.js";
+import { createAudit } from "../src/audit/log.js";
 import { lastJobBlock } from "../src/prompts.js";
 import { ClaudeOrchestrator } from "../src/orchestrator/ClaudeOrchestrator.js";
 
@@ -254,4 +256,88 @@ test("B (Codex P1): adi qısa id-lər və asılılıq dəyişmir", () => {
   const rec = ClaudeOrchestrator.lastJobRecord("x", "achieved", t);
   assert.deepEqual(rec.tasks.map((k) => [k.id, k.depends]), [["t1", []], ["t2", ["t1"]]]);
   assert.deepEqual(ClaudeOrchestrator.persistedTasks(t).map((k) => k.id), ["t1", "t2"]);
+});
+
+// ---- PR #6 tam audit: kəsmə sırası, təsdiq qeydləri, string olmayan cavab, JSON secret-lər ----
+
+const rep = (x, n) => x.repeat(n);
+const SKP = "sk" + "-";
+
+test("A (audit): maskalama kəsmədən ƏVVƏL aparılır: başlıq, mətn və etiketdə kəsmə secret-in ortasına düşməməlidir", async () => {
+  const kb = new KnowledgeBase(createStore({}));
+  const r = await kb.add({
+    type: "lesson",
+    title: rep("x", 190) + " " + ANT,
+    text: rep("y", 7990) + " " + ANT,
+    tags: [rep("z", 190) + " " + ANT, "token: " + rep("T1", 500)],
+  });
+  const all = JSON.stringify(await kb.get(r.id));
+  assert.ok(!all.includes(SKP) && !all.includes("Ab12Cd") && !all.includes("T1T1"), "yarımçıq secret qalıb");
+  const rec = await kb.get(r.id);
+  assert.ok(rec.title.length <= 200 && rec.text.length <= 8000, "ölçü limiti saxlanır");
+  assert.ok(rec.redacted >= 4, "sayı: " + rec.redacted);
+});
+
+test("A (audit): audit jurnalı uzun mətndə secret-i tam maskalayır və obyekt açarındakı secret-i də gizlədir", async () => {
+  const store = createStore({});
+  const audit = createAudit(store);
+  await audit.log("test", { note: rep("a", 290) + " " + ANT, ["k " + ANT]: "v", n: 5, nested: { t: "password: hunter2x" } });
+  const all = JSON.stringify(await audit.list(5));
+  assert.ok(!all.includes(SKP) && !all.includes("Ab12Cd") && !all.includes("hunter2x"), all.slice(0, 300));
+});
+
+test("A (audit): təsdiq qeydində token və parol maskalanır, müştəri e-poçtu qalır; kəsmə maskalamadan sonradır; redaktədə də", async () => {
+  const store = createStore({});
+  const approvals = new ApprovalCenter(store, createAudit(store));
+  const rec = await approvals.create({
+    action: "Yaz " + META + " " + MAIL,
+    content: "Salam " + MAIL + "\nparol: Salam12345\n" + rep("x", 3950) + " " + ANT,
+    risk: "medium",
+  });
+  const stored = await approvals.get(rec.id);
+  assert.ok(stored.content.includes(MAIL) && stored.action.includes(MAIL), "e-poçt qaralamanın qanuni hissəsidir");
+  for (const secret of ["Salam12345", "Ab12Cd", SKP, "EAAB"]) assert.ok(!JSON.stringify(stored).includes(secret), "təsdiq qeydində qalıb: " + secret);
+  const edited = await approvals.decide(rec.id, { decision: "edit", content: "yeni " + ANT + " " + MAIL + " " + META });
+  assert.ok(edited.ok && edited.record.content.includes(MAIL));
+  assert.ok(!/Ab12Cd|EAAB/.test(JSON.stringify(await approvals.get(rec.id))), "redaktə edilmiş məzmunda secret qalıb");
+});
+
+test("A (audit): təsdiq gözləyən qaralama və 'Hə' cavabı token/parol saxlamır, e-poçt qalır", async () => {
+  const draft = "Müştəri: " + MAIL + ", açar " + ANT + ", {\"password\":\"hunter2x\"}";
+  installFetch(mutableHandler({ mode: "task", subtasks: [task("t1", "claude", "Hazırla")], external_action: "Müştəriyə yazmaq " + META }, draft).handler);
+  const env = baseEnv();
+  await talk(env, "Müştəriyə yaz");
+  const state = await createStore(env).load();
+  assert.ok(state.pending.draft.includes(MAIL), "e-poçt qalır");
+  assert.ok(!/Ab12Cd|hunter2x|EAAB/.test(JSON.stringify(state.pending)), "pending-də secret qalıb");
+  const ap = await (await worker.fetch(new Request("https://x.dev/api/approvals?status=pending", { headers: { "x-passcode": "pw" } }), env)).json();
+  assert.ok(ap.approvals[0].content.includes(MAIL) && !/Ab12Cd|hunter2x|EAAB/.test(JSON.stringify(ap.approvals[0])));
+  const yes = await (await talk(env, "Hə")).json();
+  assert.ok(yes.screen.includes(MAIL) && !/Ab12Cd|hunter2x/.test(yes.screen), "'Hə'-dən sonra secret göstərilməməlidir");
+});
+
+test("A (audit): model cavabı string olmasa da (obyekt) yaddaşa mətn kimi və maskalanmış yazılır", async () => {
+  installFetch(mutableHandler({ mode: "chat", reply: { a: "password: hunter2x", b: ANT } }).handler);
+  const env = baseEnv();
+  await talk(env, "salam");
+  const { history } = await createStore(env).load();
+  const last = history.at(-1);
+  assert.equal(typeof last.content, "string");
+  assert.ok(!/hunter2x|Ab12Cd/.test(last.content), last.content);
+});
+
+test("A (audit): JSON ilə göndərilən parol/api_key (uzun quyruqlu) tarixçəyə, iş qeydinə və lastJob-a düşmür, amma cari sorğuda model real mətni görür", async () => {
+  const text = '{"password":"hunter2x","api_key":"' + rep("k9", 150) + 'QUYRUQ9z","user":"bob"} bunu yadda saxla';
+  const m = mutableHandler({ mode: "task", subtasks: [task("t1", "claude", "İş: " + text)], external_action: null });
+  const calls = installFetch(m.handler);
+  const env = baseEnv();
+  await talk(env, text);
+  assert.equal(leadCalls(calls)[0].body.messages.at(-1).content, text, "cari sorğuda model real mətni görməlidir");
+  const state = await createStore(env).load();
+  const stored = JSON.stringify({ history: state.history, lastJob: state.lastJob, jobs: await jobs(env) });
+  assert.ok(!/hunter2x|k9k9|QUYRUQ9z/.test(stored), "yaddaşa düşüb");
+  assert.ok(state.history[0].content.includes('"user":"bob"'), "adi sahə qalır");
+  m.cur.plan = { mode: "chat", reply: "ok" };
+  await talk(env, "necə böldün");
+  assert.ok(!/hunter2x|k9k9|QUYRUQ9z/.test(leadCalls(calls).at(-1).body.system + JSON.stringify(leadCalls(calls).at(-1).body.messages)), "növbəti sorğuda secret promptda görünür");
 });

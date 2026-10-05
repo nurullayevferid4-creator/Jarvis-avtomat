@@ -18,7 +18,7 @@ import { resolvePending } from "../approval/gate.js";
 import { CallBudget } from "../guards/budget.js";
 import { buildLeadSystem, FINAL_SYSTEM, FACT_CHECK_SYSTEM } from "../prompts.js";
 import { wrapExternal } from "../security/sanitize.js";
-import { redactText } from "../security/redact.js";
+import { redactText, redactSecrets } from "../security/redact.js";
 
 // Köməkçi modelin (məs. veb axtarışlı OpenAI) cavabı xarici məzmun sayılır:
 // başqa modelə verilərkən <external_content> qutusuna qoyulur, əmr kimi qəbul edilmir.
@@ -162,7 +162,9 @@ export class ClaudeOrchestrator {
 
     const remember = async (spoken) => {
       // Yaddaşa maskalanmış mətn yazılır. Cari sorğuda modelə isə istifadəçinin öz mətni gedir.
-      state.history.push({ role: "user", content: redactText(text) }, { role: "assistant", content: redactText(spoken) });
+      // Model cavabı string olmaya bilər (obyekt, massiv): redactText string olmayanı dəyişmədən qaytarır, ona görə əvvəlcə mətnə çevrilir.
+      const asText = (v) => (typeof v === "string" ? v : v === undefined || v === null ? "" : JSON.stringify(v));
+      state.history.push({ role: "user", content: redactText(asText(text)) }, { role: "assistant", content: redactText(asText(spoken)) });
       state.history = state.history.slice(-12);
       await this.store.save(state);
     };
@@ -233,8 +235,9 @@ export class ClaudeOrchestrator {
           approvalId = ap.id;
         } catch (e) { /* qeyd açılmasa da söhbətdəki təsdiq qapısı işləyir */ }
       }
-      // external və draft təsdiq qeydi ilə eyni məzmundur, maskalanmır: Fərid nəyi təsdiq edirsə onu görməlidir.
-      state.pending = { goal: redactText(text), external: plan.external_action, draft: screen.slice(0, 4000), approval_id: approvalId };
+      // external və draft təsdiq qeydi ilə eyni məzmundur: Fərid nəyi təsdiq edirsə onu görməlidir, ona görə e-poçt kimi adi məlumat qalır.
+      // Amma token və parol (secrets-only maskalama) heç vaxt qaralamada saxlanmır. Maskalama kəsmədən ƏVVƏL aparılır.
+      state.pending = { goal: redactText(text), external: redactSecrets(String(plan.external_action)), draft: redactSecrets(screen).slice(0, 4000), approval_id: approvalId };
     }
     state.lastJob = ClaudeOrchestrator.lastJobRecord(text, status, tasks);
     await remember(spoken);
