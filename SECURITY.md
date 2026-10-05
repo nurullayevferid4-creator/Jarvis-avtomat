@@ -42,6 +42,17 @@ Naxışlardakı bütün təkrarlar məhduddur və yoxlanan mətn 20 000 simvolla
 - Paylaşım, mesaj göndərmə, pul, silmə, deploy, qiymət/stok dəyişikliyi, sifariş: `src/policy.js` bunları `APPROVAL_ONLY_PERMISSIONS` kimi saxlayır. Belə icazəsi olan alət `high` riskdə olmalı və təsdiq tələb etməlidir, yoxsa qeydiyyatdan keçmir.
 - Təsdiq tələb edən alət **icra olunmur**, təsdiq qeydi açılır. Təsdiqdən sonra da sistem icra etmir, çünki real inteqrasiya yoxdur (bax `APPROVALS.md`).
 
+## AI Auditor (Kimi)
+
+`src/adapters/KimiAuditorAdapter.js` ikinci, müstəqil **auditordur, icraçı deyil**. Ətraflı: `docs/ai-auditor.md`.
+
+- `run()` yoxdur və `AdapterRegistry.set()` `auditOnly` adapteri rədd edir. Beləliklə `registry.helpers()` və lider modelin planı onu icraçı kimi görmür.
+- Kimi cavabından yalnız ağ siyahıdakı sahələr (`verdict`, `summary`, `findings`) götürülür. `actions`, `tasks`, `execute`, `plan` atılır. Hesabat `advisory_only: true`, `executable: false`, `trust: "untrusted"` işarələnir. Cavabdakı "icra et" mətni təsdiq zəncirini keçmir, çünki heç bir icra yoluna qoşulmayıb.
+- `KIMI_API_KEY` yalnız Secret kimi (`wrangler secret put KIMI_API_KEY`). Yoxdursa `KIMI_API_KEY is not configured` xətası verilir, saxta uğur qaytarılmır.
+- Xaricə (Moonshot API) gedən kod fərqindən açar kimi mətnlər `[REDACTED]` ilə təmizlənir. Bu ən yaxşı cəhddir, zəmanət deyil.
+- Audit jurnalına yalnız meta-məlumat yazılır, hesabat mətni yazılmır.
+- **Məhdudiyyət:** real `KIMI_API_KEY` ilə hələ sınaq keçirilməyib. Mock testlər yalnız adapterin nə göndərdiyini yoxlayır.
+
 ## Audit
 
 Təsdiq addımları, alət çağırışları (ad, status, müddət; giriş məzmunu yox), söhbət sorğuları (status, simvol sayı) `/api/audit` ilə görünür. Jurnal 30 gün saxlanır. Jurnal yazılmasa əsas iş dayanmır.
@@ -50,3 +61,4 @@ Təsdiq addımları, alət çağırışları (ad, status, müddət; giriş məzm
 
 - `.github/workflows/claude.yml` `@claude` ilə işə düşür və `ANTHROPIC_API_KEY` GitHub Secret-indən istifadə edir. Repo açıq olduğu üçün kimin bu workflow-u işə sala biləcəyi **hələ yoxlanmayıb**. Ayrıca baxılmalıdır.
 - Real Claude/OpenAI/səs sınağı hələ keçirilməyib. Bütün testlər saxta API ilə işləyir.
+- Real Kimi sınağı da keçirilməyib (açar yoxdur). `tests/kimi-auditor.live.test.mjs` açarsız atlanır.

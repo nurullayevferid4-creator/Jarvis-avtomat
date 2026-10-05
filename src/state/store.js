@@ -1,12 +1,13 @@
 // Söhbət yaddaşı, iş tarixçəsi və ümumi sənəd anbarı.
 // KV (JARVIS_KV) varsa orada, yoxdursa yaddaşda saxlanılır (Worker yenidən başlayanda silinir).
 // KV açar adları ("state", "job:...") köhnə versiya ilə eynidir ki, mövcud məlumat itməsin.
-// Yeni sənədlər "<növ>:<id>" açarı ilə saxlanılır (approval, audit, knowledge).
+// Yeni sənədlər "<növ>:<id>" açarı ilə saxlanılır (approval, audit, knowledge, auditreport).
 
 const mem = { state: null, jobs: [], docs: {} };
 
 // Yalnız bu növlərə icazə var. Açar adı kənardan gələn mətnlə düzəldilmir.
-export const DOC_KINDS = new Set(["approval", "audit", "knowledge"]);
+// "auditreport": AI Auditor (Kimi) hesabatları. "audit" jurnalından ayrıdır (açarı "auditreport:..." olduğu üçün "audit:" siyahısına qarışmır).
+export const DOC_KINDS = new Set(["approval", "audit", "knowledge", "auditreport"]);
 const ID_RE = /^\d{13}-[0-9a-f]{6}$/;
 const MEM_DOC_LIMIT = 500;
 const LIST_MAX = 40; // KV oxumaları Cloudflare-də alt sorğu sayılır (pulsuz planda 50 limit)

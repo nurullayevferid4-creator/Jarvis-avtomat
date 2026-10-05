@@ -104,7 +104,9 @@ Parol limiti KV olmadan zəifdir, KV ilə də tam dəqiq deyil. Güclü qoruma �
 
 ## Gələcəkdə Kimi (və ya başqa AI) necə əlavə edilə bilər?
 
-**Kimi hələlik sistemdə YOXDUR.** Amma quruluş buna hazırdır. Yeni model əlavə etmək 3 addımdır və orkestratora toxunmur:
+**Kimi köməkçi (icraçı) kimi sistemdə YOXDUR.** Kimi yalnız **AI Auditor** kimi əlavə olunub: kod və nəticələri yoxlayıb hesabat yazır, heç nəyi icra etmir və köməkçi reyestrinə qoşula bilmir. Bax `docs/ai-auditor.md`. Auditor üçün `KIMI_API_KEY` lazımdır; yoxdursa "not configured" xətası verir və sistem qalanı işləyir.
+
+Quruluş yeni köməkçi modelə də hazırdır. Yeni model əlavə etmək 3 addımdır və orkestratora toxunmur:
 
 1. `src/adapters/KimiAdapter.js` yarat. `BaseAdapter`-dən törət və `run(task, ctx)` funksiyasını yaz. API formatını **Kimi-nin rəsmi sənədindən** götür, təxmini yazma. Şablon `src/adapters/BaseAdapter.js` içindəki izahatdadır (hər API çağırışından əvvəl `ctx.budget.spend()`, sorğunu `httpRequest` ilə göndər).
 2. `src/adapters/registry.js` içində adapteri import et və `createRegistry` funksiyasına bir sətir əlavə et (orada nümunə şərh kimi yazılıb).
@@ -118,7 +120,7 @@ Claude lider modelin təlimatı köməkçi siyahısını reyestrdən özü oxuyu
 worker.js                  Cloudflare giriş faylı (src/index.js-i çağırır)
 src/index.js               ünvanlar, parol, parol cəhd limiti
 src/orchestrator/          ClaudeOrchestrator (planlama, yoxlama, yekun cavab)
-src/adapters/              ClaudeAdapter, OpenAIAdapter, səs, reyestr, BaseAdapter
+src/adapters/              ClaudeAdapter, OpenAIAdapter, KimiAuditorAdapter (yalnız audit), səs, reyestr, BaseAdapter
 src/guards/                limitlər (çağırış sayı, vaxt, parol)
 src/approval/              söhbət təsdiq qapısı (gate.js) və təsdiq mərkəzi (center.js)
 src/security/              SSRF qoruması, xarici məzmunun təmizlənməsi (prompt injection)
@@ -130,6 +132,7 @@ src/validate.js            sxem yoxlayıcı
 src/state/                 söhbət yaddaşı, iş tarixçəsi, ümumi sənəd anbarı
 src/ui/                    telefon səhifəsi
 SECURITY.md, APPROVALS.md, TOOLS.md   1-ci mərhələnin sənədləri
+docs/ai-auditor.md         Kimi AI Auditor: nə edir, nə etmir, quraşdırma, xəta halları
 tests/                     yeni testlər
 test.mjs                   köhnə testlər (dəyişdirilməyib)
 .env.example               açar adlarının nümunəsi (dəyərlər boş)
