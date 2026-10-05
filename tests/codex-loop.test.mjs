@@ -288,9 +288,9 @@ test("state şərhi: yazılıb-oxunur, marker bir sətirdir, '-->' daxil edilə 
 
 const DRAFT = ".github/workflow-drafts/claude-codex-loop.yml";
 
-test("workflow qaralaması aktiv deyil və təhlükəsizlik qaydalarına uyğundur", () => {
+test("workflow qaralaması təhlükəsizlik qaydalarına uyğundur", () => {
   assert.ok(existsSync(DRAFT));
-  assert.equal(existsSync(".github/workflows/claude-codex-loop.yml"), false, "qaralama özbaşına aktiv ola bilməz");
+  // Aktiv nüsxə yalnız aktivləşdirmə PR-ındadır; onun qaralama ilə eyniliyi tests/codex-loop-activation.test.mjs-də yoxlanır.
   const y = readFileSync(DRAFT, "utf8");
   assert.ok(!/pull_request_target/.test(y), "pull_request_target istifadə olunmur");
   assert.match(y, /concurrency:\s*\n\s+group: codex-loop-pr-/);

@@ -1,0 +1,244 @@
+# AKTİV workflow (qaralama: .github/workflow-drafts/claude-codex-loop.yml; gövdə eynidir, test ilə yoxlanır).
+# Bu fayl yalnız bu PR-ın budağındadır. main-ə merge Fərid-in "təsdiq"-indən sonra, PR #8 merge olunandan SONRA mümkündür
+# (workflow main-dən scripts/codex-loop/gate.mjs-i götürür; PR #8 olmadan gate addımı xəta verir və heç nə edilmir).
+# Dövr: Codex review -> (bu workflow) -> Claude yoxlayır/düzəldir/test edir/push edir -> workflow commit-i yoxlayır -> "@codex review" -> ...
+# Bütün qərarlar scripts/codex-loop/gate.mjs-dədir. Skript YALNIZ main-dən (trusted) götürülür, PR budağından yox.
+# Bu workflow merge etmir: Claude-a "gh pr merge" qadağandır və merge addımı yoxdur. Son qərar Fərid-dədir.
+name: Claude Codex Loop
+
+on:
+  pull_request_review:
+    types: [submitted]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR nömrəsi (Codex limiti açıldıqdan sonra mövcud PR üçün dövrü davam etdirmək)"
+        required: true
+        type: string
+      reset:
+        description: "Dayanmış dövrü yenidən aç (raund limitini sıfırlamır)"
+        required: false
+        type: boolean
+        default: false
+
+# Eyni PR üçün eyni anda yalnız bir icra. Növbədəkilər ləğv edilmir, gözləyir (cancel-in-progress: false).
+concurrency:
+  group: codex-loop-pr-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    # Ucuz ilkin süzgəc. Əsas yoxlamalar gate.mjs-dədir (bot login+type, cari commit, state, raund, yollar).
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request_review' &&
+        github.event.review.user.login == 'chatgpt-codex-connector[bot]' &&
+        startsWith(github.event.pull_request.head.ref, 'claude/') &&
+        github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request != null &&
+        github.event.comment.user.login == 'chatgpt-codex-connector[bot]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+    outputs:
+      action: ${{ steps.decide.outputs.action }}
+      reason: ${{ steps.decide.outputs.reason }}
+      head_ref: ${{ steps.decide.outputs.head_ref }}
+      head_sha: ${{ steps.decide.outputs.head_sha }}
+      base_sha: ${{ steps.decide.outputs.base_sha }}
+      prompt: ${{ steps.decide.outputs.prompt }}
+    steps:
+      - name: Trusted checkout (default branch)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: trusted
+          persist-credentials: false
+
+      - name: Decide
+        id: decide
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
+          REVIEW_ID: ${{ github.event.review.id }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          RESET: ${{ inputs.reset }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            pull_request_review) EV="review:${REVIEW_ID}" ;;
+            issue_comment) EV="comment:${COMMENT_ID}" ;;
+            *) EV="dispatch" ;;
+          esac
+          ARGS=()
+          if [ "$RESET" = "true" ]; then ARGS+=(--reset); fi
+          node trusted/scripts/codex-loop/gate.mjs decide --repo "$REPO" --pr "$PR" --event "$EV" ${ARGS[@]+"${ARGS[@]}"} --out decision.json --prompt-out prompt.txt
+          ACTION="$(jq -r '.action' decision.json)"
+          REASON="$(jq -r '.reason' decision.json)"
+          HEAD_REF="$(gh api "repos/$REPO/pulls/$PR" --jq '.head.ref')"
+          HEAD_SHA="$(gh api "repos/$REPO/pulls/$PR" --jq '.head.sha')"
+          BASE_SHA="$(gh api "repos/$REPO/git/ref/heads/$DEFAULT_BRANCH" --jq '.object.sha')"
+          # Budaq adı kənardan gəlir: şəkil və uzunluq yoxlanır
+          [[ "$HEAD_REF" =~ ^claude/[A-Za-z0-9._/-]{1,100}$ ]] || { ACTION=skip; REASON=bad_head_ref; }
+          [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || { ACTION=skip; REASON=bad_head_sha; }
+          [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { ACTION=skip; REASON=bad_base_sha; }
+          {
+            echo "action=$ACTION"
+            echo "reason=$REASON"
+            echo "head_ref=$HEAD_REF"
+            echo "head_sha=$HEAD_SHA"
+            echo "base_sha=$BASE_SHA"
+          } >> "$GITHUB_OUTPUT"
+          if [ "$ACTION" = "fix" ] && [ -s prompt.txt ]; then
+            D="PROMPT_$(openssl rand -hex 8)"
+            { echo "prompt<<$D"; cat prompt.txt; echo; echo "$D"; } >> "$GITHUB_OUTPUT"
+          fi
+          echo "action=$ACTION reason=$REASON"
+
+      # State yazılır FIX-DƏN ƏVVƏL: iş yarıda qırılsa da eyni review ikinci dəfə işlənmir (at-most-once).
+      - name: Save state and notify
+        if: steps.decide.outputs.action != 'skip'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
+        run: |
+          set -euo pipefail
+          STATE="$(jq -r '.state_comment // empty' decision.json)"
+          if [ -n "$STATE" ]; then
+            EXISTING="$(gh api "repos/$REPO/issues/$PR/comments?per_page=100" --paginate --jq '[.[] | select(.user.login=="github-actions[bot]" and (.body | contains("codex-loop-state:v1")))] | last | .id // empty' | tail -n1)"
+            if [ -n "$EXISTING" ]; then
+              gh api --method PATCH "repos/$REPO/issues/comments/$EXISTING" -f body="$STATE" > /dev/null
+            else
+              gh api --method POST "repos/$REPO/issues/$PR/comments" -f body="$STATE" > /dev/null
+            fi
+          fi
+          NOTE="$(jq -r '.notify // empty' decision.json)"
+          ACTION="$(jq -r '.action' decision.json)"
+          REASON="$(jq -r '.reason' decision.json)"
+          if [ "$ACTION" = "stop" ]; then
+            gh api --method POST "repos/$REPO/issues/$PR/comments" -f body="Claude ↔ Codex dövrü dayandı: ${REASON}. ${NOTE} Merge edilmir; qərar Fərid-dədir." > /dev/null
+          fi
+
+      # Limit açıldıqdan sonra əl ilə (workflow_dispatch) davam: yalnız BİR sorğu.
+      - name: Request review (dispatch)
+        if: steps.decide.outputs.action == 'request_review'
+        env:
+          GH_TOKEN: ${{ secrets.CODEX_TRIGGER_TOKEN || secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
+        run: gh api --method POST "repos/$REPO/issues/$PR/comments" -f body="@codex review" > /dev/null
+
+  fix:
+    needs: gate
+    # Düzəliş YALNIZ review hadisəsində və eyni repo-nun budağında mümkündür (fork PR-da heç vaxt işləmir).
+    if: >-
+      needs.gate.outputs.action == 'fix' &&
+      github.event_name == 'pull_request_review' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Minimum icazə. contents: write YALNIZ PR budağına push üçündür (git push origin HEAD).
+    # pull-requests/issues yalnız oxuma: bu token ilə PR merge/bağlama və şərh yazma mümkün olmamalıdır.
+    # id-token: write lazım deyil: github_token verildiyi üçün action OIDC/Claude App yolunu atlayır.
+    permissions:
+      contents: write
+      pull-requests: read
+      issues: read
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.head_ref }}
+          fetch-depth: 0
+
+      # Qərar verildiyi andan sonra branch dəyişibsə (yeni push), köhnə review əsasında heç nə edilmir.
+      - name: Stale guard
+        env:
+          EXPECTED: ${{ needs.gate.outputs.head_sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED" || { echo "branch dəyişib, dayanıram"; exit 1; }
+
+      - name: Claude (Developer)
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ github.token }}
+          # Actor Codex botudur: action default olaraq botları rədd edir. Yalnız bu bot icazəlidir ("*" yox).
+          allowed_bots: chatgpt-codex-connector
+          prompt: ${{ needs.gate.outputs.prompt }}
+          claude_args: >-
+            --max-turns 25
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(npm test),Bash(npx wrangler deploy --dry-run),Bash(git status:*),Bash(git diff:*),Bash(git add:*),Bash(git commit:*),Bash(git push origin HEAD)"
+            --disallowedTools "Bash(gh pr merge:*),Bash(gh pr close:*),Bash(git push --force:*),Bash(git push -f:*),Bash(git push origin main:*),Bash(git push origin HEAD:main:*)"
+
+  post:
+    needs: [gate, fix]
+    if: needs.fix.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+    steps:
+      - name: Trusted checkout (default branch)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: trusted
+          persist-credentials: false
+
+      - name: Verify Claude's commit and request next review
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          READ_TOKEN: ${{ github.token }}
+          TRIGGER_TOKEN: ${{ secrets.CODEX_TRIGGER_TOKEN || secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
+          BEFORE: ${{ needs.gate.outputs.head_sha }}
+          BASE_BEFORE: ${{ needs.gate.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          node trusted/scripts/codex-loop/gate.mjs verify --repo "$REPO" --pr "$PR" --before "$BEFORE" --base-before "$BASE_BEFORE" --out verify.json
+          ACTION="$(jq -r '.action' verify.json)"
+          REASON="$(jq -r '.reason' verify.json)"
+          STATE="$(jq -r '.state_comment // empty' verify.json)"
+          if [ -n "$STATE" ]; then
+            EXISTING="$(GH_TOKEN="$READ_TOKEN" gh api "repos/$REPO/issues/$PR/comments?per_page=100" --paginate --jq '[.[] | select(.user.login=="github-actions[bot]" and (.body | contains("codex-loop-state:v1")))] | last | .id // empty' | tail -n1)"
+            if [ -n "$EXISTING" ]; then GH_TOKEN="$READ_TOKEN" gh api --method PATCH "repos/$REPO/issues/comments/$EXISTING" -f body="$STATE" > /dev/null; fi
+          fi
+          if [ "$ACTION" = "request_review" ]; then
+            GH_TOKEN="$TRIGGER_TOKEN" gh api --method POST "repos/$REPO/issues/$PR/comments" -f body="@codex review" > /dev/null
+          else
+            GH_TOKEN="$READ_TOKEN" gh api --method POST "repos/$REPO/issues/$PR/comments" -f body="Claude ↔ Codex dövrü dayandı: ${REASON}. Merge edilmir; qərar Fərid-dədir." > /dev/null
+          fi
+
+  on_failure:
+    needs: [gate, fix]
+    if: always() && (needs.fix.result == 'failure' || needs.fix.result == 'cancelled')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Report failure
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
+        run: |
+          gh api --method POST "repos/$REPO/issues/$PR/comments" -f body="Claude ↔ Codex dövrü: Claude işi uğursuz oldu və ya ləğv edildi. Avtomatik təkrar yoxdur; qərar Fərid-dədir." > /dev/null
