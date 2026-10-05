@@ -131,3 +131,11 @@ Mənbələr: `anthropics/claude-code-action` `main` budağının `action.yml`, `
 - **Səssiz dayanma:** Codex cavab verməzsə dövr heç nə etmir və bildiriş də yoxdur (watchdog yoxdur). Təhlükəsizdir, amma səssizdir.
 - **PR #6 üçün:** `src/security/` və `src/approval/`-a toxunduğu üçün gate onu `sensitive_paths` ilə dayandırır (stop şərhi düşər); PR #6 yalnız əl ilə (Claude sessiyası) aparılır.
 - **Gecikmə riski:** push-dan dərhal sonra `pulls/N` `head.sha` bir neçə saniyə köhnə qala bilər; `verify` onu "dəyişiklik yoxdur" kimi oxuyub dayana bilər (səhv istiqamət yox, yalnız lazımsız dayanma).
+
+## ANTHROPIC_API_KEY olmadıqda (düzəliş)
+- Problem (audit): açar yoxdursa gate yenə raundu artırıb state-i `fixing` edir, fix job-u isə xəta verir; raundlar boşuna yanır, eyni review yenidən işlənmir.
+- Düzəliş: workflow açarın **mövcudluğunu** (`true/false`, dəyər yox) `--fix-available` ilə gate-ə verir. Açar yoxdursa və tapıntı real P1/P2-dirsə gate `skip: fix_unavailable_no_api_key` qaytarır: raund sərf olunmur, state dəyişmir, PR-da bir dəfə xəbərdarlıq düşür. P0, `.github/`, həssas yol, stale/duplicate və s. dayanmaları əvvəlki kimidir (açar yoxlaması onlardan sonradır). `--fix-available` verilməsə (Claude sessiyası yolu) fix mümkündür.
+- **Açarsız işləyən yol (B):** Claude sessiyası `node scripts/codex-loop/gate.mjs decide --repo ... --pr N --use-gh` ilə Codex review-unu oxuyur, P1/P2-ni özü doğrulayıb düzəldir, test edib push edir və yeni `@codex review` istəyir. Action və API açarı tələb olunmur.
+- Açar əlavə olunandan sonra: yeni Codex review (və ya `@codex review`) eyni dövrü sıfırdan itkisiz başladır.
+- Alternativ autentifikasiya (**yoxlanmayıb, yalnız `claude-code-action`-ın `main` mənbəyində oxunub**): `claude_code_oauth_token` input-u `anthropic_api_key`-in əvəzi kimi göstərilir. Bu da secret tələb edir və workflow-a daxil edilməyib.
+- Repo ayarları oxuna bilmədi (proxy `actions/permissions` yolunu bloklayır). `main` qorunmur (branch protection yoxdur): oxundu.

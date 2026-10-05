@@ -76,6 +76,8 @@ jobs:
           COMMENT_ID: ${{ github.event.comment.id }}
           RESET: ${{ inputs.reset }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          # Secret dəyəri yazılmır, yalnız mövcudluğu (true/false) ötürülür.
+          FIX_AVAILABLE: ${{ secrets.ANTHROPIC_API_KEY != '' }}
         run: |
           set -euo pipefail
           case "$EVENT_NAME" in
@@ -85,7 +87,7 @@ jobs:
           esac
           ARGS=()
           if [ "$RESET" = "true" ]; then ARGS+=(--reset); fi
-          node trusted/scripts/codex-loop/gate.mjs decide --repo "$REPO" --pr "$PR" --event "$EV" ${ARGS[@]+"${ARGS[@]}"} --out decision.json --prompt-out prompt.txt
+          node trusted/scripts/codex-loop/gate.mjs decide --repo "$REPO" --pr "$PR" --event "$EV" --fix-available "$FIX_AVAILABLE" ${ARGS[@]+"${ARGS[@]}"} --out decision.json --prompt-out prompt.txt
           ACTION="$(jq -r '.action' decision.json)"
           REASON="$(jq -r '.reason' decision.json)"
           HEAD_REF="$(gh api "repos/$REPO/pulls/$PR" --jq '.head.ref')"
@@ -131,6 +133,20 @@ jobs:
           REASON="$(jq -r '.reason' decision.json)"
           if [ "$ACTION" = "stop" ]; then
             gh api --method POST "repos/$REPO/issues/$PR/comments" -f body="Claude ↔ Codex dövrü dayandı: ${REASON}. ${NOTE} Merge edilmir; qərar Fərid-dədir." > /dev/null
+          fi
+
+      # Açar yoxdursa: raund sərf edilmir; PR-da bir dəfə xəbərdarlıq (səssiz dayanma olmasın).
+      - name: Notify missing API key (once per PR)
+        if: steps.decide.outputs.reason == 'fix_unavailable_no_api_key'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
+        run: |
+          set -euo pipefail
+          N="$(gh api "repos/$REPO/issues/$PR/comments?per_page=100" --paginate --jq '[.[] | select(.user.login=="github-actions[bot]" and (.body | contains("[codex-loop:no-api-key]")))] | length' | awk '{s+=$1} END{print s+0}')"
+          if [ "$N" -eq 0 ]; then
+            gh api --method POST "repos/$REPO/issues/$PR/comments" -f body="Claude ↔ Codex dövrü [codex-loop:no-api-key]: Codex real P1/P2 tapıntı yazıb, amma workflow-da Claude düzəlişi üçün ANTHROPIC_API_KEY yoxdur. Raund sərf edilmədi, heç nə dəyişmədi. Claude sessiyasında davam edilə bilər. Merge edilmir; qərar Fərid-dədir." > /dev/null
           fi
 
       # Limit açıldıqdan sonra əl ilə (workflow_dispatch) davam: yalnız BİR sorğu.
