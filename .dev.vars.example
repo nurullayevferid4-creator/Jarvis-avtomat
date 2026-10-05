@@ -5,3 +5,5 @@
 ANTHROPIC_API_KEY=
 OPENAI_API_KEY=
 PASSCODE=
+# İstəyə bağlı: AI Auditor (Kimi). Boş qalsa auditor "KIMI_API_KEY is not configured" xətası verir.
+KIMI_API_KEY=
