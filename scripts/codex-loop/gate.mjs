@@ -21,6 +21,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 export const loadConfig = (path = join(HERE, "config.json")) => JSON.parse(readFileSync(path, "utf8"));
 
 const HEX = /^[0-9a-f]{7,40}$/;
+// Budaq adı prompta və shell-ə düşə bilər: yalnız sadə simvollar (workflow-dakı yoxlama ilə eynidir).
+const SAFE_REF_TAIL = /^[A-Za-z0-9._\/-]{1,100}$/;
 const STATUSES = new Set(["idle", "fixing", "awaiting_review", "waiting_limit", "clean", "stopped"]);
 export const MARKER_RE = /<!-- codex-loop-state:v1 (\{[^\n]{0,4000}?\}) -->/;
 
@@ -118,7 +120,8 @@ const LOOP_PATTERNS = /gh\s{1,5}pr\s{1,5}(merge|close|review)|git\s{1,5}push\s{1
 const suspicious = (text) => detectInjection(text).length > 0 || LOOP_PATTERNS.test(String(text).normalize("NFKC"));
 
 const isBot = (u, login) => !!u && u.login === login && u.type === "Bot";
-const startsWithAny = (p, list) => list.some((x) => (x.endsWith("/") ? p.startsWith(x) : p === x));
+// Hərf registri nəzərə alınmır: böyük/kiçik hərf fərqli yazılış yan keçid olmasın (artıq dayanmaq təhlükəsiz istiqamətdir).
+const startsWithAny = (p, list) => { const q = String(p).toLowerCase(); return list.some((x) => { const y = x.toLowerCase(); return y.endsWith("/") ? q.startsWith(y) : q === y; }); };
 const classify = (files, cfg) => {
   const names = [];
   for (const f of files) {
@@ -134,7 +137,7 @@ const classify = (files, cfg) => {
 function eligibility(pr, repo, cfg) {
   if (!pr || pr.state !== "open") return "pr_not_open";
   if (!pr.head || !pr.head.repo || String(pr.head.repo.full_name).toLowerCase() !== String(repo).toLowerCase()) return "fork_or_unknown_head";
-  if (typeof pr.head.ref !== "string" || !pr.head.ref.startsWith(cfg.branch_prefix)) return "branch_not_allowed";
+  if (typeof pr.head.ref !== "string" || !pr.head.ref.startsWith(cfg.branch_prefix) || !SAFE_REF_TAIL.test(pr.head.ref.slice(cfg.branch_prefix.length))) return "branch_not_allowed";
   if (!pr.base || pr.base.ref !== cfg.base_branch) return "base_not_allowed";
   if (typeof pr.head.sha !== "string" || !HEX.test(pr.head.sha)) return "bad_head_sha";
   return null;
@@ -191,6 +194,8 @@ function decideReview({ repo, pr, event, files, filesTruncated, inlineComments }
 
   const findings = parseFindings(r.body, inlineComments, cfg);
   const actionable = findings.filter((f) => f.severity === "P0" || f.severity === "P1" || f.severity === "P2");
+  // Tanınmayan formatda inline şərh varsa səssiz buraxılmır: real tapıntı gözdən qaça bilər, qərar insana verilir.
+  if (!findings.length && (inlineComments || []).length) return out("stop", "unparsed_findings", stopState(state, "unparsed_findings"), { notify: "Codex inline şərh yazıb, amma P0-P3 formatında deyil. Əl ilə baxın." });
   if (!actionable.length) return out("skip", findings.length ? "only_p3" : "no_actionable", state);
 
   if (filesTruncated) return out("stop", "too_many_files", stopState(state, "too_many_files"));

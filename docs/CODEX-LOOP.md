@@ -35,10 +35,11 @@ Nəticə: yalnız `pull_request_review` kifayət etmir. Təmiz nəticə və limi
 
 | Fayl | Rol | Vəziyyət |
 |---|---|---|
-| `scripts/codex-loop/gate.mjs` | bütün qərarlar (təmiz funksiyalar) + `decide` / `verify` CLI | yazılıb, 24 testlə yoxlanıb, PR #6/#7 üzərində oxuma rejimində işlədilib |
+| `scripts/codex-loop/gate.mjs` | bütün qərarlar (təmiz funksiyalar) + `decide` / `verify` CLI | yazılıb, 54 testlə yoxlanıb (24 vahid + 30 simulyasiya), PR #6/#7 üzərində oxuma rejimində işlədilib |
 | `scripts/codex-loop/config.json` | bot adı, budaq prefiksi, raund limiti, həssas/workflow yolları | hazır |
 | `.github/workflow-drafts/claude-codex-loop.yml` | workflow qaralaması | **aktiv deyil**, YAML sintaksisi parse olunur, Actions-da işləməyib |
 | `tests/codex-loop.test.mjs` | gate + qaralamanın statik təhlükəsizlik yoxlamaları | `npm test`-ə daxildir |
+| `tests/codex-loop-simulation.test.mjs` | 17 ssenari cədvəli + saxta GitHub dünyasında bütöv dövr | `npm test`-ə daxildir |
 
 Mövcud `.github/workflows/claude.yml`-ə toxunulmayıb (yalnız `@claude` ilə işləyir, `ANTHROPIC_API_KEY` tələb edir).
 
@@ -62,6 +63,18 @@ Mövcud `.github/workflows/claude.yml`-ə toxunulmayıb (yalnız `@claude` ilə 
 | 18 | limitdən sonra mövcud PR-lar | `workflow_dispatch` (pr_number); `codex_limit` şərhi dövrü `waiting_limit`-ə qoyur və yeni sorğu yazmır | test |
 
 Əlavə: skript PR budağından yox, **main-dən (trusted) checkout** ilə işləyir; PR-ın dəyişdirdiyi gate.mjs qərar vermir. `verify` Claude-un push-undan sonra: xətti irəliləmə, ≤3 commit, `.github/` və həssas yola toxunmama yoxlayır, sonra `@codex review` yazır.
+
+## Simulyasiya (aktivləşdirmədən əvvəl)
+
+`tests/codex-loop-simulation.test.mjs`: şəbəkə yoxdur (fetch söndürülür), GitHub-a yazma yoxdur (saxta api yalnız oxuyur), giriş deep-freeze edilir, hər ssenari iki dəfə işləyib eyni nəticə verir.
+
+17 ssenari: P1/P2 → fix; təmiz şərh → stop; limit → stop; köhnə commit → skip; təkrar review → skip; 8 raund → stop; P0 → stop; `.github/` → stop; həssas fayl → stop; `gh pr merge`/`--force` izi → stop; etibarsız bot → skip; bağlı PR → skip; `claude/*` olmayan budaq → skip; fork → skip; cari HEAD + P1/P2 → fix; adi şərh kimi təmiz nəticə → stop; adi şərh kimi limit → stop.
+
+Bütöv dövr (saxta dünya, `collect` → `decide` → Claude düzəlişi → `verifyFix` → `@codex review`): P2 → fix → sorğu → P1 → fix → sorğu → təmiz → stop; eyni review 5 dəfə → 1 düzəliş; sonsuz tapıntı → 8 düzəlişdən sonra stop; Claude dəyişiklik etməsə və ya `.github/`/həssas yola toxunsa sorğu yoxdur; limit → dispatch ilə bir sorğu; yarımçıq düzəlişdə eyni commit üçün təkrar iş yoxdur; həssas fayllı PR-da heç bir düzəliş başlamır.
+
+Simulyasiyanın tapdığı və düzəldilən 3 boşluq: (1) `claude/` ilə başlayan qeyri-standart simvollu budaq adı prompta qutudan kənarda düşə bilərdi, indi `[A-Za-z0-9._/-]{1,100}` tələb olunur (workflow-dakı yoxlama ilə eyni); (2) yol qaydaları hərf registrinə həssas idi, indi deyil; (3) tanınmayan formatlı inline Codex şərhi səssizcə `skip` olurdu, indi `unparsed_findings` ilə dayanır.
+
+Bilinən sərhəd: Claude-un düzəliş işi yarımçıq qalsa, həmin commit üçün gələn yeni review `sha_already_handled` ilə buraxılır (sonsuz dövr yoxdur, amma dövr irəliləmir). Davam etmək üçün yeni commit (əl ilə düzəliş) lazımdır.
 
 ## Limit açıldıqdan sonra
 
