@@ -69,6 +69,7 @@ Hamısı dəyişdirilə bilər (`.env.example` faylına bax), amma həmişə tə
   - `PASSCODE` (tətbiqə girmək üçün öz seçdiyin parol)
 - **Lokal sınaq üçün:** `.dev.vars.example` faylını kopyala, adını `.dev.vars` qoy, açarları orada yaz. `.dev.vars` və `.env` faylları `.gitignore` ilə qorunur.
 - `.env.example` yalnız **nümunədir**: adları göstərir, dəyərləri boşdur.
+- **Sosial platformalar** (Instagram, TikTok, YouTube, Telegram) üçün əlavə secret-lər və addım-addım qurulum `SOCIAL.md`-dədir. Onlar yoxdursa JARVIS əvvəlki kimi işləyir, platforma "NOT CONNECTED" görünür.
 
 ## Lokal test necə ediləcək?
 
@@ -123,13 +124,16 @@ src/guards/                limitlər (çağırış sayı, vaxt, parol)
 src/approval/              söhbət təsdiq qapısı (gate.js) və təsdiq mərkəzi (center.js)
 src/security/              SSRF qoruması, xarici məzmunun təmizlənməsi (prompt injection)
 src/tools/                 alət reyestri və daxili alətlər (hələ orkestratora qoşulmayıb)
+src/social/                sosial paylaşım: adapterlər (Instagram/TikTok/YouTube/Telegram), təsdiqə bağlı axın (flow.js), OAuth, media, planner
+src/telegram/              Telegram bot idarəsi (webhook, təsdiq düymələri)
+scripts/                   asılılıqsız lint (npm run lint)
 src/knowledge/             bilik bazası
 src/audit/                 audit jurnalı
 src/policy.js              risk səviyyələri və icazələr
 src/validate.js            sxem yoxlayıcı
 src/state/                 söhbət yaddaşı, iş tarixçəsi, ümumi sənəd anbarı
 src/ui/                    telefon səhifəsi
-SECURITY.md, APPROVALS.md, TOOLS.md   1-ci mərhələnin sənədləri
+SECURITY.md, APPROVALS.md, TOOLS.md, SOCIAL.md   sənədlər
 tests/                     yeni testlər
 test.mjs                   köhnə testlər (dəyişdirilməyib)
 .env.example               açar adlarının nümunəsi (dəyərlər boş)
@@ -151,7 +155,8 @@ Böyük plan 4 mərhələyə bölünüb, hər biri ayrı PR və ayrı test ilə 
 ## Məhdudiyyətlər
 
 - Düyməyə basıb danışmaq rejimidir, canlı zəng deyil.
-- Shopify, Instagram, Telegram inteqrasiyaları hələ yoxdur. Paylaşım tapşırıqlarında yalnız qaralama hazırlanır.
+- Shopify inteqrasiyası hələ yoxdur. Instagram/TikTok/YouTube/Telegram paylaşım kodu yazılıb, amma yalnız saxta API ilə sınanıb; real hesabla sınaq və platforma təsdiqləri (App Review/audit) Fərid-dən asılıdır. Bax `SOCIAL.md`.
+- Söhbət (`/api/talk`) üzərindən "paylaş" demək hələ də yalnız qaralama qaytarır. Real paylaşım `social.publish` təsdiq qeydi (UI, API və ya Telegram) ilə gedir.
 - Real API ilə sınaq hələ keçirilməyib (yuxarıya bax).
 - API açarlarını heç vaxt bu repo-ya yazma. Repo açıqdırsa hər kəs görür.
 Üçlü komanda testi: Fərid + Claude + ChatGPT

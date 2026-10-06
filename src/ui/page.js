@@ -32,6 +32,9 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--acc);outline-of
 <div id="out"></div>
 <div class="row"><span class="lbl">Son işlər</span><button id="jobs" class="s" type="button">Göstər</button></div>
 <div id="jl"></div>
+<div class="row"><span class="lbl">Sosial platformalar</span><span><button id="spv" class="s" type="button">Yoxla</button> <button id="spr" class="s" type="button">Yenilə</button></span></div>
+<div id="sp"></div>
+<div id="spa"></div>
 </main>
 <script>
 var $=function(i){return document.getElementById(i)};
@@ -107,4 +110,54 @@ if(!d.jobs.length){jl.appendChild(el("div","lbl","Hələ iş yoxdur."));return}
 d.jobs.forEach(function(j){var c=el("div","card");c.style.marginBottom="8px";var h=el("div","row");h.appendChild(el("div","lbl",j.ts.slice(0,16).replace("T"," ")));h.appendChild(el("span","pill",LABEL[j.status]||j.status));c.appendChild(h);c.appendChild(el("div","txt",j.request));jl.appendChild(c)});
 });
 });
+
+var SOC={CONNECTED:"CONNECTED",NOT_CONNECTED:"NOT CONNECTED",TOKEN_EXPIRED:"TOKEN EXPIRED",API_ERROR:"API ERROR"};
+var SCOL={CONNECTED:"var(--ok)",NOT_CONNECTED:"var(--line)",TOKEN_EXPIRED:"var(--bad)",API_ERROR:"var(--bad)"};
+function pill(text,color){var p=el("span","pill",text);if(color){p.style.background=color;if(color!=="var(--line)")p.style.color="#10141a"}return p}
+function decide(id,decision){
+if(decision==="approve"&&!window.confirm("Bu paylaşım real hesablarda dərc olunacaq. Təsdiq edirsən?"))return;
+var h=authHeaders();h["content-type"]="application/json";
+fetch("/api/approvals/"+id,{method:"POST",headers:h,body:JSON.stringify({decision:decision})}).then(function(r){return r.json()}).then(function(d){
+setState(d.error?("xəta: "+d.error):(decision==="approve"?"təsdiq verildi":"rədd edildi"));loadSocial(false)
+}).catch(function(e){setState("xəta: "+e.message)});
+}
+function connect(k){
+fetch("/api/social/"+k+"/connect",{method:"POST",headers:authHeaders()}).then(function(r){return r.json()}).then(function(d){
+if(d.url){window.open(d.url,"_blank","noopener")}else{setState(d.message||d.error||"xəta")}
+});
+}
+function loadSocial(verify){
+fetch("/api/social/status"+(verify?"?verify=1":""),{headers:authHeaders()}).then(function(r){return r.json()}).then(function(d){
+var box=$("sp"),pa=$("spa");box.textContent="";pa.textContent="";
+if(d.error){box.appendChild(el("div","lbl",d.error));return}
+Object.keys(d.platforms).forEach(function(k){
+var s=d.platforms[k],c=el("div","card");c.style.marginBottom="8px";
+var h=el("div","row");h.appendChild(el("div","who",(s.label||k).toUpperCase()));
+var pills=el("span");pills.appendChild(pill(SOC[s.state]||s.state,SCOL[s.state]));
+if(s.pending_approvals){pills.appendChild(document.createTextNode(" "));pills.appendChild(pill("NEEDS APPROVAL","var(--acc)"))}
+h.appendChild(pills);c.appendChild(h);
+var info=[];
+if(s.account&&(s.account.username||s.account.title||s.account.nickname))info.push("hesab: "+(s.account.username||s.account.title||s.account.nickname));
+if(s.expires_in_days!==undefined&&s.expires_in_days!==null)info.push("token: "+s.expires_in_days+" gün");
+if(s.reason)info.push(s.reason);
+if(s.warning)info.push(s.warning);
+if(info.length)c.appendChild(el("div","lbl",info.join(" · ")));
+if(s.state!=="CONNECTED"&&k!=="telegram"&&!(s.secrets_missing&&s.secrets_missing.length)){var b=el("button","s","Qoş");b.type="button";b.style.marginTop="8px";b.addEventListener("click",function(){connect(k)});c.appendChild(b)}
+box.appendChild(c);
+});
+if(d.pending&&d.pending.length){
+pa.appendChild(el("div","lbl","Təsdiq gözləyən paylaşımlar"));
+d.pending.forEach(function(a){
+var c=el("div","card");c.style.marginTop="8px";
+c.appendChild(el("div","txt",a.summary));
+var r=el("div","row");r.style.marginTop="10px";
+var ok=el("button","s","Təsdiq");ok.type="button";ok.addEventListener("click",function(){decide(a.id,"approve")});
+var no=el("button","s","Rədd");no.type="button";no.addEventListener("click",function(){decide(a.id,"reject")});
+r.appendChild(ok);r.appendChild(no);c.appendChild(r);pa.appendChild(c);
+});
+}
+}).catch(function(e){$("sp").textContent="Bağlantı xətası: "+e.message});
+}
+$("spr").addEventListener("click",function(){loadSocial(false)});
+$("spv").addEventListener("click",function(){loadSocial(true)});
 </script></body></html>`;

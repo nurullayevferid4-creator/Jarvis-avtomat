@@ -7,7 +7,7 @@ compatibility_date = "2026-09-01"
 # Boş blok: preview production ilə eyni ayarları alır, ayrıca ayar yoxdur.
 [previews]
 
-# Secrets (ANTHROPIC_API_KEY, OPENAI_API_KEY, PASSCODE) are NOT stored here.
+# Secrets (ANTHROPIC_API_KEY, OPENAI_API_KEY, PASSCODE and all social secrets listed in .env.example) are NOT stored here.
 # Add them in the Cloudflare dashboard under the Worker's Settings > Variables and Secrets.
 
 # Optional memory across restarts: create a KV namespace, paste its id, then remove the leading #.
@@ -15,11 +15,24 @@ compatibility_date = "2026-09-01"
 # binding = "JARVIS_KV"
 # id = "PASTE_KV_NAMESPACE_ID"
 
+# Media anbarı (Instagram/TikTok/YouTube üçün video/şəkil). R2 bucket yaradıb adını yaz, sonra # işarələrini sil.
+# Bucket İCTİMAİ OLMAMALIDIR: media yalnız imzalı müvəqqəti ünvanla (/media/...) verilir.
+# [[r2_buckets]]
+# binding = "JARVIS_MEDIA"
+# bucket_name = "PASTE_BUCKET_NAME"
+
+# Gözləyən paylaşım işlərini hər 5 dəqiqədən bir irəlilədir və Instagram tokenini vaxtında yeniləyir.
+# Yalnız təsdiq verilmiş işlərə toxunur; təsdiq yoxdursa heç nə etmir.
+[triggers]
+crons = ["*/5 * * * *"]
+
 # Optional, NOT secret: model names and safety limits. Remove the leading # to change a value.
 # See .env.example for what each one does.
 # [vars]
 # CLAUDE_MODEL = "claude-sonnet-5-5"
 # OPENAI_MODEL = "gpt-4o"
+# PUBLIC_BASE_URL = "https://jarvis-avtomat.<account>.workers.dev"   # NOT secret; OAuth callback + media URL base
+# INSTAGRAM_API_VERSION = "v25.0"
 # MAX_SUBTASKS = "4"
 # MAX_MODEL_CALLS = "12"
 # CALL_TIMEOUT_SECONDS = "25"

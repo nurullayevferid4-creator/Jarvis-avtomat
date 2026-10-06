@@ -4,7 +4,9 @@ Xarici təsiri olan hər iş (paylaşım, mesaj, pul, silmə, qiymət/stok, depl
 
 ## Vacib: təsdiq icra demək deyil
 
-Bu versiyada Shopify, Instagram, Telegram kimi inteqrasiya yoxdur. Ona görə **APPROVE heç nəyi icra etmir**. Qeyd `status: approved`, `execution: manual` olur, yəni "təsdiq alındı, icra Fərid-in özündədir". Bunu `tests/approvals.test.mjs` və `tests/api.test.mjs` yoxlayır.
+**Adi qeydlər:** Shopify və s. üçün inteqrasiya yoxdur. Ona görə APPROVE heç nəyi icra etmir. Qeyd `status: approved`, `execution: manual` olur, yəni "təsdiq alındı, icra Fərid-in özündədir". Bunu `tests/approvals.test.mjs` və `tests/api.test.mjs` yoxlayır.
+
+**Sosial paylaşım qeydləri (`kind: "social.publish"`):** qeyddə strukturlu `payload` və onun SHA-256 `payload_hash`-i saxlanır. Təsdiqdən sonra icranı `src/social/flow.js` edir (təsdiq mərkəzinin özü yenə şəbəkəyə çıxmır): qeyd `approved` olmalıdır və hash dəyişməməlidir, yoxsa icra bloklanır (`execution: "blocked"`). Bu tip qeyd `edit` oluna bilmir (`edit_not_supported`): rədd edib yenisini hazırlatmaq lazımdır. `execution` dəyərləri: `pending` (təsdiqləndi, iş başlamayıb) → `running` → `done` | `partial` | `failed` | `unknown` | `blocked`. Bax `SOCIAL.md`.
 
 ## Qeyd necə görünür
 
@@ -32,7 +34,7 @@ Bütün yollar parol tələb edir (`x-passcode-b64`, bax `SECURITY.md`). Bayraq:
 
 ## Məhdudiyyətlər
 
-- Telefon səhifəsində (UI) təsdiq düymələri hələ yoxdur. Hazırda yalnız API var. UI 4-cü mərhələdədir.
+- Telefon səhifəsində (UI) yalnız **sosial paylaşım** qeydləri üçün Təsdiq/Rədd düymələri var ("Sosial platformalar" paneli). Digər qeydlər üçün hələ yalnız API var.
 - Tək istifadəçi üçündür. Eyni anda iki qərarın yarışına qarşı kilid yoxdur.
 - KV olmadan qeydlər Worker yenidən başlayanda itir.
 - KV son-nəticəli (eventually consistent) saxlanışdır: qərardan dərhal sonra başqa Cloudflare məntəqəsindən oxuma qısa müddət köhnə vəziyyət göstərə bilər. Tək istifadəçi üçün bu qəbul edilən riskdir. Güclü zəmanət (iki qərarın toqquşmaması) üçün sonradan D1 və ya Durable Object lazımdır.

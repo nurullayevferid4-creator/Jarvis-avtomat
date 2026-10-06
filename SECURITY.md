@@ -5,7 +5,7 @@ Bu sənəd 1-ci mərhələdə (təməl) **həqiqətən kodda olan** qoruma qatla
 ## Sirlər
 
 - `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `PASSCODE` yalnız Cloudflare Worker > Settings > Variables and Secrets bölməsində, **Secret** növü ilə saxlanılır.
-- Repo açıqdır. `.gitignore` `.env`, `.dev.vars`, `*.pem`, `*.key` fayllarını bağlayır. `tests/secrets.test.mjs` repo-da açara oxşar mətn olarsa testi pozur.
+- Repo açıqdır. `.gitignore` `.env`, `.dev.vars`, `*.pem`, `*.key` fayllarını bağlayır. `tests/leak-scan.test.mjs` repo-da tipik açar naxışlarına (Anthropic/OpenAI, Google, Meta, Telegram, GitHub, Bearer, private key) uyğun mətn olarsa testi pozur (açıq-aydın saxta test dəyərləri istisnadır; bu naxış axtarışıdır, tam zəmanət deyil). Qeyd: `.gitignore`-dakı `secrets.*` qaydası `secrets.test.mjs` adlı faylı da gizlədirdi, ona görə test `leak-scan.test.mjs` adlandırılıb.
 - `/api/status` açarların yalnız **təyin olunub-olunmadığını** (`true/false`) göstərir, dəyərini heç vaxt.
 - Audit jurnalı `key`, `token`, `secret`, `pass`, `authorization`, `cookie` adlı sahələri və `sk-...`, `Bearer ...` kimi dəyərləri `[gizlədildi]` ilə əvəz edir.
 - JARVIS özü açarı oxuya və ya dəyişə bilməz: alət qeydiyyatı `read.secrets` və `change.apikey` icazəsi olan aləti rədd edir.
@@ -40,7 +40,18 @@ Naxışlardakı bütün təkrarlar məhduddur və yoxlanan mətn 20 000 simvolla
 ## Əməliyyat qoruması
 
 - Paylaşım, mesaj göndərmə, pul, silmə, deploy, qiymət/stok dəyişikliyi, sifariş: `src/policy.js` bunları `APPROVAL_ONLY_PERMISSIONS` kimi saxlayır. Belə icazəsi olan alət `high` riskdə olmalı və təsdiq tələb etməlidir, yoxsa qeydiyyatdan keçmir.
-- Təsdiq tələb edən alət **icra olunmur**, təsdiq qeydi açılır. Təsdiqdən sonra da sistem icra etmir, çünki real inteqrasiya yoxdur (bax `APPROVALS.md`).
+- Təsdiq tələb edən alət **icra olunmur**, təsdiq qeydi açılır. Adi qeydlərdə təsdiqdən sonra da sistem icra etmir (bax `APPROVALS.md`). İstisna: sosial paylaşım (`social.publish`) təsdiqdən sonra `src/social/flow.js` ilə icra olunur və bu qapılardan keçir: qeyd `approved` olmalıdır, `payload_hash` dəyişməməlidir, hər platforma addımı bir dəfə icra olunur (kəsilərsə `unknown`, avtomatik təkrar yoxdur).
+
+## Sosial platformalar
+
+Tam siyahı və limitlər `SOCIAL.md`-dədir. Qısa:
+
+- **Tokenlər** kodda deyil, KV-də (`secret:<platform>`) saxlanır; `TOKEN_ENC_KEY` təyin olunsa AES-GCM ilə şifrələnir. Token heç bir API cavabında, audit jurnalında, xəta mətnində və ya UI-da görünmür (`tests/social-*.test.mjs`).
+- **Telegram webhook** yalnız doğru `X-Telegram-Bot-Api-Secret-Token` başlığı ilə qəbul olunur (sabit vaxtlı müqayisə); `TELEGRAM_WEBHOOK_SECRET` təyin olunmayıbsa hamısı rədd edilir. Göndərən `TELEGRAM_ALLOWED_CHAT_IDS` siyahısında və şəxsi söhbətdə olmalıdır, siyahı boşdursa heç kim idarə edə bilməz. İcazəsizlərə cavab verilmir və audit yazılmır. `update_id` təkrarı bir dəfə işlənir.
+- **OAuth `state`** bir dəfəlik, 10 dəqiqəlik, platformaya bağlıdır və yalnız parolla girmiş sahib yarada bilər. Callback ictimaidir, amma state olmadan heç nə etmir.
+- **Media ünvanı** (`/media/...`) HMAC-SHA256 imzalı və müvəqqətidir; R2 bucket ictimai olmamalıdır. Xarici `media_url` SSRF yoxlamasından keçir (yalnız https, IP yoxdur).
+- **Claude yalnız mətn hazırlayır** (`src/social/planner.js`): alətə, tokenə və təsdiq qeydinə çıxışı yoxdur; cavabı sərt süzgəcdən keçir, platforma və məxfilik seçimini dəyişə bilmir. İstifadəçi mətni `<external_content>` içində verilir.
+- **GitHub Actions:** `claude.yml` yalnız repo sahibi/üzvü/əməkdaşı tərəfindən işə düşür və `ANTHROPIC_API_KEY` secret-i yoxdursa aydın xəta mesajı ilə dayanır.
 
 ## Audit
 
@@ -48,5 +59,8 @@ Təsdiq addımları, alət çağırışları (ad, status, müddət; giriş məzm
 
 ## Bilinən boşluqlar
 
-- `.github/workflows/claude.yml` `@claude` ilə işə düşür və `ANTHROPIC_API_KEY` GitHub Secret-indən istifadə edir. Repo açıq olduğu üçün kimin bu workflow-u işə sala biləcəyi **hələ yoxlanmayıb**. Ayrıca baxılmalıdır.
+- `.github/workflows/claude.yml`: `author_association` yoxlaması əlavə olunub (OWNER/MEMBER/COLLABORATOR). Bu yalnız YAML-dır, GitHub-da real işə salınaraq sınanmayıb.
+- Sosial adapterlər yalnız saxta (mock) API ilə sınanıb. Heç bir real Meta/TikTok/Google/Telegram çağırışı edilməyib. Xəta kodlarının bir hissəsi (Meta 190/10/4/17/32/613, TikTok `access_token_invalid`/`rate_limit_exceeded`, Google `reason` dəyərləri) ümumi biliyə əsaslanır və real cavabla yoxlanmalıdır.
+- Təsdiq/icra yarışı: eyni Worker nüsxəsi daxilində `approveAndStart` və `advance` açar üzrə növbəyə düzülür (gecikməli KV ilə `tests/social-hardening.test.mjs`-də yoxlanıb). KV-də atomik kilid (compare-and-set) olmadığı və KV son-nəticəli olduğu üçün **fərqli Worker nüsxələri/məntəqələri arasında** eyni anda iki təsdiq tam istisna edilmir; addım-əvvəli vəziyyət qeydi (`starting`/`committing`) və 5 dəqiqəlik iş kilidi riski azaldır. Tam zəmanət üçün Durable Object lazımdır (hələ yoxdur).
+- Telegram-da mətnlə təsdiq yalnız `Bəli/hə/yes/təsdiq edirəm/paylaş` sözləri ilə, son 15 dəqiqədə hazırlanmış TƏK qaralama üçün keçərlidir; digər hallarda konkret qeydə bağlı düymə lazımdır. Düymə yalnız qeydin `notify_chat`-ı ilə eyni söhbətdən işləyir.
 - Real Claude/OpenAI/səs sınağı hələ keçirilməyib. Bütün testlər saxta API ilə işləyir.

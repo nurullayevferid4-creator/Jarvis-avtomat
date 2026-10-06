@@ -43,7 +43,7 @@ Siyasət bir yerdə dəyişdirilir: `src/policy.js`.
 | `web.fetch` | low | Açıq HTTPS səhifəni oxuyur (SSRF qorumalı). Nəticə `<external_content>` qutusunda gəlir. Real internetlə sınanmayıb, yalnız saxta fetch ilə test olunub. |
 | `knowledge.search` | low | Bilik bazasında axtarış |
 | `knowledge.add` | low | Bilik bazasına qeyd (təkrar saxlanmır) |
-| `social.publish` | high | **Real paylaşım etmir.** Təsdiq qeydi açır. Təsdiqdən sonra da icra yoxdur ("API integration pending"). |
+| `social.publish` | high | Paylaşım aləti (Instagram, TikTok, YouTube, Telegram). **Özü paylaşmır:** strukturlu təsdiq qeydi (`payload` + hash) açır. Real paylaşımı təsdiqdən sonra `src/social/flow.js` edir. Sahələr: `platform`/`platforms`, `caption`, `title`, `description`, `hashtags`, `media_id`/`media_url`, `media_type`, `thumbnail_media_id`, `privacy` (standart `private`), `made_for_kids`. Bax `SOCIAL.md`. |
 
 ## Yeni alət əlavə etmək
 

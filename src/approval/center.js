@@ -1,13 +1,15 @@
 // Təsdiq mərkəzi: xarici təsiri olan hər iş burada "gözləyir" siyahısına düşür.
 // Fərid APPROVE / REJECT / EDIT edir.
 //
-// DİQQƏT: "approve" heç nəyi icra ETMİR. Bu versiyada Shopify, Instagram və s. inteqrasiya yoxdur,
-// ona görə təsdiqdən sonra da icra Fərid-in özündədir (bax TEAM.md). Qeyd yalnız "təsdiq alındı"
-// deməkdir və audit jurnalında saxlanılır.
+// DİQQƏT: "approve" ÖZÜ heç nəyi icra ETMİR. Adi qeydlərdə təsdiqdən sonra icra Fərid-in özündədir
+// (execution:"manual"). Yalnız strukturlu qeydlər (kind:"social.publish", payload + payload_hash) üçün
+// icranı ayrıca src/social/flow.js həyata keçirir: o, qeydin "approved" olduğunu və hash-in
+// dəyişmədiyini yoxlayır. Təsdiq mərkəzinin özündə şəbəkə çağırışı yoxdur.
 // Qeyd: sistem tək istifadəçi üçündür, eyni anda iki qərarın yarışına qarşı kilid yoxdur.
 
 import { RISKS, APPROVAL_TTL_DAYS } from "../policy.js";
 import { makeId, isValidId } from "../state/store.js";
+import { payloadHash } from "../social/canon.js";
 
 const DAY_MS = 86400000;
 const MAX_CONTENT = 4000;
@@ -23,7 +25,7 @@ export class ApprovalCenter {
     if (this.audit) await this.audit.log(event, data);
   }
 
-  async create({ action, content, risk = "medium", source = "system" }) {
+  async create({ action, content, risk = "medium", source = "system", kind = null, payload = null }) {
     if (!RISKS.includes(risk)) throw new Error("risk düzgün deyil");
     const a = String(action || "").trim().slice(0, 200);
     if (!a) throw new Error("əməliyyat adı boşdur");
@@ -42,6 +44,11 @@ export class ApprovalCenter {
       decided_at: null,
       execution: null,
     };
+    if (kind) {
+      rec.kind = String(kind).slice(0, 40);
+      rec.payload = payload || {};
+      rec.payload_hash = await payloadHash(rec.payload);
+    }
     await this.store.putDoc("approval", id, rec, 30 * 86400);
     await this._log("approval.created", { id, action: a, risk, source: rec.source });
     return rec;
@@ -79,11 +86,12 @@ export class ApprovalCenter {
     if (decision === "approve") {
       rec.status = "approved";
       rec.decided_at = at;
-      rec.execution = "manual"; // icra Fərid-in özündədir, sistem icra etmir
+      rec.execution = rec.kind ? "pending" : "manual"; // "pending": social flow icra edəcək; "manual": icra Fərid-in özündədir
     } else if (decision === "reject") {
       rec.status = "rejected";
       rec.decided_at = at;
     } else if (decision === "edit") {
+      if (rec.kind) return { ok: false, error: "edit_not_supported" }; // strukturlu qeyd: rədd edin və yenisini hazırlayın
       const c = String(content || "").trim();
       if (!c) return { ok: false, error: "content_required" };
       rec.content = c.slice(0, MAX_CONTENT);
@@ -95,5 +103,16 @@ export class ApprovalCenter {
     await this.store.putDoc("approval", id, rec, 30 * 86400);
     await this._log("approval." + decision, { id, action: rec.action, risk: rec.risk, status: rec.status });
     return { ok: true, record: rec };
+  }
+
+  // İcra vəziyyətini yazır (yalnız social flow çağırır). Qeydin statusu/payload-u dəyişmir.
+  async setExecution(id, execution, extra = {}) {
+    const rec = await this.get(id);
+    if (!rec) return null;
+    rec.execution = String(execution).slice(0, 30);
+    if (extra.job_id) rec.job_id = String(extra.job_id);
+    await this.store.putDoc("approval", id, rec, 30 * 86400);
+    await this._log("approval.execution", { id, execution: rec.execution });
+    return rec;
   }
 }

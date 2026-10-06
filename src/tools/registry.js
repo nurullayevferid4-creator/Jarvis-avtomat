@@ -42,6 +42,7 @@ export class ToolRegistry {
       retries: Math.min(2, Math.max(0, def.retries | 0)),
       requiresApproval: def.requiresApproval === true,
       handler: def.handler,
+      approval: def.approval && typeof def.approval.build === "function" ? def.approval : null,
     };
     this.tools.set(tool.name, tool);
     return this;
@@ -90,7 +91,22 @@ export class ToolRegistry {
     if (tool.requiresApproval) {
       const approvals = ctx.approvals || this.approvals;
       if (!approvals) return { ok: false, status: "error", error: "təsdiq mərkəzi qoşulmayıb, alət icra olunmadı" };
-      const rec = await approvals.create({ action: tool.name, content: JSON.stringify(input), risk: tool.risk, source: "tool" });
+      let content = JSON.stringify(input);
+      let kind = null;
+      let payload = null;
+      if (tool.approval) {
+        // Strukturlu təsdiq: payload və hash qeydə yazılır, sonradan dəyişdirilə bilməz.
+        try {
+          const b = tool.approval.build(input, ctx);
+          content = b.content;
+          payload = b.payload;
+          kind = tool.approval.kind || tool.name;
+        } catch (e) {
+          await this._log("tool.invalid_input", { tool: name });
+          return { ok: false, status: "invalid_input", errors: [String((e && e.message) || "sorğu düzgün deyil").slice(0, 200)] };
+        }
+      }
+      const rec = await approvals.create({ action: tool.name, content, risk: tool.risk, source: (ctx.source ? "tool:" + String(ctx.source).slice(0, 40) : "tool"), kind, payload });
       await this._log("tool.pending_approval", { tool: name, approval_id: rec.id });
       return { ok: false, status: "pending_approval", approval_id: rec.id };
     }
