@@ -143,7 +143,12 @@ export default {
         const orchestrator = new ClaudeOrchestrator({ env, registry: createRegistry(env), limits, store: d.store, approvals: features.approvals ? d.approvals : null, tools: features.approvals ? d.tools : null });
         return await orchestrator.handle(text, { origin });
       };
-      const handler = createTelegramHandler({ env, hub: d.hub, flow: d.flow, approvals: d.approvals, store: d.store, audit: d.audit, runChat, runner: d.runner, library: d.library });
+      // Telegram səsli mesajı: veb səs əmri ilə eyni STT (OpenAI whisper-1, dil "az")
+      const transcribe = async (blob) => {
+        if (!env.OPENAI_API_KEY) throw new AppError("AUTH_ERROR", "OPENAI_API_KEY təyin edilməyib", { source: "voice" });
+        return await stt(env, blob, limits.callTimeoutMs);
+      };
+      const handler = createTelegramHandler({ env, hub: d.hub, flow: d.flow, approvals: d.approvals, store: d.store, audit: d.audit, runChat, runner: d.runner, library: d.library, transcribe, voiceEnabled: features.voice });
       const work = handler.handleUpdate(update).catch(() => null);
       if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(work);
       else await work;

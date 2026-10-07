@@ -35,7 +35,8 @@ Node olan maşında: `ANTHROPIC_API_KEY` və `OPENAI_API_KEY` mühit dəyişəni
 3. Düyməni **ikinci dəfə** bas: `ARTIQ QURULUB`, heç nə dəyişməməlidir (idempotentlik yoxlaması).
 4. «Telegram webhook-u yoxla» → `Webhook düzgündür`.
 5. Telegram-da botuna (öz hesabından, ID-n `TELEGRAM_ALLOWED_CHAT_IDS`-dədir) `/help` yaz: cavab gəlməlidir. Başqa hesabdan yazsan cavab **gəlməməlidir** (bu normaldır).
-6. Real paylaşım etmə: test məzmunu yalnız qaralama + təsdiq düymələri yaratmalıdır.
+6. Botuna **səsli mesaj** göndər («Jarvis, platformaların vəziyyətini göstər»): əvvəl «🎤 Eşitdim: …», sonra cavab gəlməlidir. Menyu (/help) gəlməməlidir. Səslə «Bəli» demək heç nəyi paylaşmır.
+7. Real paylaşım etmə: test məzmunu yalnız qaralama + təsdiq düymələri yaratmalıdır.
 
 Node olan maşında (isteğe bağlı, bot tokeni mühit dəyişənidir, heç yerə yazılmır): `RUN_LIVE_TESTS=1 TELEGRAM_BOT_TOKEN=... npm run test:live` yalnız oxuma yoxlaması edir. Botun webhook-unu **dəyişən** real test ayrıca `TELEGRAM_LIVE_SETUP=1`, `TELEGRAM_WEBHOOK_SECRET`, `PUBLIC_BASE_URL` tələb edir.
 
