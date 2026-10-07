@@ -10,16 +10,26 @@ compatibility_date = "2026-09-01"
 # Secrets (ANTHROPIC_API_KEY, OPENAI_API_KEY, PASSCODE and all social secrets listed in .env.example) are NOT stored here.
 # Add them in the Cloudflare dashboard under the Worker's Settings > Variables and Secrets.
 
-# Optional memory across restarts: create a KV namespace, paste its id, then remove the leading #.
-# [[kv_namespaces]]
-# binding = "JARVIS_KV"
-# id = "PASTE_KV_NAMESPACE_ID"
+# Yaddaş (təsdiqlər, tokenlər, audit). Namespace ID gizli məlumat deyil; namespace Fərid-in hesabında "jarvis-kv" adı ilə yaradılıb.
+[[kv_namespaces]]
+binding = "JARVIS_KV"
+id = "b2724230925a48289e16d82ae5403009"
 
-# Media anbarı (Instagram/TikTok/YouTube üçün video/şəkil). R2 bucket yaradıb adını yaz, sonra # işarələrini sil.
+# Media anbarı (Instagram/TikTok/YouTube üçün video/şəkil). Bucket "jarvis-r2" Fərid-in hesabında mövcuddur.
 # Bucket İCTİMAİ OLMAMALIDIR: media yalnız imzalı müvəqqəti ünvanla (/media/...) verilir.
-# [[r2_buckets]]
-# binding = "JARVIS_MEDIA"
-# bucket_name = "PASTE_BUCKET_NAME"
+[[r2_buckets]]
+binding = "JARVIS_MEDIA"
+bucket_name = "jarvis-r2"
+
+# Koordinator (Durable Object): təsdiq/icra kilidi və "bir dəfə" markeri. KV-də atomik yazma olmadığı üçün lazımdır.
+# Resurs yaratmaq tələb etmir, ilk deploy zamanı özü yaranır.
+[[durable_objects.bindings]]
+name = "COORD"
+class_name = "JarvisCoordinator"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["JarvisCoordinator"]
 
 # Gözləyən paylaşım işlərini hər 5 dəqiqədən bir irəlilədir və Instagram tokenini vaxtında yeniləyir.
 # Yalnız təsdiq verilmiş işlərə toxunur; təsdiq yoxdursa heç nə etmir.
