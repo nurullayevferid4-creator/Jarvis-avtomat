@@ -162,12 +162,14 @@ test("mövzu və ya media yoxdursa soruşur, qeyd yaratmır, mətn uydurmur", as
   const w = await ready();
   const calls = installSocialFetch(tgServer());
   await hook(w.env, msg({ caption: "Jarvis, bu videonu Instagram, TikTok və YouTube-da paylaş", video: { file_id: "F1", file_size: 20 } }));
-  assert.match(sent(calls)[0].text, /Mövzunu qısa yaz/);
-  await hook(w.env, msg({ text: POST_TEXT }));
-  assert.match(sent(calls)[1].text, /video\/şəkil lazımdır/);
-  await hook(w.env, msg({ caption: "Jarvis, bunu paylaş. Mövzu: x yeni ətir", video: { file_id: "F1", file_size: 20 } }));
-  assert.match(sent(calls)[2].text, /Hansı platformalarda/);
+  assert.match(sent(calls)[0].text, /Mövzunu bir cümlə ilə de/);
+  const w2 = await ready();
+  await hook(w2.env, msg({ text: POST_TEXT }));
+  assert.match(sent(calls)[1].text, /şəkil və ya video lazımdır/);
+  await hook(w2.env, msg({ caption: "Jarvis, bunu paylaş. Mövzu: x yeni ətir", video: { file_id: "F1", file_size: 20 } }));
+  assert.match(sent(calls)[2].text, /Hansı platformada/);
   assert.equal((await w.approvals.list({})).length, 0);
+  assert.equal((await w2.approvals.list({})).length, 0);
 });
 
 test("20 MB-dan böyük fayl və R2 olmadan media: aydın xəta, qeyd yoxdur", async () => {

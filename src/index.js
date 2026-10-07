@@ -9,7 +9,10 @@ import { renderPage, pageCsp } from "./ui/page.js";
 import { json } from "./util.js";
 import { getLimits, getFeatures, DEFAULTS, VERSION } from "./config.js";
 import { createRegistry } from "./adapters/registry.js";
-import { stt, tts, diagnoseOpenAI } from "./adapters/openaiAudio.js";
+import { stt, tts, diagnoseOpenAI, sttDetailed, ttsBytes } from "./adapters/openaiAudio.js";
+import { ConversationMemory } from "./conversation/memory.js";
+import { CallBudget } from "./guards/budget.js";
+import { SUMMARY_SYSTEM } from "./prompts.js";
 import { inspectOpenAIKey } from "./security/envvalue.js";
 import { ClaudeOrchestrator } from "./orchestrator/ClaudeOrchestrator.js";
 import { buildContext } from "./app/context.js";
@@ -21,7 +24,7 @@ import { UPLOAD_TYPES } from "./media/library.js";
 import { SocialError } from "./social/errors.js";
 import { createTelegramHandler, verifyWebhook } from "./telegram/handler.js";
 import { setupWebhook, webhookStatus, setupErrorBody } from "./telegram/setup.js";
-import { handleShopifyPublicRoute, handleShopifyApiRoute } from "./shopify/index.js";
+import { handleShopifyPublicRoute, handleShopifyApiRoute, shopifyStatus } from "./shopify/index.js";
 import { OWNER_PERMISSIONS } from "./policy.js";
 import { checkAudioFile, parseVoiceCommand, speakable } from "./voice/command.js";
 import { AppError, publicError, toAppError } from "./errors.js";
@@ -141,17 +144,27 @@ export default {
       const d = buildSocial(env);
       const limits = getLimits(env);
       const features = getFeatures(env);
-      const runChat = async (text, origin) => {
+      const runChat = async (text, origin, context = null) => {
         if (!env.ANTHROPIC_API_KEY || !env.OPENAI_API_KEY) throw new AppError("AUTH_ERROR", "ANTHROPIC_API_KEY və ya OPENAI_API_KEY təyin edilməyib", { source: "chat" });
         const orchestrator = new ClaudeOrchestrator({ env, registry: createRegistry(env), limits, store: d.store, approvals: features.approvals ? d.approvals : null, tools: features.approvals ? d.tools : null });
-        return await orchestrator.handle(text, { origin });
+        return await orchestrator.handle(text, { origin, context });
       };
-      // Telegram səsli mesajı: veb səs əmri ilə eyni STT (OpenAI whisper-1, dil "az")
-      const transcribe = async (blob) => {
+      // Telegram səsli mesajı: veb səs əmri ilə eyni STT (OpenAI, dil "az"), terminlər/son söhbət ipucu ilə
+      const transcribe = async (blob, opts = {}) => {
         if (!env.OPENAI_API_KEY) throw new AppError("AUTH_ERROR", "OPENAI_API_KEY təyin edilməyib", { source: "voice" });
-        return await stt(env, blob, limits.callTimeoutMs);
+        return await sttDetailed(env, blob, Math.max(limits.callTimeoutMs, 30000), opts);
       };
-      const handler = createTelegramHandler({ env, hub: d.hub, flow: d.flow, approvals: d.approvals, store: d.store, audit: d.audit, runChat, runner: d.runner, library: d.library, transcribe, voiceEnabled: features.voice });
+      // Səsli cavab: OpenAI TTS → Ogg/Opus → Telegram sendVoice
+      const speak = env.OPENAI_API_KEY && features.voice ? async (text) => await ttsBytes(env, text, limits.callTimeoutMs, { format: "opus" }) : null;
+      // Söhbət yaddaşı: köhnə mesajlar Claude ilə qısa xülasəyə çevrilir (alınmasa sadə sıxışdırma)
+      const summarize = env.ANTHROPIC_API_KEY
+        ? async (prev, turnsText) => {
+            const claude = createRegistry(env).get("claude");
+            return await claude.complete(SUMMARY_SYSTEM, [{ role: "user", content: (prev ? "Previous summary:\n" + prev + "\n\n" : "") + "New messages:\n" + turnsText }], 500, { budget: new CallBudget(1), timeoutMs: limits.callTimeoutMs });
+          }
+        : null;
+      const memory = new ConversationMemory(d.store, { summarize });
+      const handler = createTelegramHandler({ env, hub: d.hub, flow: d.flow, approvals: d.approvals, store: d.store, audit: d.audit, runChat, runner: d.runner, library: d.library, transcribe, voiceEnabled: features.voice, memory, speak });
       const work = handler.handleUpdate(update).catch(() => null);
       if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(work);
       else await work;
@@ -216,6 +229,42 @@ export default {
         providers: c.providers.status(),
         shopify: { configured: !!(env.SHOPIFY_API_KEY && env.SHOPIFY_API_SECRET) },
       }));
+    }
+
+    // Command Center: bütün hissələrin REAL vəziyyəti bir baxışda (xarici şəbəkə çağırışı yoxdur, sirr göstərilmir).
+    // "Canlı" yoxlamalar ayrıca düymələrlədir: Telegram webhook, OpenAI səs tanıma, platformaların «Canlı yoxla».
+    if (req.method === "GET" && url.pathname === "/api/overview") {
+      const c = buildContext(env);
+      const safe = async (fn, fallback) => { try { return await fn(); } catch (e) { return fallback === undefined ? { error: publicError(e, "overview").message } : fallback; } };
+      const providers = c.providers.status();
+      const social = await safe(async () => await c.hub.statusAll({ verify: false }), {});
+      const shopify = await safe(async () => await shopifyStatus({ env, vault: c.shopify.vault }));
+      const pending = await safe(async () => await c.approvals.list({ status: "pending", limit: 50 }), []);
+      const jobs = await safe(async () => await c.flow.listJobs(10), []);
+      const mjobs = await safe(async () => await c.mediaJobs.list(10), []);
+      const leadRows = await safe(async () => await c.leads.provider.list(), []);
+      const media = await safe(async () => await c.library.list(10), []);
+      const recentAudit = await safe(async () => await c.audit.list(60), []);
+      const errors = recentAudit.filter((e) => /fail|error|rejected/i.test(e.event)).slice(0, 10).map((e) => ({ ts: e.ts, event: e.event }));
+      const count = (arr, key) => arr.reduce((m, x) => { const k = String((x && x[key]) || "unknown"); m[k] = (m[k] || 0) + 1; return m; }, {});
+      const key = inspectOpenAIKey(env);
+      return json({
+        generated_at: new Date().toISOString(),
+        telegram: { bot_token: !!env.TELEGRAM_BOT_TOKEN, webhook_secret: !!env.TELEGRAM_WEBHOOK_SECRET, allowed_chats: String(env.TELEGRAM_ALLOWED_CHAT_IDS || "").split(",").filter((x) => /^\s*"?\d/.test(x)).length, voice: features.voice },
+        ai: {
+          claude: providers.find((p) => p.id === "claude") || null,
+          openai: { ...(providers.find((p) => p.id === "openai") || {}), key_shape: key.shape, key_usable: key.usable === true, stt_model: env.STT_MODEL || DEFAULTS.sttModel, tts_model: env.TTS_MODEL || DEFAULTS.ttsModel },
+          kimi: providers.find((p) => p.id === "kimi") || null,
+        },
+        social: Object.fromEntries(Object.entries(social || {}).map(([p, s]) => [p, { state: s.state, verified: !!s.verified, reason: s.reason || null }])),
+        shopify: shopify && !shopify.error ? { configured: shopify.configured, connected: shopify.connected, shop: shopify.shop || null } : shopify,
+        approvals: { pending: pending.length, by_kind: count(pending, "kind") },
+        jobs: { social: count(jobs, "status"), media: count(mjobs, "status") },
+        leads: { total: leadRows.length, by_status: count(leadRows, "status") },
+        media: { recent: media.length, store: !!env.JARVIS_MEDIA },
+        errors,
+        health: { storage: env.JARVIS_KV ? "kv" : "memory", coordinator: c.coord.kind === "durable_object" ? "durable_object" : "memory", version: VERSION },
+      });
     }
 
     if (url.pathname === "/api/audit" && req.method === "GET") {

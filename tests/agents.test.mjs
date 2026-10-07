@@ -11,6 +11,8 @@ import { AppError } from "../src/errors.js";
 import { registerLeadTools, LEAD_PERMISSIONS } from "../src/leads/index.js";
 import { registerMarketingTools, MARKETING_PERMISSIONS } from "../src/marketing/index.js";
 import { createAgentRegistry, registerAgentTools, AGENT_PERMISSIONS, createEventBus, buildManagerReport, createApprovalProvider, createJobProvider, AGENT_DEFINITIONS, HUMAN_APPROVAL_ONLY } from "../src/agents/index.js";
+import { SHOPIFY_READ_TOOLS, SHOPIFY_WRITE_TOOLS } from "../src/shopify/tools.js";
+import { registerOpsTools, OPS_PERMISSIONS } from "../src/agents/ops.js";
 import { NotConfiguredSupplier, NotConfiguredPayment, NotConfiguredFulfillment, createNotConfiguredProviders, missingMethods, PROVIDER_CONTRACTS } from "../src/commerce/interfaces.js";
 
 const realFetch = globalThis.fetch;
@@ -27,7 +29,7 @@ afterEach(() => {
   globalThis.fetch = realFetch;
 });
 
-const PERMS = [...DEFAULT_PERMISSIONS, ...LEAD_PERMISSIONS, ...MARKETING_PERMISSIONS, ...AGENT_PERMISSIONS];
+const PERMS = [...DEFAULT_PERMISSIONS, ...LEAD_PERMISSIONS, ...MARKETING_PERMISSIONS, ...AGENT_PERMISSIONS, ...OPS_PERMISSIONS];
 const DAY = 86400000;
 
 function setup({ providers } = {}) {
@@ -41,6 +43,7 @@ function setup({ providers } = {}) {
   const events = createEventBus({ store, now });
   const leads = registerLeadTools(tools, { store, coord, now, events });
   const marketing = registerMarketingTools(tools, { now });
+  registerOpsTools(tools, { client: null, now });
   const agents = createAgentRegistry({ tools, store, events, now, providers: providers === undefined ? { leads: leads.provider, approvals: createApprovalProvider(approvals), jobs: createJobProvider(store) } : providers });
   const agentTools = registerAgentTools(tools, agents);
   const ctx = { permissions: PERMS, approvals };
@@ -49,25 +52,26 @@ function setup({ providers } = {}) {
 
 const cand = (n) => ({ business_name: "Kafe " + n, category: "kafe", location: "Bakı", website: "https://kafe" + n + ".az", instagram: "kafe" + n, need: "QR menyu", confidence: 0.8, entity_type: "business", source: { url: "https://example.com/d/" + n, source_type: "public_directory" } });
 
-test("reyestr: 8 rol, yalnız Sales/Marketing/Manager 'implemented', qalanları 'interface_only' və imkansızdır", () => {
+test("reyestr: 8 rol, hamısı 'implemented' və real alətlərə bağlıdır (boş capabilities yoxdur)", () => {
   const { agents } = setup();
   const list = agents.list();
   assert.deepEqual(list.map((a) => a.role), ["Sales", "Marketing", "Manager", "Order", "Logistics", "Seller", "CustomerSupport", "FraudQuality"]);
-  assert.deepEqual(list.filter((a) => a.status === "implemented").map((a) => a.id), ["sales", "marketing", "manager"]);
-  for (const a of list.filter((x) => x.status === "interface_only")) {
-    assert.deepEqual(a.capabilities, [], a.id + " imkansızdır");
-    assert.ok(a.planned_capabilities.length > 0);
-    assert.ok(a.description && a.inputs && a.outputs && Array.isArray(a.requiresApprovalFor));
+  assert.deepEqual(list.filter((a) => a.status === "implemented").map((a) => a.id), ["sales", "marketing", "manager", "order", "logistics", "seller", "customer_support", "fraud_quality"]);
+  for (const a of list) {
+    assert.ok(a.capabilities.length > 0, a.id + " imkanları var");
+    assert.ok(a.id && a.role && a.description && a.status && Array.isArray(a.requiresApprovalFor) && a.inputs && a.outputs, a.id);
+    assert.ok(Array.isArray(a.humanApprovalOnly) && a.humanApprovalOnly.length > 0, a.id + " kritik əməliyyatlar insan təsdiqindədir");
   }
-  for (const a of list) assert.ok(a.id && a.role && a.description && a.status && Array.isArray(a.capabilities) && Array.isArray(a.requiresApprovalFor) && a.inputs && a.outputs, a.id);
   assert.ok(list.find((a) => a.id === "sales").requiresApprovalFor.includes("lead.outreach.prepare"));
+  assert.ok(list.find((a) => a.id === "seller").requiresApprovalFor.includes("shopify.product.create"));
 });
 
-test("interface_only agent icra olunmur: VALIDATION_ERROR 'Bu agent hələ qoşulmayıb'; naməlum agent NOT_FOUND", async () => {
+test("agent öz imkanından kənar aləti işlədə bilməz; naməlum agent NOT_FOUND; kritik əməliyyat bloklanır", async () => {
   const { agents, ctx } = setup();
   for (const id of ["order", "logistics", "seller", "customer_support", "fraud_quality"]) {
-    await assert.rejects(() => agents.run(id, { tool: "lead.list", input: {} }, ctx), (e) => e instanceof AppError && e.code === "VALIDATION_ERROR" && e.message === "Bu agent hələ qoşulmayıb", id);
-    await assert.rejects(() => agents.run(id, { task: "report" }, ctx), (e) => e.message === "Bu agent hələ qoşulmayıb");
+    await assert.rejects(() => agents.run(id, { tool: "lead.list", input: {} }, ctx), (e) => e instanceof AppError && e.code === "PERMISSION_ERROR", id);
+    await assert.rejects(() => agents.run(id, { task: "report" }, ctx), (e) => e.code === "VALIDATION_ERROR");
+    await assert.rejects(() => agents.run(id, { tool: "message.send", input: {} }, ctx), (e) => e.code === "SECURITY_ERROR");
   }
   await assert.rejects(() => agents.run("nope", {}, ctx), (e) => e.code === "NOT_FOUND");
   assert.equal(netCalls, 0);
@@ -76,7 +80,9 @@ test("interface_only agent icra olunmur: VALIDATION_ERROR 'Bu agent hələ qoşu
 test("capabilities real alətlərlə uyğundur (saxta alət adı yoxdur)", () => {
   const { agents, tools, leads, marketing, agentTools } = setup();
   const registered = new Set(tools.list().map((t) => t.name));
-  for (const a of agents.list().filter((x) => x.status === "implemented")) for (const c of a.capabilities) assert.ok(registered.has(c), a.id + " -> " + c);
+  // Shopify alətləri ayrıca (Shopify kliyenti ilə) qeydiyyatdan keçir; adlar onun siyahısındadır
+  const shopifyNames = new Set([...SHOPIFY_READ_TOOLS, ...SHOPIFY_WRITE_TOOLS]);
+  for (const a of agents.list()) for (const c of a.capabilities) assert.ok(registered.has(c) || shopifyNames.has(c), a.id + " -> " + c);
   assert.deepEqual([...agents.get("sales").capabilities].sort(), [...leads.toolNames].sort());
   assert.deepEqual([...agents.get("marketing").capabilities].sort(), [...marketing.toolNames].sort());
   assert.deepEqual([...agents.get("manager").capabilities].sort(), [...agentTools].sort());

@@ -19,3 +19,4 @@ export { createEventBus, KNOWN_EVENT_TYPES } from "./events.js";
 export { buildManagerReport, MANAGER_RULES } from "./manager.js";
 export { AGENT_DEFINITIONS, HUMAN_APPROVAL_ONLY } from "./definitions.js";
 export { createApprovalProvider, createJobProvider, createShopifyProvider } from "./providers.js";
+export { registerOpsTools, OPS_PERMISSIONS, ORDER_TOOLS, LOGISTICS_TOOLS, SELLER_TOOLS, SUPPORT_TOOLS, FRAUD_TOOLS } from "./ops.js";

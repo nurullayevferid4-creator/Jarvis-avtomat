@@ -31,7 +31,7 @@ test("açar təmizlənir: ətraf boşluq/sətir sonu/dırnaq və 'Bearer ' prefi
     assert.equal(await stt({ OPENAI_API_KEY: raw }, new Blob([OGG], { type: "audio/ogg" }), 5000), "salam");
     assert.equal(calls[0].headers.authorization, "Bearer " + KEY);
     assert.equal(calls[0].url, "https://api.openai.com/v1/audio/transcriptions");
-    assert.equal(calls[0].body.get("model"), "whisper-1");
+    assert.equal(calls[0].body.get("model"), "gpt-4o-transcribe");
     assert.equal(calls[0].body.get("language"), "az");
   }
   assert.deepEqual(inspectOpenAIKey({ OPENAI_API_KEY: KEY }), { set: true, shape: "project", cleaned: false, usable: true, sendable: true, problems: [], has_inner_space: false, last4: "6789" });
@@ -101,7 +101,7 @@ test("diaqnostika: işləyir → verdict ok; /v1/models və /v1/audio/transcript
   assert.equal(b.key.last4, "6789");
   assert.equal(b.auth.http, 200);
   assert.equal(b.auth.project, "proj_TEST1");
-  assert.equal(b.stt.model, "whisper-1");
+  assert.equal(b.stt.model, "gpt-4o-transcribe");
   assert.equal(b.stt.language, "az");
   assert.equal(calls.length, 2);
   for (const c of calls) assert.equal(c.headers.authorization, "Bearer " + KEY);

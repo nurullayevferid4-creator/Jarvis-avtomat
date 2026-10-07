@@ -9,9 +9,15 @@ Kod: `src/agents/`, `src/commerce/interfaces.js`. Qoşulma: `createAgentRegistry
 | Sales (`sales`) | **implemented** | `lead.*` alətləri (9) | `lead.outreach.prepare` |
 | Marketing (`marketing`) | **implemented** | `marketing.*` alətləri (7) | yoxdur (dərc ayrıca təsdiqli axındadır) |
 | Manager (`manager`) | **implemented** | `manager.report`, `agents.list` | yoxdur |
-| Order, Logistics, Seller, CustomerSupport, FraudQuality | **interface_only** | yoxdur | planlaşdırılan əməliyyatlar `requiresApprovalFor`-da sənədləşib |
+| Order (`order`) | **implemented** | `order.summary`, `order.status`, `shopify.orders.list`, `shopify.order.get` | yoxdur (oxuma); sifariş vermək/ləğv yalnız insan |
+| Logistics (`logistics`) | **implemented** | `logistics.tracking`, `logistics.delayed` (Shopify fulfillment + tracking) | yoxdur (oxuma) |
+| Seller (`seller`) | **implemented** | `seller.catalog_health`, `shopify.products.search/product.get/inventory.get/product.prepare/product.create` | `shopify.product.create` (həmişə DRAFT) |
+| CustomerSupport (`customer_support`) | **implemented** | `support.classify`, `support.draft_reply` (Claude və ya şablon, Shopify statusu ilə) | yoxdur — mesaj GÖNDƏRİLMİR |
+| FraudQuality (`fraud_quality`) | **implemented** | `fraud.order_risk` (Shopify risk + qaydalar, 0-100), `quality.content_review` | yoxdur — yalnız tövsiyə |
 
-`interface_only` agent işə düşmür: `agents.run(...)` `AppError("VALIDATION_ERROR", "Bu agent hələ qoşulmayıb")` atır. Bu agentlərin kodu, saxta alətləri və saxta nəticələri yoxdur; `planned_capabilities` yalnız plan sənədidir.
+Yeni agent alətləri `src/agents/ops.js`-dədir: hamısı risk `low`, yan təsirsiz (yazmır, göndərmir, pul xərcləmir). Shopify sorğuları Shopify Admin GraphQL sxeminə qarşı yoxlanıb. Shopify qoşulmayıbsa alət açıq xəta verir, saxta nəticə yoxdur. Alıcı haqqında yalnız ad, şəhər və ölkə kodu oxunur (telefon, e-poçt, küçə ünvanı yox). Göndəriş izləmə məlumatı Shopify-da olduğu kimidir (`read_merchant_managed_fulfillment_orders` və ya oxşar fulfillment oxuma scope-u lazım ola bilər; yoxdursa Shopify xəta qaytarır və alət onu göstərir).
+
+Kimi (`KIMI_API_KEY` olanda) orkestratorda `kimi` köməkçisidir: ikinci rəy və müqayisə; lider və son yoxlayıcı Claude-dur.
 
 `implemented` agent yalnız öz `capabilities` siyahısındakı alətləri çağıra bilər və çağırış `ToolRegistry`-dən keçir: giriş, icazə və təsdiq qapıları orada işləyir. Agent təsdiq qapısını keçə bilmir (`lead.outreach.prepare` agent vasitəsilə də `pending_approval` qaytarır).
 

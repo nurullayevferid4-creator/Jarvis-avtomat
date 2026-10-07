@@ -19,7 +19,9 @@ import { MEDIA_TYPES } from "../social/media.js";
 import { formatResult } from "../social/flow.js";
 import { publicError } from "../errors.js";
 import { cleanEnvValue } from "../security/envvalue.js";
-import { checkAudioFile, parseVoiceCommand, MAX_AUDIO_BYTES } from "../voice/command.js";
+import { checkAudioFile, parseVoiceCommand, MAX_AUDIO_BYTES, speakable } from "../voice/command.js";
+import { normalizeTranscript, sttPrompt, looksLikePromptEcho } from "../voice/normalize.js";
+import { agentForTools, artifactFrom, voicePreference, refersBack, WAIT_MEDIA_MS } from "../conversation/router.js";
 
 const ID_RE = /^\d{13}-[0-9a-f]{6}$/;
 const PLATFORM_WORDS = {
@@ -61,7 +63,7 @@ export function topicOf(text) {
   let t = String(text || "");
   for (const re of Object.values(PLATFORM_WORDS)) t = t.replace(new RegExp(re.source, "gi"), " ");
   t = t.replace(/jarvis[,:]?/gi, " ").replace(new RegExp(POST_WORDS.source, "gi"), " ");
-  t = t.replace(/(^|\s)(bu|bunu|videonu|video|şəkli|şəkil|və|da|də|kanalına|public|unlisted|mövzu)(?=[\s:,.]|$)/gi, " ");
+  t = t.replace(/(^|\s)(bu|bunu|onu|o|həmin|videonu|video|şəkli|şəkil|və|da|də|kanalına|public|unlisted|mövzu|üçün|də)(?=[\s:,.]|$)/gi, " ");
   t = t.replace(/(^|\s)[-–]\w{0,3}(?=\s|$)/g, " ").replace(/[,;:.!?]+/g, " ").replace(/\s+/g, " ").trim();
   return t.replace(/[^\p{L}\p{N}]/gu, "").length >= 3 ? t : "";
 }
@@ -104,7 +106,10 @@ const HELP = [
 // runner (istəyə bağlı): strukturlu (sosial olmayan) təsdiq qeydlərini icra edir (Shopify yazma və s.).
 // transcribe (istəyə bağlı): (Blob) => mətn. Səsli mesaj mətnə çevrilir və YAZILI mesajla eyni yoldan keçir
 // (eyni icazə siyahısı, eyni təsdiq qaydası; səs heç nəyi birbaşa icra etmir).
-export function createTelegramHandler({ env, hub, flow, approvals, store, audit = null, runChat = null, runner = null, library = null, transcribe = null, voiceEnabled = true }) {
+// memory (istəyə bağlı): ConversationMemory — çat konteksti (tarix, iş yaddaşı, seçimlər).
+// speak (istəyə bağlı): async (text) => ArrayBuffer (Ogg/Opus) — səsli girişə səsli cavab.
+// runChat(text, origin, context): Claude lideri (kontekst bloku və çat tarixi ilə).
+export function createTelegramHandler({ env, hub, flow, approvals, store, audit = null, runChat = null, runner = null, library = null, transcribe = null, voiceEnabled = true, memory = null, speak = null }) {
   const tg = () => hub.adapter("telegram");
 
   async function say(chatId, text, extra) {
@@ -188,40 +193,86 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
     return await hub.media.put(bytes, ct);
   }
 
-  async function makeDraft(msg, text, chatId) {
+  // Paylaşım qaralaması. Mövzu/məzmun və media mesajda yoxdursa söhbət yaddaşından götürülür
+  // («QR Menu üçün reklam hazırla» → «Instagram-da paylaş»). Təsdiq yenə yalnız düymə ilə.
+  async function makeDraft(msg, text, chatId, conv = null, { continuation = false } = {}) {
+    const origin = actorOf(chatId);
+    const w = (conv && conv.work) || {};
     const intent = parseIntent(text);
-    if (!intent.platforms.length) return say(chatId, "Hansı platformalarda paylaşım? (Instagram, TikTok, YouTube, Telegram)");
-    const topic = topicOf(text);
-    if (!topic) return say(chatId, "Mövzunu qısa yaz (məsələn: «Mövzu: yeni ətir kolleksiyası») və ya videonun altına yazıb göndər. Mətni uydurmuram.");
+    let platforms = intent.platforms;
+    if (!platforms.length && refersBack(text) && w.entities && Array.isArray(w.entities.platforms)) platforms = w.entities.platforms.filter((p) => PLATFORM_INFO[p]);
+    if (!platforms.length) return say(chatId, "Hansı platformada paylaşım? (Instagram, TikTok, YouTube, Telegram)");
 
-    const mediaMsg = mediaFromMessage(msg) || mediaFromMessage(msg.reply_to_message);
+    const artifact = Array.isArray(w.artifacts) && w.artifacts.length ? w.artifacts[0] : null;
+    let topic = topicOf(text);
+    let brief = topic;
+    let fromMemory = false;
+    const explicitTopic = /mövzu\s*:/i.test(text) || Boolean(mediaFromMessage(msg));
+    if (artifact && (!topic || (refersBack(text) && !explicitTopic))) {
+      topic = "";
+      // Claude bu məzmunu platformaya uyğunlaşdırır; Claude cavab verməsə qaralamada məzmunun ÖZÜ qalır (daxili təlimat yox)
+      brief = artifact.text;
+      fromMemory = true;
+    } else if (!topic && w.entities && w.entities.topic) {
+      brief = w.entities.topic;
+      fromMemory = true;
+    }
+
     let media = null;
+    let rememberedMedia = false;
+    const mediaMsg = mediaFromMessage(msg) || mediaFromMessage(msg.reply_to_message);
     if (mediaMsg) {
       try {
         const saved = await storeTelegramMedia(mediaMsg);
         media = { id: saved.id, type: saved.type };
+        if (memory) await memory.rememberMedia(origin, media);
       } catch (e) {
         return say(chatId, "Mediaya baxa bilmədim: " + publicError(e, "media").message);
       }
+    } else if (w.media && w.media.id && Date.parse(w.media.ts) > Date.now() - WAIT_MEDIA_MS && (continuation || fromMemory || refersBack(text))) {
+      // Yaddaşdakı media yalnız istinad olanda («onu paylaş») və ya media gözləyən niyyətin davamında götürülür
+      media = { id: w.media.id, type: w.media.type };
+      rememberedMedia = true;
     }
-    const needsMedia = intent.platforms.filter((p) => p !== "telegram");
-    if (needsMedia.length && !media) return say(chatId, needsMedia.map((p) => PLATFORM_INFO[p].label).join(", ") + " üçün video/şəkil lazımdır. Faylı göndər və ya ona cavab yaz.");
 
-    const copy = await draftCopy({ env, instruction: topic, platforms: intent.platforms });
+    if (!brief) {
+      if (memory) await memory.record(origin, { work: { intent: "social_post_waiting_topic", task: "Paylaşım: " + platforms.join("/") } });
+      return say(chatId, "Nəyi paylaşaq? Mövzunu bir cümlə ilə de (məsələn: «QR Menu üçün yeni reklam»).");
+    }
+    const needsMedia = platforms.filter((p) => p !== "telegram");
+    if (needsMedia.length && !media) {
+      if (memory) await memory.record(origin, { work: { intent: "social_post_waiting_media", task: "Paylaşım: " + platforms.join("/") + (topic ? " – " + topic : ""), topic: topic || undefined } });
+      await memory_setPending(origin, { platforms, topic, privacy: intent.privacy });
+      return say(chatId, needsMedia.map((p) => PLATFORM_INFO[p].label).join(", ") + " üçün şəkil və ya video lazımdır. Faylı bura göndər, " + (fromMemory ? "əvvəlki məzmunla" : "bu mövzu ilə") + " qaralamanı hazırlayım.");
+    }
+
+    const copy = await draftCopy({ env, instruction: brief, platforms });
     let rec;
     try {
       rec = await flow.createDraft(
-        { platforms: intent.platforms, caption: copy.caption, title: copy.title, description: copy.description, hashtags: copy.hashtags, media_id: media ? media.id : undefined, media_type: media ? media.type : undefined, privacy: intent.privacy },
-        { source: "telegram:" + chatId, notifyChat: String(chatId), origin: actorOf(chatId) },
+        { platforms, caption: copy.caption, title: copy.title, description: copy.description, hashtags: copy.hashtags, media_id: media ? media.id : undefined, media_type: media ? media.type : undefined, privacy: intent.privacy },
+        { source: "telegram:" + chatId, notifyChat: String(chatId), origin },
       );
     } catch (e) {
       return say(chatId, "Qaralama hazırlanmadı: " + toSocialError(e).message);
     }
-    const warn = intent.platforms.includes("tiktok") ? "\nQeyd: TikTok tətbiqi audit olunmayıbsa yalnız «şəxsi» paylaşım mümkündür." : "";
-    await say(chatId, "Hazırladım" + (copy.source === "fallback" ? " (Claude cavab vermədi, mətn sənin yazdığın kimidir)" : "") + ":\n\n" + rec.content + warn + "\n\nPaylaşmağa icazə verirsən?", {
+    const warn = platforms.includes("tiktok") ? "\nQeyd: TikTok tətbiqi audit olunmayıbsa yalnız «şəxsi» paylaşım mümkündür." : "";
+    await say(chatId, "Hazırladım" + (fromMemory ? " (əvvəlki məzmun əsasında)" : "") + (rememberedMedia ? " (son göndərdiyin " + (media.type === "video" ? "video" : "şəkil") + " ilə)" : "") + (copy.source === "fallback" ? " (Claude cavab vermədi, mətn sənin yazdığın kimidir)" : "") + ":\n\n" + rec.content + warn + "\n\nPaylaşmağa icazə verirsən?", {
       reply_markup: { inline_keyboard: [[{ text: "✅ Bəli, paylaş", callback_data: "ap:" + rec.id + ":y" }, { text: "❌ Xeyr", callback_data: "ap:" + rec.id + ":n" }]] },
     });
-    await log("telegram.draft", { approval_id: rec.id, platforms: intent.platforms });
+    if (memory) {
+      await memory.record(origin, { user: text, assistant: "Paylaşım qaralaması hazırladım (" + platforms.join(", ") + "), təsdiq düyməsini gözləyirəm.", work: { intent: "social_post", agent: "marketing", tools: ["social.publish"], approval_id: rec.id, task: "Paylaşım qaralaması: " + platforms.join("/"), topic: topic || undefined } });
+      await memory_setPending(origin, null);
+    }
+    await log("telegram.draft", { approval_id: rec.id, platforms, from_memory: fromMemory });
+  }
+
+  // Media gözləyən paylaşım niyyəti (növbəti fayl gələndə avtomatik davam edir)
+  async function memory_setPending(origin, pending) {
+    if (!memory) return;
+    const c = await memory.load(origin);
+    c.work.pending_post = pending ? { ...pending, ts: new Date().toISOString() } : null;
+    await memory.save(origin, c);
   }
 
   async function statusText() {
@@ -264,35 +315,63 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
     return say(chatId, "Naməlum əmr. /help");
   }
 
-  // Səsli mesajı mətnə çevirir. Uğursuz olarsa istifadəçiyə aydın səbəb yazılır və null qaytarılır.
-  async function voiceToText(v, chatId) {
-    const fail = async (why) => {
+  // Səsli mesajı mətnə çevirir: endirmə → STT (az, terminlər + son söhbət ipucu) → təmizləmə.
+  // Uğursuz olarsa istifadəçiyə sadə səbəb və nə etməli yazılır, null qaytarılır.
+  async function voiceToText(v, chatId, conv) {
+    const fail = async (why, hint) => {
       await log("telegram.voice_failed", { kind: v.kind, reason: String(why).slice(0, 120) });
-      await say(chatId, "🎤 Səsli mesajı mətnə çevirə bilmədim: " + why + "\nYenidən göndər və ya yazı ilə yaz.");
+      await say(chatId, "🎤 Səsli mesajı mətnə çevirə bilmədim: " + why + (hint ? "\n" + hint : "") + "\nYenidən göndər və ya yazı ilə yaz.");
       return null;
     };
     if (!voiceEnabled) return await fail("səs əmrləri söndürülüb (FEATURE_VOICE=0)");
     if (!transcribe) return await fail("səs tanıma xidməti qoşulmayıb");
-    if (v.size && v.size > MAX_AUDIO_BYTES) return await fail("səs yazısı çox uzundur (maksimum 8 MB)");
+    if (v.size && v.size > MAX_AUDIO_BYTES) return await fail("səs yazısı çox uzundur (maksimum 8 MB, təxminən 8-10 dəqiqə). Daha qısa hissələrlə göndər.");
+    if (v.kind === "voice" && v.duration && v.duration < 1) return await fail("səs çox qısadır");
+    try { await tg().sendChatAction(chatId, "typing"); } catch (e) { /* əhəmiyyətsiz */ }
+    const lastReply = conv && Array.isArray(conv.turns) ? (conv.turns.filter((t) => t.r === "assistant").pop() || {}).t : "";
+    const prompt = sttPrompt(lastReply);
     let raw;
     try {
       const { bytes, path } = await tg().downloadFile(v.file_id);
       const ext = (path.split(".").pop() || "").toLowerCase();
       const mime = String(v.mime || AUDIO_EXT[ext] || "audio/ogg").split(";")[0].toLowerCase();
       const blob = checkAudioFile(new Blob([bytes], { type: mime }));
-      raw = await transcribe(blob);
+      const out = await transcribe(blob, { prompt });
+      raw = typeof out === "string" ? out : String((out && out.text) || "");
     } catch (e) {
-      return await fail(publicError(e, "voice").message.slice(0, 160));
+      const pe = publicError(e, "voice");
+      const hint = pe.code === "AUTH_ERROR" ? "Yoxlamaq üçün: JARVIS səhifəsi → Sistem vəziyyəti → «OpenAI səs tanımanı yoxla»." : pe.code === "RATE_LIMIT" ? "Səs tanıma xidməti hazırda məşğuldur, bir az sonra yenidən sına." : pe.code === "TIMEOUT" || pe.code === "NETWORK_ERROR" ? "Xidmət vaxtında cavab vermədi, bir az sonra yenidən sına." : "";
+      return await fail(pe.message.slice(0, 160), hint);
     }
+    if (looksLikePromptEcho(raw)) return await fail("səs aydın eşidilmədi (fon səsi çoxdur və ya səs çox zəifdir)", "Telefonu ağzına yaxın tut və bir də de.");
     let cmd;
     try {
       cmd = parseVoiceCommand(raw);
     } catch (e) {
       return await fail(publicError(e, "voice").message.slice(0, 160));
     }
-    await log("telegram.voice_transcribed", { kind: v.kind, duration: v.duration || 0, chars: cmd.text.length });
-    await say(chatId, "🎤 Eşitdim: «" + cmd.text.slice(0, 500) + "»");
-    return cmd.text;
+    const norm = normalizeTranscript(cmd.text);
+    await log("telegram.voice_transcribed", { kind: v.kind, duration: v.duration || 0, chars: norm.text.length, corrections: norm.corrections.length });
+    await say(chatId, "🎤 Eşitdim: «" + norm.text.slice(0, 500) + "»");
+    return { text: norm.text, corrections: norm.corrections };
+  }
+
+  // Cavab: mətn həmişə; səsli girişə (seçim açıqdırsa) səsli cavab da. Səs alınmasa mətn onsuz da göndərilib.
+  async function reply(chatId, screen, spoken, { voiceIn = false, conv = null } = {}) {
+    await say(chatId, String(screen || spoken || "").slice(0, 4000));
+    const wantVoice = voiceIn && speak && !(conv && conv.prefs && conv.prefs.voice_reply === false);
+    if (!wantVoice) return false;
+    const toSay = speakable(spoken || screen);
+    if (!toSay) return false;
+    try {
+      try { await tg().sendChatAction(chatId, "record_voice"); } catch (e) { /* əhəmiyyətsiz */ }
+      const audio = await speak(toSay);
+      await tg().sendVoice(chatId, audio);
+      return true;
+    } catch (e) {
+      await log("telegram.voice_reply_failed", { reason: publicError(e, "tts").message.slice(0, 120) });
+      return false;
+    }
   }
 
   // Qaytarır: { handled: "duplicate"|"unauthorized"|"ignored"|"ok" }
@@ -324,18 +403,66 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
       return { handled: "ok" };
     }
 
+    const origin = actorOf(chatId);
+    const conv = memory ? await memory.load(origin) : null;
     let raw = String(msg.text || msg.caption || "");
+    let via = "text";
+    let corrections = null;
     const voice = !msg.text ? voiceFromMessage(msg) : null;
     if (voice) {
       // Səs → mətn. Sonra yazılı mesajla TAM eyni yol (komandalar, qaralama, söhbət, təsdiq qaydaları).
-      const heard = await voiceToText(voice, chatId);
+      const heard = await voiceToText(voice, chatId, conv);
       if (heard === null) return { handled: "ok" };
-      raw = heard;
+      raw = heard.text;
+      corrections = heard.corrections;
+      via = "voice";
     }
     const text = cleanText(raw, 2000).text.trim();
     if (text.startsWith("/")) {
       const parts = text.split(/\s+/);
-      await onCommand(parts[0].replace(/@\w+$/, "").toLowerCase(), parts[1], chatId);
+      const cmd = parts[0].replace(/@\w+$/, "").toLowerCase();
+      if (cmd === "/voice" && memory) {
+        const on = voicePreference(text);
+        if (on !== null) await memory.setPref(origin, "voice_reply", on);
+        await say(chatId, on === false ? "Səsli cavabları bağladım, yalnız yazı ilə cavab verəcəyəm." : on === true ? "Səsli mesajlarına səslə də cavab verəcəyəm." : "İstifadə: /voice on | /voice off");
+        return { handled: "ok" };
+      }
+      if (cmd === "/reset" && memory) {
+        await memory.reset(origin);
+        await say(chatId, "Söhbət yaddaşını təmizlədim. Təsdiq qeydləri və işlər yerindədir.");
+        return { handled: "ok" };
+      }
+      await onCommand(cmd, parts[1], chatId);
+      return { handled: "ok" };
+    }
+
+    // Media mətnsiz gəldi: saxlanır, yaddaşa yazılır; media gözləyən paylaşım varsa davam edilir
+    const incomingMedia = mediaFromMessage(msg);
+    if (!text && incomingMedia) {
+      let saved;
+      try {
+        saved = await storeTelegramMedia(incomingMedia);
+      } catch (e) {
+        await say(chatId, "Faylı saxlaya bilmədim: " + publicError(e, "media").message);
+        return { handled: "ok" };
+      }
+      const media = { id: saved.id, type: saved.type };
+      if (memory) await memory.rememberMedia(origin, media);
+      const pend = conv && conv.work && conv.work.pending_post;
+      if (pend && Date.parse(pend.ts) > Date.now() - WAIT_MEDIA_MS) {
+        await memory_setPending(origin, null); // bir dəfə davam edilir (alınmasa yenidən soruşulur)
+        const fresh = memory ? await memory.load(origin) : conv;
+        await makeDraft({ ...msg, video: undefined, photo: undefined, animation: undefined, document: undefined, reply_to_message: undefined }, "paylaş " + pend.platforms.join(" ") + (pend.topic ? " mövzu: " + pend.topic : "") + (pend.privacy && pend.privacy !== "private" ? " " + pend.privacy : ""), chatId, fresh, { continuation: true });
+        return { handled: "ok" };
+      }
+      await say(chatId, (media.type === "video" ? "Videonu" : "Şəkli") + " aldım. Nə edək? Məsələn: «Instagram-da paylaş» və ya «bu video üçün caption yaz».");
+      return { handled: "ok" };
+    }
+
+    const pref = voicePreference(text);
+    if (pref !== null && memory && text.split(/\s+/).length <= 6) {
+      await memory.setPref(origin, "voice_reply", pref);
+      await say(chatId, pref ? "Oldu, səsli mesajlarına səslə də cavab verəcəyəm." : "Oldu, bundan sonra yalnız yazı ilə cavab verəcəyəm.");
       return { handled: "ok" };
     }
 
@@ -357,23 +484,49 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
       }
     }
 
+    // Açıq paylaşım istəyi → qaralama (+ yaddaş). «Instagram-da paylaş» əvvəlki reklama aiddirsə onu götürür.
     const intent = parseIntent(text);
     const hasMedia = Boolean(mediaFromMessage(msg) || mediaFromMessage(msg.reply_to_message));
-    if (intent.wantsPost && (intent.platforms.length || hasMedia)) {
-      await makeDraft(msg, text, chatId);
+    const hasMemoryContent = Boolean(conv && conv.work && ((Array.isArray(conv.work.artifacts) && conv.work.artifacts.length) || conv.work.entities.topic));
+    if (intent.wantsPost && (intent.platforms.length || hasMedia || (refersBack(text) && hasMemoryContent))) {
+      await makeDraft(msg, text, chatId, conv);
       return { handled: "ok" };
     }
 
     if (text && runChat) {
+      try { await tg().sendChatAction(chatId, "typing"); } catch (e) { /* əhəmiyyətsiz */ }
+      let context = null;
+      if (memory) {
+        let pending = [];
+        try { pending = (await pendingFor(chatId)).slice(0, 5).map((a) => ({ id: a.id, summary: a.content })); } catch (e) { pending = []; }
+        let jobs = [];
+        try { jobs = (await flow.listJobs(10)).filter((j) => String(j.notify_chat || "") === String(chatId)).slice(0, 3).map((j) => ({ id: j.id, status: j.status, platforms: Object.keys(j.targets || {}) })); } catch (e) { jobs = []; }
+        context = { history: memory.historyMessages(conv), block: memory.contextBlock(conv, { pending, jobs }), voice: via === "voice" };
+      }
+      let r;
       try {
-        const r = await runChat(text, actorOf(chatId));
-        await say(chatId, String(r.screen || r.spoken || "Cavab yoxdur").slice(0, 4000));
+        r = await runChat(text, origin, context);
       } catch (e) {
-        await say(chatId, "Xəta baş verdi: " + publicError(e, "chat").message.slice(0, 160));
+        const pe = publicError(e, "chat");
+        await say(chatId, "Bunu indi edə bilmədim: " + pe.message.slice(0, 160) + (pe.retryable ? " Bir az sonra yenidən sına." : ""));
+        if (memory) await memory.record(origin, { user: text, via, assistant: "(xəta: " + pe.code + ")" });
+        return { handled: "ok" };
+      }
+      await reply(chatId, r.screen, r.spoken, { voiceIn: via === "voice", conv });
+      if (memory) {
+        const tools = (r.tools || []).map((t) => t.tool);
+        const art = artifactFrom(r);
+        await memory.record(origin, {
+          user: text,
+          via,
+          assistant: String(r.spoken || r.screen || "").slice(0, 1500),
+          transcriptCorrections: corrections,
+          work: { intent: r.mode || r.status, agent: agentForTools(tools) || (r.mode === "task" ? "claude" : undefined), tools: tools.length ? tools : undefined, artifact: art, approval_id: r.approval_id, task: r.mode === "task" || r.mode === "tools" ? text.slice(0, 300) : undefined },
+        });
       }
       return { handled: "ok" };
     }
-    await say(chatId, HELP);
+    await say(chatId, text ? "Hazırda cavab verə bilmirəm (AI xidməti qoşulmayıb)." : "Mesajı oxuya bilmədim. Yaz və ya səsli mesaj göndər.");
     return { handled: "ok" };
   }
 

@@ -44,7 +44,9 @@ Bindinqlər (`JARVIS_KV`, `JARVIS_MEDIA`, `COORD`) `wrangler.toml`-dadır, əl i
 |---|---|---|
 | `KIMI_API_KEY`, `KIMI_MODEL`, `KIMI_BASE_URL` | Secret/Variable | Üçüncü AI: araşdırma / ikinci rəy. Yoxdursa heç nə pozulmur |
 | `VIDEO_PROCESSOR_URL`, `VIDEO_PROCESSOR_TOKEN` | Variable / Secret | Video emal xidməti (`docs/VIDEO.md`). Yoxdursa video emal olunmur, redaktə tələb edən iş `FAILED` olur |
-| `CLAUDE_MODEL`, `OPENAI_MODEL`, `OPENAI_WEB_SEARCH_TOOL`, `TTS_VOICE` | Variable | Model adları, səs |
+| `CLAUDE_MODEL`, `OPENAI_MODEL`, `OPENAI_WEB_SEARCH_TOOL`, `TTS_VOICE` | Variable | Model adları, səs (standart `onyx`; digərləri: alloy, ash, ballad, coral, echo, fable, nova, sage, shimmer, verse, marin, cedar) |
+| `STT_MODEL` | Variable | Səs tanıma modeli (standart `gpt-4o-transcribe`; layihədə yoxdursa avtomatik `whisper-1`) |
+| `TTS_MODEL` | Variable | Səsləndirmə modeli (standart `gpt-4o-mini-tts` Azərbaycan təlimatı ilə; yoxdursa avtomatik `tts-1`) |
 | `INSTAGRAM_API_VERSION` | Variable | Standart `v25.0` |
 | `MAX_SUBTASKS`, `MAX_MODEL_CALLS`, `MAX_RETRIES`, `CALL_TIMEOUT_SECONDS` | Variable | Limitlər |
 | `LOGIN_MAX_FAILURES`, `LOGIN_WINDOW_SECONDS` | Variable | Parol cəhd limiti |

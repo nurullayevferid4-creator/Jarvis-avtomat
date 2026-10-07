@@ -97,6 +97,12 @@ problems.push(...tgNoise);
 const tgAll = Object.values(tg).join(" | ") + (await page.textContent("#errs")) + (await page.textContent("#state"));
 const tgLeak = tgAll.includes(TG_TOKEN) || tgAll.includes("UI-SMOKE-BOT-TOKEN") || tgAll.includes(TG_SECRET);
 if (/\b409\b/.test(tg.rejected)) problems.push("token rədd halı 409 kimi göstərilir");
+// Command Center paneli (real vəziyyət, sirrsiz)
+await page.evaluate(() => { document.getElementById("d-cc").open = true; });
+await page.waitForFunction(() => /Claude \(lider\)/.test(document.getElementById("cc").textContent) && /Telegram/.test(document.getElementById("cc").textContent), null, { timeout: 5000 }).catch(() => problems.push("Command Center göstərilmədi"));
+const ccText = await page.textContent("#cc");
+if (/test-a|test-o|şifrə-ə|UI-SMOKE-BOT-TOKEN|ui-smoke-webhook-secret/.test(ccText)) problems.push("Command Center-də sirr görünür");
+tg.command_center = ccText.slice(0, 200);
 // OpenAI səs diaqnostikası düyməsi (saxta OpenAI 401 qaytarır)
 await page.evaluate(() => { document.getElementById("d-status").open = true; });
 await page.click("#oaidiag");
