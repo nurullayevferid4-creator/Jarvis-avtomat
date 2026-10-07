@@ -2,7 +2,7 @@
 
 `src/tools/registry.js` JARVIS-in istifadə edə biləcəyi alətləri təsvir edir. Daxili alətlər `src/tools/builtin.js`-dədir.
 
-**Status:** reyestr hazırdır və testlərlə yoxlanıb, amma alətlər hələ **orkestratora qoşulmayıb**. Onlar yalnız `/api/status`-da siyahıda görünür. Qoşulma sonrakı mərhələdir.
+**Status:** reyestr orkestratora və `/api/tools`, `/api/tools/run` ünvanlarına qoşulub (45 alət: veb oxuma, bilik, sosial paylaşım, Shopify, media, lead, marketinq, agent hesabatı). Təsdiq tələb edən hər alət yalnız təsdiq qeydi açır; real icra təsdiqdən sonra `ActionRunner` (və ya sosial paylaşım üçün `social flow`) ilə bir dəfə olur. Real xarici API ilə sınaq hələ keçirilməyib. Siyahı: `GET /api/tools`.
 
 ## Hər alətin sahələri
 

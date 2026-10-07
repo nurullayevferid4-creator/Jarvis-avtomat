@@ -32,9 +32,20 @@ Bütün yollar parol tələb edir (`x-passcode-b64`, bax `SECURITY.md`). Bayraq:
 
 `src/tools/registry.js` təsdiq tələb edən aləti çağıranda aləti icra etmir, bu mərkəzdə qeyd açır və `pending_approval` + `approval_id` qaytarır. Bax `TOOLS.md`.
 
+## Strukturlu qeydlər və icra
+
+Alət qeydi `kind` + dəqiq `payload` + `payload_hash` + `summary_hash` + `origin` daşıyır. Təsdiq edəndə `ActionRunner` (sosial paylaşım üçün `social flow`):
+
+1. qeydin bu çat/istifadəçi üçün icazəli olduğunu yoxlayır (`origin`);
+2. `payload` hash-ini və xülasəni yenidən hesablayıb qeyddəkilə tutuşdurur (təsdiq mətni = icra olunan əməliyyat);
+3. `decide` və `exec` addımlarını Durable Object üzərindən atomik "bir dəfə" markeri ilə götürür (eyni anda iki təsdiq → biri icra, digəri `409`);
+4. icra edir, nəticəni qeydə yazır, audit jurnalına yazır. 30 dəqiqədən köhnə təsdiq icra olunmur.
+
+Şəbəkə/vaxt xətasında nəticə `unknown` olur və **avtomatik təkrarlanmır**.
+
 ## Məhdudiyyətlər
 
-- Telefon səhifəsində (UI) yalnız **sosial paylaşım** qeydləri üçün Təsdiq/Rədd düymələri var ("Sosial platformalar" paneli). Digər qeydlər üçün hələ yalnız API var.
-- Tək istifadəçi üçündür. Eyni anda iki qərarın yarışına qarşı kilid yoxdur.
+- UI-da («Təsdiqlər» bölməsi) bütün gözləyən qeydlər üçün Təsdiq/Rədd düymələri var; Telegram-da sosial paylaşım üçün düymə var.
+- Tək istifadəçi (sahib) üçündür; fərqli çatların təsdiqi bir-birinə keçmir.
+- `COORD` (Durable Object) bağlanmayıbsa yaddaş koordinatoru işləyir və yalnız bir Worker nüsxəsində etibarlıdır; `/api/status` bunu göstərir. Real Cloudflare-də çox-məntəqəli yoxlama `docs/SMOKE.md` ilə edilməlidir.
 - KV olmadan qeydlər Worker yenidən başlayanda itir.
-- KV son-nəticəli (eventually consistent) saxlanışdır: qərardan dərhal sonra başqa Cloudflare məntəqəsindən oxuma qısa müddət köhnə vəziyyət göstərə bilər. Tək istifadəçi üçün bu qəbul edilən riskdir. Güclü zəmanət (iki qərarın toqquşmaması) üçün sonradan D1 və ya Durable Object lazımdır.

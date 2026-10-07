@@ -1,6 +1,6 @@
 # Təhlükəsizlik
 
-Bu sənəd 1-ci mərhələdə (təməl) **həqiqətən kodda olan** qoruma qatlarını yazır. Yoxlanmayan şey burada "var" kimi yazılmır.
+Bu sənəd **həqiqətən kodda olan** qoruma qatlarını yazır. Yoxlanmayan şey burada "var" kimi yazılmır.
 
 ## Sirlər
 
@@ -35,7 +35,7 @@ Naxışlardakı bütün təkrarlar məhduddur və yoxlanan mətn 20 000 simvolla
 
 `src/security/ssrf.js`: yalnız `https`, yalnız port 443, loqin/parol olmayan ünvan, **heç bir IP ünvanı** (IPv4 onluq/onaltılıq/səkkizlik yazılışları və IPv6 daxil), `localhost`, `.local`, `.internal` və tək etiketli adlar rədd edilir. Yönləndirmə (redirect) əl ilə izlənir və hər addımda yenidən yoxlanılır. Cavab ölçüsü və vaxt məhduddur, yalnız mətn növlü cavab oxunur.
 
-**Məhdudiyyət:** Cloudflare Worker-də DNS cavabını yoxlamaq olmur. Adı açıq görünən, amma daxili ünvana yönələn domen bu qatda tutulmur. Bu alət hələ orkestratora qoşulmayıb.
+**Məhdudiyyət:** Cloudflare Worker-də DNS cavabını yoxlamaq olmur. Adı açıq görünən, amma daxili ünvana yönələn domen bu qatda tutulmur. `web.fetch` aləti orkestratorun alət rejimində istifadə olunur; nəticə həmişə etibarsız qutuda qayıdır.
 
 ## Əməliyyat qoruması
 
@@ -57,10 +57,33 @@ Tam siyahı və limitlər `SOCIAL.md`-dədir. Qısa:
 
 Təsdiq addımları, alət çağırışları (ad, status, müddət; giriş məzmunu yox), söhbət sorğuları (status, simvol sayı) `/api/audit` ilə görünür. Jurnal 30 gün saxlanır. Jurnal yazılmasa əsas iş dayanmır.
 
+## Təsdiq və yarış qoruması (Durable Object)
+
+- Təsdiq qeydi strukturludur: `kind`, dəqiq `payload`, `payload_hash`, `summary_hash`, `origin` (kim/hansı çat yaratdı), bitmə vaxtı.
+- Qərar (`decide`), icra iddiası (`exec`) və platforma addımları `src/coord/coordinator.js` ilə **atomik** "bir dəfə" markeri üzərindən gedir. Eyni anda iki təsdiq → biri icra olunur, digəri `409`. `wrangler dev --local` (real workerd) üzərində 6 paralel sorğu ilə yoxlanıb (`scripts/runtime-smoke.mjs`).
+- Koordinator əlçatmazdırsa sistem **bağlı** qalır (fail-closed): icra olunmur. `COORD` binding yoxdursa yaddaş koordinatoru işləyir (yalnız bir Worker nüsxəsi daxilində etibarlıdır; `/api/status` bunu açıq göstərir).
+- Bir çatın/istifadəçinin təsdiqi başqasına keçmir (`actorAllowed`). Təsdiq xülasəsi icra anında `payload`-dan yenidən hesablanır; fərq olarsa icra bloklanır (1:1).
+- Şəbəkə/vaxt xətasında əməliyyat avtomatik təkrarlanmır, status `unknown` olur (təkrarın ikiqat icra riski var).
+- Səslə «hə» riskli əməliyyatı icra etmir; yalnız təsdiq paneli/Telegram düyməsi.
+
+## Token şifrələməsi
+
+`TOKEN_ENC_KEY` **məcburidir**: onsuz OAuth qoşulması başlamır və token yazılmır (açıq mətnlə saxlama yoxdur). Açarı dəyişsən, saxlanmış tokenlər oxunmaz olur, platformaları yenidən qoşmaq lazımdır.
+
+## Veb səhifə (UI)
+
+CSP hər sorğuda yeni nonce ilə verilir (`script-src 'nonce-…'`, `unsafe-inline`/`unsafe-eval` yoxdur, `connect-src 'self'`, `frame-ancestors 'none'`). Səhifə `innerHTML` istifadə etmir. Parol yalnız brauzerin `sessionStorage`-ində (və ya «yadda saxla» seçilərsə `localStorage`) durur; serverə Base64 başlıqla gedir. `scripts/ui-smoke.mjs` səhifəni real Chromium-da açıb CSP/JS xətası olmadığını yoxlayır.
+
+## GitHub Actions
+
+- `ci.yml`: yalnız `pull_request`/`push`, `contents: read`, **heç bir secret istifadə etmir**; lint, statik audit, testlər, `wrangler deploy --dry-run` (deploy etmir).
+- `claude.yml`: yalnız repo sahibi/üzvü/əməkdaşı işə sala bilər; `ANTHROPIC_API_KEY` yoxdursa qırmızı xəta ilə dayanır (saxta uğur yoxdur).
+
 ## Bilinən boşluqlar
 
-- `.github/workflows/claude.yml`: `author_association` yoxlaması əlavə olunub (OWNER/MEMBER/COLLABORATOR). Bu yalnız YAML-dır, GitHub-da real işə salınaraq sınanmayıb.
-- Sosial adapterlər yalnız saxta (mock) API ilə sınanıb. Heç bir real Meta/TikTok/Google/Telegram çağırışı edilməyib. Xəta kodlarının bir hissəsi (Meta 190/10/4/17/32/613, TikTok `access_token_invalid`/`rate_limit_exceeded`, Google `reason` dəyərləri) ümumi biliyə əsaslanır və real cavabla yoxlanmalıdır.
-- Təsdiq/icra yarışı: eyni Worker nüsxəsi daxilində `approveAndStart` və `advance` açar üzrə növbəyə düzülür (gecikməli KV ilə `tests/social-hardening.test.mjs`-də yoxlanıb). KV-də atomik kilid (compare-and-set) olmadığı və KV son-nəticəli olduğu üçün **fərqli Worker nüsxələri/məntəqələri arasında** eyni anda iki təsdiq tam istisna edilmir; addım-əvvəli vəziyyət qeydi (`starting`/`committing`) və 5 dəqiqəlik iş kilidi riski azaldır. Tam zəmanət üçün Durable Object lazımdır (hələ yoxdur).
-- Telegram-da mətnlə təsdiq yalnız `Bəli/hə/yes/təsdiq edirəm/paylaş` sözləri ilə, son 15 dəqiqədə hazırlanmış TƏK qaralama üçün keçərlidir; digər hallarda konkret qeydə bağlı düymə lazımdır. Düymə yalnız qeydin `notify_chat`-ı ilə eyni söhbətdən işləyir.
-- Real Claude/OpenAI/səs sınağı hələ keçirilməyib. Bütün testlər saxta API ilə işləyir.
+- Real Shopify, Meta/Instagram, TikTok, Google/YouTube, Telegram, Claude, OpenAI və Kimi çağırışları real hesabla **sınanmayıb**. Bütün testlər saxta API ilə işləyir. Xəta kodlarının bir hissəsi (Meta 190/10/4/17/32/613, TikTok `access_token_invalid`/`rate_limit_exceeded`, Google `reason`) ümumi biliyə əsaslanır və real cavabla yoxlanmalıdır.
+- Durable Object çox-məntəqəli davranışı yalnız lokal workerd-də (bir nüsxə) yoxlanıb; Cloudflare-də real deploydan sonra `docs/SMOKE.md` ilə təkrar yoxlanmalıdır.
+- Video emalı Worker-də deyil, sahibin öz serverindəki ffmpeg xidmətindədir (`docs/VIDEO.md`); xidmət olmadan video "emal olundu" deyilmir, redaktə tələb edən iş `FAILED` olur (plan göstərilir).
+- Platforma video qaydaları (müddət, tərəflər nisbəti) rəsmi sənədlə təsdiqlənməmiş **tövsiyələrdir**; faktiki həddlər (ölçü, MIME) kodda sərtdir.
+- Telegram-da mətnlə təsdiq yalnız `Bəli/hə/yes/təsdiq edirəm/paylaş` sözləri ilə, son 15 dəqiqədə hazırlanmış TƏK qaralama üçün keçərlidir; digər hallarda konkret qeydə bağlı düymə lazımdır.
+- Parol limiti KV ilə də tam dəqiq deyil; Cloudflare Rate Limiting qaydası əlavə etmək məsləhətdir.

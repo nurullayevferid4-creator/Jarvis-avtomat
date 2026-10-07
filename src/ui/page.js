@@ -75,7 +75,7 @@ var $=function(i){return document.getElementById(i)};
 var busy=false,rec=null,stream=null,chunks=[],timer=null,attached=[];
 var player=new Audio();
 var SILENT="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
-var LABEL={achieved:"Tamamlandı",partial:"Qismən",blocked:"Bloklandı",pending_approval:"Təsdiq gözləyir",clarification:"Sual",chat:"Söhbət",pending:"Gözləyir",approved:"Təsdiqləndi",rejected:"Rədd edildi",expired:"Vaxtı bitib",done:"Bitdi",failed:"Uğursuz",running:"İşləyir",queued:"Növbədə",unknown:"Naməlum"};
+var LABEL={achieved:"Tamamlandı",partial:"Qismən",blocked:"Bloklandı",pending_approval:"Təsdiq gözləyir",clarification:"Sual",chat:"Söhbət",pending:"Gözləyir",approved:"Təsdiqləndi",rejected:"Rədd edildi",expired:"Vaxtı bitib",done:"Bitdi",failed:"Uğursuz",running:"İşləyir",queued:"Növbədə",unknown:"Naməlum",success:"Bitdi",queued:"Növbədə"};
 var errLog=[];
 function store(){return $("rem").checked?localStorage:sessionStorage}
 try{var sp=localStorage.getItem("jv_pass");if(sp){$("pass").value=sp;$("rem").checked=true}else{$("pass").value=sessionStorage.getItem("jv_pass")||""}}catch(e){}
@@ -264,12 +264,12 @@ var jobs=r.data.jobs||[];
 if(!jobs.length){note(box,"Video işi yoxdur.");return}
 jobs.forEach(function(j){
 var c=el("div","card gap");c.style.marginTop="8px";
-var h=el("div","row");h.appendChild(el("div","lbl",(j.created_at?new Date(j.created_at).toISOString().slice(0,16).replace("T"," "):"")+" · "+(j.input&&j.input.platform||"")));h.appendChild(pill(LABEL[j.status]||j.status,j.status==="done"?"ok":j.status==="failed"?"bad":"warn"));c.appendChild(h);
+var h=el("div","row");h.appendChild(el("div","lbl",(j.created_at?new Date(j.created_at).toISOString().slice(0,16).replace("T"," "):"")+" · "+(j.input&&j.input.platform||"")));var st=String(j.status||"").toLowerCase();h.appendChild(pill(LABEL[st]||j.status,st==="success"?"ok":st==="failed"?"bad":"warn"));c.appendChild(h);
 if(j.plan&&j.plan.summary)c.appendChild(el("div","txt",j.plan.summary));
 if(j.error)c.appendChild(el("div","txt","Xəta: "+(j.error.message||j.error)));
-if(j.status==="done"&&j.result)c.appendChild(el("div","lbl","Nəticə media: "+String(j.result.media_id||"").slice(0,8)+(j.result.verified===false?" · yoxlama uğursuz":"")));
-if(j.status!=="done"&&j.status!=="failed"){var adv=el("button","s","İrəlilət");adv.type="button";adv.addEventListener("click",function(){api("/api/media/jobs/"+j.id+"/advance",{method:"POST"},"video işi").then(function(){loadMJobs()})});c.appendChild(adv)}
-if(j.status==="failed"){var rt=el("button","s","Yenidən cəhd");rt.type="button";rt.addEventListener("click",function(){api("/api/media/jobs/"+j.id+"/retry",{method:"POST"},"video işi").then(function(){loadMJobs()})});c.appendChild(rt)}
+if(st==="success"&&j.result)c.appendChild(el("div","lbl","Nəticə media: "+String(j.result.media_id||"").slice(0,8)+(j.result.verified===false?" · yoxlama uğursuz":"")));
+if(st!=="success"&&st!=="failed"){var adv=el("button","s","İrəlilət");adv.type="button";adv.addEventListener("click",function(){api("/api/media/jobs/"+j.id+"/advance",{method:"POST"},"video işi").then(function(){loadMJobs()})});c.appendChild(adv)}
+if(st==="failed"){var rt=el("button","s","Yenidən cəhd");rt.type="button";rt.addEventListener("click",function(){api("/api/media/jobs/"+j.id+"/retry",{method:"POST"},"video işi").then(function(){loadMJobs()})});c.appendChild(rt)}
 box.appendChild(c);
 });
 });

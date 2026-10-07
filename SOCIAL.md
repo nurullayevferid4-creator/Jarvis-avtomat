@@ -1,6 +1,6 @@
 # Sosial platformalar
 
-Bu sənəd **kodda və testdə olanı** yazır. "Hazırdır" yalnız testlə təsdiqlənən hissəyə deyilir. Real hesabla heç bir sınaq keçirilməyib: bütün testlər saxta (mock) API ilə işləyir.
+Bu sənəd **kodda və testdə olanı** yazır. "Hazırdır" yalnız testlə təsdiqlənən hissəyə deyilir. Real hesabla heç bir sınaq keçirilməyib: bütün testlər saxta API cavabları ilə işləyir.
 
 ## Axın
 
@@ -41,10 +41,10 @@ Qaydalar (hamısı testlərlə yoxlanır, `tests/social-*.test.mjs`):
 
 | Platforma | OAuth/token | Hesab məlumatı | Paylaşım | Status yoxlama | Test |
 |---|---|---|---|---|---|
-| Instagram | var (uzun token 60 gün, yeniləmə) | `/me` | şəkil + Reel (konteyner → status → media_publish), post id + link | `status_code` | mock |
-| TikTok | var (access 24 saat, refresh 365 gün) | creator_info | FILE_UPLOAD (tək parça ≤64 MB) | `status/fetch` | mock |
-| YouTube | var (offline refresh token) | `channels?mine=true` | resumable yükləmə (tək sorğu ≤64 MB), thumbnail, video id | — (yükləmə sinxrondur) | mock |
-| Telegram | bot tokeni (OAuth yox) | `getMe` | kanala mətn/şəkil/video | — | mock |
+| Instagram | var (uzun token 60 gün, yeniləmə) | `/me` | şəkil + Reel (konteyner → status → media_publish), post id + link | `status_code` | real sınaq yoxdur |
+| TikTok | var (access 24 saat, refresh 365 gün) | creator_info | FILE_UPLOAD (tək parça ≤64 MB) | `status/fetch` | real sınaq yoxdur |
+| YouTube | var (offline refresh token) | `channels?mine=true` | resumable yükləmə (tək sorğu ≤64 MB), thumbnail, video id | — (yükləmə sinxrondur) | real sınaq yoxdur |
+| Telegram | bot tokeni (OAuth yox) | `getMe` | kanala mətn/şəkil/video | — | real sınaq yoxdur |
 
 Ortaq: xəta kodları (`not_connected`, `token_expired`, `permission_denied`, `rate_limited`, `invalid_request`, `unaudited_client`, `media_error`, `timeout`, `api_error`), token heç yerdə göstərilmir.
 
