@@ -13,6 +13,7 @@ import { WORKER_SYSTEM } from "../prompts.js";
 import { httpRequest } from "../guards/http.js";
 import { BudgetExceededError } from "../guards/budget.js";
 import { providerHttpError } from "../providers/http.js";
+import { openaiKey } from "../security/envvalue.js";
 
 export class OpenAIAdapter extends BaseAdapter {
   constructor(env) {
@@ -22,7 +23,7 @@ export class OpenAIAdapter extends BaseAdapter {
 
   async run(task, ctx) {
     const model = this.env.OPENAI_MODEL || DEFAULTS.openaiModel;
-    const headers = { "content-type": "application/json", authorization: "Bearer " + this.env.OPENAI_API_KEY };
+    const headers = { "content-type": "application/json", authorization: "Bearer " + openaiKey(this.env) };
 
     if (task.webSearch !== false) {
       try {

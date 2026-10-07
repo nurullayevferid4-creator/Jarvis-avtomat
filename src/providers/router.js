@@ -10,6 +10,7 @@ import { AppError, toAppError } from "../errors.js";
 import { DEFAULTS } from "../config.js";
 import { validate } from "../validate.js";
 import { parseJson } from "../util.js";
+import { openaiKey } from "../security/envvalue.js";
 import { providerCall } from "./http.js";
 
 const FALLBACK_ON = new Set(["AUTH_ERROR", "PERMISSION_ERROR", "RATE_LIMIT", "TIMEOUT", "NETWORK_ERROR", "PROVIDER_ERROR", "NOT_FOUND"]);
@@ -38,7 +39,7 @@ async function chatComplete(provider, url, key, model, { system, messages, maxTo
   return { text, model };
 }
 
-const openaiComplete = (env, a) => chatComplete("openai", "https://api.openai.com/v1/chat/completions", env.OPENAI_API_KEY, env.OPENAI_MODEL || DEFAULTS.openaiModel, a);
+const openaiComplete = (env, a) => chatComplete("openai", "https://api.openai.com/v1/chat/completions", openaiKey(env), env.OPENAI_MODEL || DEFAULTS.openaiModel, a);
 
 // Kimi (Moonshot) OpenAI-uyğun API-dir. DİQQƏT: real açarla yoxlanmayıb, yalnız mock testlidir.
 const kimiBase = (env) => String(env.KIMI_BASE_URL || "https://api.moonshot.ai/v1").replace(/\/+$/, "");

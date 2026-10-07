@@ -32,6 +32,7 @@ Bütün `/api/*` yolları parol tələb edir: başlıq `x-passcode-b64: <parolun
 | `POST /api/social/{platform}/connect` | OAuth başlat (`TOKEN_ENC_KEY` məcburi) |
 | `POST /api/social/draft` | Paylaşım qaralaması → təsdiq qeydi |
 | `POST /api/telegram/setup` | Webhook qur (idempotent): `getWebhookInfo` → lazımdırsa `setWebhook` → `getWebhookInfo` ilə təsdiq. Gövdə ixtiyari `{"force":true}` düzgün qurulu webhook-u da yenidən tətbiq edir. Uğur: `status` = `created`/`already_set`/`switched`/`refreshed`. Xəta: `reason`, `step`, `hint` (412 konfiqurasiya, 424 Telegram rədd etdi, 409 yalnız Telegram-ın özü 409 verərsə, 429, 502/504) |
+| `POST /api/diagnostics/openai-audio` | OpenAI STT diaqnostikası: açarın yalnız forması (`project`/`legacy`/`admin`/`unexpected`, təmizlənibmi) + 1 san. səssiz WAV ilə real `whisper-1` sorğusu; 401 səbəbi (`invalid_api_key`, `missing_scopes`, `insufficient_quota`...). Açar dəyəri qaytarılmır |
 | `GET /api/telegram/webhook` | Yalnız oxuma: konfiqurasiya yoxlaması + Telegram-dakı webhook vəziyyəti (`verdict`: `ok`, `not_set`, `other_url`, `delivery_error`, `config_problem`). Token/secret və köhnə ünvanın yolu göstərilmir |
 | `GET /api/shopify/status`, `POST /api/shopify/connect`, `POST /api/shopify/disconnect` | Shopify bağlantısı |
 | `GET/POST /api/knowledge` | Bilik bazası (`FEATURE_KNOWLEDGE`) |

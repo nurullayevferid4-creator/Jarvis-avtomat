@@ -24,6 +24,9 @@
 | UI-da heç nə işləmir, boş səhifə | Çox köhnə brauzer (CSP/ES5 xaric funksiyalar) | Başqa/yeni brauzer; səhifə `fetch` və `TextEncoder` tələb edir |
 | Səs işləmir | Mikrofon icazəsi, `FEATURE_VOICE=0`, brauzer `MediaRecorder` dəstəkləmir | Mətnlə yaz; icazə ver |
 | Telegram səsli mesajına «🎤 Səsli mesajı mətnə çevirə bilmədim: …» | Səbəb mesajdadır: `OPENAI_API_KEY` yoxdur/səhvdir (401), OpenAI xətası, fayl 8 MB-dan böyükdür, səs aydın deyil, `FEATURE_VOICE=0` | Səbəbə görə düzəlt; və ya yazı ilə yaz |
+| «Səs tanıma xətası 401: OPENAI_API_KEY etibarsızdır» | Cloudflare-dəki `OPENAI_API_KEY` OpenAI tərəfindən qəbul edilmir: səhv/yarımçıq yapışdırılıb, OpenAI-da silinib/ləğv edilib, başqa (silinmiş) layihəyə aiddir | platform.openai.com → API keys-də açarın aktiv olduğunu yoxla; lazımdırsa yeni açar yarat və Cloudflare → Variables and Secrets → `OPENAI_API_KEY` secret-ini yenilə. Sonra UI → Sistem vəziyyəti → «OpenAI səs tanımanı yoxla» |
+| «… 401: açarın icazəsi çatmır» | Restricted key-də audio icazəsi yoxdur | OpenAI → API keys → açarın icazələri: «All» və ya Model capabilities-də audio/transcription icazəsi |
+| «… balansı/limiti bitib» (429) | OpenAI billing/kredit | OpenAI → Billing |
 | Telegram səsli mesajına cavab gəlmir | Göndərən `TELEGRAM_ALLOWED_CHAT_IDS`-də deyil və ya qrup çatıdır (bilərəkdən cavab yoxdur), webhook qurulmayıb | «Telegram webhook-u yoxla»; ID-ni yoxla |
 | Səsli mesaja Telegram menyusu (/help) gəlir | Köhnə versiya deploy olunub (səsli mesaj dəstəyindən əvvəlki) | `feature/jarvis-production`-u `main`-ə merge et, deploy-u gözlə |
 
