@@ -5,7 +5,7 @@
 // İcazə adı (DEFAULT_PERMISSIONS-a əlavə olunmalıdır): use.marketing
 
 import { AppError } from "../errors.js";
-import { BRAND_IDS, getBrand, requestsDigitalCard, missingFacts } from "./brands.js";
+import { BRAND_IDS, getBrand, normalizeBrandId, requestsDigitalCard, missingFacts } from "./brands.js";
 import { PLATFORMS, LIMITS, stripUnsafe } from "./safety.js";
 import { produce, frame, buildPublishingPlan, PLAN_SCHEMA, HOOKS_SCHEMA, CAPTIONS_SCHEMA, HASHTAGS_SCHEMA, CALENDAR_SCHEMA, templatePlan, templateHooks, templateCaptions, templateHashtags, templateCalendar } from "./engine.js";
 import { analyzePerformance } from "./performance.js";
@@ -62,7 +62,8 @@ export function registerMarketingTools(registry, deps = {}) {
     if (!b) throw new AppError("VALIDATION_ERROR", "Naməlum brend: " + input.brand);
     return b;
   };
-  const base = { permissions: MARKETING_PERMISSIONS, risk: "low", requiresApproval: false, timeoutMs: 30000 };
+  const normalizeInput = (input) => (input && typeof input === "object" && typeof input.brand === "string" ? { ...input, brand: normalizeBrandId(input.brand) } : input);
+  const base = { normalizeInput, permissions: MARKETING_PERMISSIONS, risk: "low", requiresApproval: false, timeoutMs: 30000 };
 
   // ---- marketing.campaign.plan ----
   registry.register({
