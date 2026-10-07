@@ -34,7 +34,7 @@ test("açar təmizlənir: ətraf boşluq/sətir sonu/dırnaq və 'Bearer ' prefi
     assert.equal(calls[0].body.get("model"), "whisper-1");
     assert.equal(calls[0].body.get("language"), "az");
   }
-  assert.deepEqual(inspectOpenAIKey({ OPENAI_API_KEY: KEY }), { set: true, shape: "project", cleaned: false, has_inner_space: false, last4: "6789" });
+  assert.deepEqual(inspectOpenAIKey({ OPENAI_API_KEY: KEY }), { set: true, shape: "project", cleaned: false, usable: true, sendable: true, problems: [], has_inner_space: false, last4: "6789" });
   assert.equal(inspectOpenAIKey({ OPENAI_API_KEY: "sk-short" }).last4, null, "qısa dəyərdə son simvollar göstərilmir");
   assert.equal(inspectOpenAIKey({ OPENAI_API_KEY: ' "' + KEY + '" ' }).cleaned, true);
   assert.equal(inspectOpenAIKey({ OPENAI_API_KEY: "sk-admin-xyz" }).shape, "admin");
@@ -169,4 +169,89 @@ test("/api/status açarın yalnız formasını göstərir", async () => {
   assert.equal(b.openai_key.cleaned, true);
   assert.equal(b.openai_key.last4, undefined, "status-da son simvollar da göstərilmir");
   assert.ok(!text.includes("UNITTEST"));
+});
+
+// ---- HTTP 0 / network_error səbəbi: açarın içində sətir sonu və s. ----
+test("açarın içində sətir sonu, görünməz simvol, ağıllı dırnaq, OPENAI_API_KEY= prefiksi: normallaşdırılır və eyni Bearer başlığı qurulur", async () => {
+  const variants = [
+    KEY.slice(0, 20) + "\n" + KEY.slice(20),
+    KEY.slice(0, 20) + "\r\n" + KEY.slice(20) + "\n",
+    "\uFEFF" + KEY,
+    KEY + "\u200B",
+    "\u201C" + KEY + "\u201D",
+    "OPENAI_API_KEY=" + KEY,
+    "Bearer " + KEY.slice(0, 10) + " " + KEY.slice(10),
+  ];
+  for (const raw of variants) {
+    assert.equal(openaiKey({ OPENAI_API_KEY: raw }), KEY, JSON.stringify(inspectOpenAIKey({ OPENAI_API_KEY: raw }).problems));
+    const info = inspectOpenAIKey({ OPENAI_API_KEY: raw });
+    assert.equal(info.usable, true);
+    assert.ok(info.problems.length >= 1);
+    const calls = installSocialFetch([[/audio\/transcriptions/, () => json({ text: "salam" })]]);
+    assert.equal(await stt({ OPENAI_API_KEY: raw }, new Blob([OGG], { type: "audio/ogg" }), 5000), "salam");
+    assert.equal(calls[0].headers.authorization, "Bearer " + KEY);
+    // real Headers ilə də başlıq qəbul olunur (Cloudflare/Node fetch "Invalid header value" atmır)
+    assert.doesNotThrow(() => new Headers({ authorization: calls[0].headers.authorization }));
+  }
+});
+
+test("başlığa yazıla bilməyən açar (latın olmayan simvol): sorğu GÖNDƏRİLMİR; Telegram və diaqnostika dəqiq problemi deyir", async () => {
+  const raw = ["sk", "proj", "ABCəDEFGHIJKLMNOPQRSTUVWX"].join("-");
+  const info = inspectOpenAIKey({ OPENAI_API_KEY: raw });
+  assert.equal(info.sendable, false);
+  assert.ok(info.problems.includes("non_ascii_chars"));
+  assert.equal(info.last4, null);
+  let calls = installSocialFetch([]);
+  await assert.rejects(() => stt({ OPENAI_API_KEY: raw }, new Blob([OGG], { type: "audio/ogg" }), 5000), (e) => e.code === "AUTH_ERROR" && /latın olmayan/.test(e.message));
+  assert.equal(calls.length, 0);
+
+  const w = world({ OPENAI_API_KEY: raw });
+  calls = installSocialFetch(tgRoutes(() => json({ text: "x" })));
+  await hook(w.env, voice());
+  const [t] = replies(calls);
+  assert.match(t, /OPENAI_API_KEY formatı səhvdir/);
+  assert.ok(!t.includes("ABCəDEF"), "açarın hissəsi mesajda olmamalıdır");
+  assert.equal(calls.filter((c) => /openai/.test(c.url)).length, 0);
+
+  const w2 = world({ OPENAI_API_KEY: raw });
+  calls = installSocialFetch([]);
+  const r = await diag(w2.env);
+  const text = await r.clone().text();
+  const b = await r.json();
+  assert.equal(b.verdict, "key_malformed");
+  assert.equal(b.header.well_formed, false);
+  assert.ok(b.problems.some((x) => /latın olmayan/.test(x)));
+  assert.equal(calls.length, 0);
+  assert.ok(!text.includes("ABCəDEF"));
+});
+
+test("sk- ilə başlamayan / qısa açar: bloklanmır (qərarı OpenAI verir), amma problem göstərilir; 401-də hökm key_invalid", async () => {
+  for (const [raw, problem] of [[["not", "an", "openai", "key", "value", "1234567890"].join("-"), "not_sk_prefix"], [["sk", "abc"].join("-"), "too_short"]]) {
+    const info = inspectOpenAIKey({ OPENAI_API_KEY: raw });
+    assert.equal(info.sendable, true);
+    assert.equal(info.usable, false);
+    assert.ok(info.problems.includes(problem));
+    const w = world({ OPENAI_API_KEY: raw });
+    const calls = installSocialFetch([[/api\.openai\.com/, () => new Response(BODY_401, { status: 401 })]]);
+    const b = await (await diag(w.env)).json();
+    assert.equal(calls.length, 2, "sorğu göndərilir");
+    assert.equal(b.verdict, "key_invalid");
+    assert.equal(b.header.well_formed, false);
+    assert.match(b.action, /OpenAI açarı formasında deyil/);
+  }
+});
+
+test("fetch başlıq xətası atarsa (Cloudflare: 'Invalid header value') bu 'şəbəkə' kimi yox, key_malformed kimi göstərilir", async () => {
+  const w = world({ OPENAI_API_KEY: KEY });
+  installSocialFetch([[/api\.openai\.com/, () => { throw new TypeError("Invalid header value."); }]]);
+  const b = await (await diag(w.env)).json();
+  assert.equal(b.auth.reason, "invalid_header_value");
+  assert.equal(b.auth.error_name, "TypeError");
+  assert.equal(b.stt.http, 0);
+  assert.equal(b.verdict, "key_malformed");
+  const w2 = world({ OPENAI_API_KEY: KEY });
+  installSocialFetch([[/api\.openai\.com/, () => { throw new TypeError("fetch failed"); }]]);
+  const b2 = await (await diag(w2.env)).json();
+  assert.equal(b2.auth.reason, "network_error");
+  assert.equal(b2.verdict, "unreachable");
 });
