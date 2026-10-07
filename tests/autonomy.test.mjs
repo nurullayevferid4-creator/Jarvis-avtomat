@@ -96,3 +96,31 @@ test("gündəlik hesabat REAL store ilə işləyir və avtonom iş nəticələri
   assert.match(sent[0][1], /qr_menu\.market_research: pending/);
   assert.equal((await maybeSendDailyReport({ env: { ...ENV, DAILY_REPORT_HOUR: "9" }, ...deps, now: bakuMs(8, 11) })).reason, "already_sent");
 });
+
+test("/auto əmri: cədvəl qurulur, işə düşür, söndürülür; naməlum iş/cədvəl rədd edilir", async () => {
+  const { autoCommand, statusIntent, statusAnswer } = await import("../src/autonomy/commands.js");
+  const store = createStore({});
+  const now = bakuMs(8, 8);
+  assert.match(await autoCommand(store, "/auto", now), /Avtonom iş yoxdur/);
+  assert.match(await autoCommand(store, "/auto set yoxdur.is hər gün 09:00", now), /Naməlum iş/);
+  assert.match(await autoCommand(store, "/auto set " + T + " bəlkə", now), /başa düşülmədi/);
+  assert.match(await autoCommand(store, "/auto set " + T + " hər gün 09:00", now), /Quruldu/);
+  assert.match(await autoCommand(store, "/auto", now), /🟢 qr_menu\.market_research — hər gün 09:00/);
+  // env-siz də state-dəki job işləyir (əmrlə qurulub)
+  const r = await tick({ store, env: {}, handlers: createHandlers({}), now: bakuMs(8, 9, 1) });
+  assert.deepEqual(r.ran, [{ job: T, status: "pending" }]);
+  assert.match(await autoCommand(store, "/auto off " + T, now), /dayandırıldı/);
+  assert.equal((await tick({ store, env: {}, handlers: createHandlers({}), now: bakuMs(9, 9, 1) })).ran.length, 0);
+  // bir dəfəlik: işləyir və özünü söndürür
+  await autoCommand(store, "/auto set " + T + " bu gün 20:00", bakuMs(8, 10));
+  await tick({ store, env: {}, handlers: createHandlers({}), now: bakuMs(8, 20, 1) });
+  assert.equal((await loadState(store)).jobs[T].enabled, false);
+  assert.equal(statusIntent("Nə etdin?"), "did");
+  assert.equal(statusIntent("nə gözləyir"), "waiting");
+  assert.equal(statusIntent("Nə uğursuz oldu?"), "failed");
+  assert.equal(statusIntent("sabah nə edək"), null);
+  const deps = { store, approvals: { list: async () => [{}] }, flow: { listJobs: async () => [] }, now: bakuMs(8, 21) };
+  assert.match(await statusAnswer("did", deps), /qr_menu\.market_research \[pending\]/);
+  assert.match(await statusAnswer("waiting", deps), /Təsdiq: 1/);
+  assert.match(await statusAnswer("failed", deps), /uğursuz iş yoxdur/);
+});
