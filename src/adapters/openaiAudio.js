@@ -10,6 +10,33 @@ import { AppError } from "../errors.js";
 import { providerHttpError } from "../providers/http.js";
 import { openaiKey, inspectOpenAIKey } from "../security/envvalue.js";
 
+// Problem növlərinin izahı (açarın simvolları göstərilmir)
+export const KEY_PROBLEM_TEXT = {
+  only_whitespace_or_quotes: "secret-də yalnız boşluq/dırnaq var",
+  line_break_inside: "açarın içində sətir sonu var (iki sətirə bölünüb yapışdırılıb)",
+  control_chars: "görünməz idarəedici simvol var",
+  space_inside: "açarın içində boşluq var",
+  invisible_chars: "görünməz simvol var (BOM/zero-width/NBSP)",
+  wrapping_quotes: "açar dırnaq içində yazılıb",
+  bearer_prefix: "əvvəlinə «Bearer» yazılıb",
+  name_prefix: "əvvəlinə «OPENAI_API_KEY=» yazılıb",
+  not_sk_prefix: "açar «sk-» ilə başlamır (bu OpenAI API açarı deyil və ya yarımçıqdır)",
+  non_ascii_chars: "açarda latın olmayan hərf/simvol var",
+  invalid_chars: "açarda icazəsiz simvol var",
+  too_short: "açar çox qısadır (yarımçıq kopyalanıb)",
+};
+
+// HTTP başlığına yazılmazdan ƏVVƏL yoxlama: səhv dəyər fetch-də "Invalid header value" xətası verir və sorğu OpenAI-a getmir.
+export function openaiAuthHeader(env) {
+  const info = inspectOpenAIKey(env);
+  if (!info.set) throw new AppError("AUTH_ERROR", "OPENAI_API_KEY təyin edilməyib", { source: "openai-audio", retryable: false });
+  if (!info.sendable) {
+    // Bu dəyər HTTP başlığına yazıla bilməz (fetch "Invalid header value" atardı, sorğu OpenAI-a getməzdi)
+    throw new AppError("AUTH_ERROR", "OPENAI_API_KEY formatı səhvdir: " + info.problems.map((p) => KEY_PROBLEM_TEXT[p] || p).join("; "), { source: "openai-audio", retryable: false });
+  }
+  return "Bearer " + openaiKey(env);
+}
+
 // Səs xətaları da vahid kodlarla çıxır (AUTH_ERROR, RATE_LIMIT, ...), provider gövdəsi istifadəçiyə getmir.
 // OpenAI xəta gövdəsindən YALNIZ səbəb növü çıxarılır; gövdənin özü (açarın maskalı hissəsi ola bilər) heç yerə getmir.
 export function openaiAuthReason(status, body) {
@@ -40,7 +67,7 @@ export async function stt(env, file, timeoutMs) {
   fd.append("file", file, name);
   fd.append("model", "whisper-1");
   fd.append("language", "az");
-  const r = await httpRequest("https://api.openai.com/v1/audio/transcriptions", { method: "POST", headers: { authorization: "Bearer " + openaiKey(env) }, body: fd }, timeoutMs);
+  const r = await httpRequest("https://api.openai.com/v1/audio/transcriptions", { method: "POST", headers: { authorization: openaiAuthHeader(env) }, body: fd }, timeoutMs);
   if (!r.ok) throw audioError("Səs tanıma xətası", r.status, r.data);
   return String(r.data.text || "").trim();
 }
@@ -50,7 +77,7 @@ export async function tts(env, text, timeoutMs) {
     "https://api.openai.com/v1/audio/speech",
     {
       method: "POST",
-      headers: { "content-type": "application/json", authorization: "Bearer " + openaiKey(env) },
+      headers: { "content-type": "application/json", authorization: openaiAuthHeader(env) },
       body: JSON.stringify({ model: "tts-1", voice: env.TTS_VOICE || DEFAULTS.ttsVoice, input: text.slice(0, 900), response_format: "mp3" }),
     },
     timeoutMs,
@@ -106,7 +133,12 @@ async function probe(fetchImpl, url, init, timeoutMs) {
       organization: h("openai-organization"),
     };
   } catch (e) {
-    return { reached: false, http: 0, ok: false, reason: ctrl.signal.aborted ? "timeout" : "network_error", explanation: "OpenAI-a çatmaq olmadı", error_code: null, error_type: null, request_id: null, project: null, organization: null };
+    // Xətanın yalnız növü qaytarılır (mesaj başlıq dəyərini ehtiva edə bilər).
+    const name = e && typeof e.name === "string" && /^[A-Za-z]{1,40}$/.test(e.name) ? e.name : "Error";
+    const msg = String((e && e.message) || "");
+    const reason = ctrl.signal.aborted ? "timeout" : /header/i.test(msg) ? "invalid_header_value" : "network_error";
+    const explanation = reason === "invalid_header_value" ? "sorğu göndərilmədi: Authorization başlığında icazəsiz simvol var (OPENAI_API_KEY səhv yapışdırılıb)" : reason === "timeout" ? "OpenAI vaxtında cavab vermədi" : "Worker OpenAI-a qoşula bilmədi (şəbəkə)";
+    return { reached: false, http: 0, ok: false, reason, error_name: name, explanation, error_code: null, error_type: null, request_id: null, project: null, organization: null };
   } finally {
     clearTimeout(timer);
   }
@@ -120,8 +152,15 @@ export async function diagnoseOpenAI(env, timeoutMs, fetchImpl = (...a) => globa
     out.action = "Cloudflare → jarvis-avtomat → Settings → Variables and Secrets → OPENAI_API_KEY (Secret) əlavə et və Deploy et.";
     return out;
   }
+  out.header.well_formed = key.usable;
+  out.problems = key.problems.map((p) => KEY_PROBLEM_TEXT[p] || p);
+  if (!key.sendable) {
+    // Səhv açarla sorğu göndərilmir: fetch onsuz da "Invalid header value" atardı (HTTP 0).
+    out.verdict = "key_malformed";
+    out.action = "Cloudflare → jarvis-avtomat → Settings → Variables and Secrets → OPENAI_API_KEY secret-ini «Edit» et: OpenAI → API keys-dən açarı «Copy» düyməsi ilə götür, tək sətirdə, dırnaqsız, boşluqsuz yapışdır, Save/Deploy et. Problem: " + out.problems.join("; ") + ".";
+    return out;
+  }
   const auth = "Bearer " + openaiKey(env);
-  out.header.well_formed = /^Bearer sk-[A-Za-z0-9_-]{8,}$/.test(auth);
   out.auth = { endpoint: "GET /v1/models", ...(await probe(fetchImpl, "https://api.openai.com/v1/models", { method: "GET", headers: { authorization: auth } }, timeoutMs)) };
   const fd = new FormData();
   fd.append("file", new Blob([silentWav()], { type: "audio/wav" }), "audio.wav");
@@ -137,12 +176,15 @@ export async function diagnoseOpenAI(env, timeoutMs, fetchImpl = (...a) => globa
   } else if (key.shape === "admin") {
     out.verdict = "admin_key";
     out.action = "Admin açarı (sk-admin-) model API-ləri üçün işləmir. OpenAI → Dashboard → API keys → «Create new secret key» (layihə açarı, sk-proj-) yarat, OPENAI_API_KEY secret-inə yaz, Deploy et.";
+  } else if (!t.reached && (t.reason === "invalid_header_value" || a.reason === "invalid_header_value")) {
+    out.verdict = "key_malformed";
+    out.action = "Authorization başlığı qurula bilmədi: OPENAI_API_KEY-də icazəsiz simvol var. Açarı OpenAI-dan yenidən «Copy» edib Cloudflare secret-inə tək sətirdə, dırnaqsız yapışdır, Deploy et.";
   } else if (!t.reached) {
     out.verdict = "unreachable";
     out.action = "Worker OpenAI-a çata bilmədi (şəbəkə/vaxt). Bir az sonra yenidən yoxla.";
   } else if (t.reason === "invalid_api_key" || a.reason === "invalid_api_key") {
     out.verdict = "key_invalid";
-    out.action = "OpenAI bu açarı tanımır: səhv/yarımçıq yapışdırılıb, silinib və ya ləğv edilib. OpenAI → API keys siyahısında «son 4 simvol» ilə uyğun aktiv açar yoxdursa yeni layihə açarı yarat, Cloudflare-də OPENAI_API_KEY secret-ini yenilə (dırnaqsız), Deploy et.";
+    out.action = (key.usable ? "" : "Secret-dəki dəyər OpenAI açarı formasında deyil (" + out.problems.join("; ") + "). ") + "OpenAI bu açarı tanımır: səhv/yarımçıq yapışdırılıb, silinib və ya ləğv edilib. OpenAI → API keys siyahısında «son 4 simvol» ilə uyğun aktiv açar yoxdursa yeni layihə açarı yarat, Cloudflare-də OPENAI_API_KEY secret-ini yenilə (dırnaqsız), Deploy et.";
   } else if (t.reason === "missing_scopes") {
     out.verdict = "missing_audio_scope";
     out.action = "Açar etibarlıdır, amma audio icazəsi yoxdur (restricted key). OpenAI → API keys → açarı redaktə et → Permissions: «All» və ya Model capabilities-də audio (transcription) icazəsi ver. Yaxud «All» icazəli yeni açar yarat.";

@@ -335,8 +335,8 @@ box.appendChild(el("div","lbl","«təyin olunub» yalnız sirrin mövcudluğunu 
 }
 $("r-status").addEventListener("click",loadStatus);
 var OAKEY={missing:"təyin edilməyib",project:"layihə açarı (sk-proj-)",legacy:"köhnə tip açar (sk-)",service_account:"servis hesabı açarı",admin:"ADMIN açarı: model API-ləri üçün yaramır",unexpected:"gözlənilməz format (sk- ilə başlamır)"};
-var OAV={ok:["OPENAI İŞLƏYİR","ok"],secret_missing:["SECRET YOXDUR","bad"],admin_key:["ADMIN AÇARI","bad"],key_invalid:["AÇAR ETİBARSIZDIR","bad"],missing_audio_scope:["AUDIO İCAZƏSİ YOXDUR","bad"],billing:["BILLING","bad"],rate_limited:["LİMİT","warn"],account_or_project:["HESAB/LAYİHƏ PROBLEMİ","bad"],unreachable:["ÇATMIR","warn"],stt_error:["STT XƏTASI","bad"]};
-function oaLine(box,label,x){if(!x)return;box.appendChild(el("div","lbl",label+": HTTP "+x.http+" · "+x.reason+(x.explanation?" · "+x.explanation:"")+(x.request_id?" · request_id "+x.request_id:"")+(x.project?" · layihə "+x.project:"")))}
+var OAV={ok:["OPENAI İŞLƏYİR","ok"],key_malformed:["AÇAR SƏHV YAPIŞDIRILIB","bad"],secret_missing:["SECRET YOXDUR","bad"],admin_key:["ADMIN AÇARI","bad"],key_invalid:["AÇAR ETİBARSIZDIR","bad"],missing_audio_scope:["AUDIO İCAZƏSİ YOXDUR","bad"],billing:["BILLING","bad"],rate_limited:["LİMİT","warn"],account_or_project:["HESAB/LAYİHƏ PROBLEMİ","bad"],unreachable:["ÇATMIR","warn"],stt_error:["STT XƏTASI","bad"]};
+function oaLine(box,label,x){if(!x)return;box.appendChild(el("div","lbl",label+": HTTP "+x.http+" · "+x.reason+(x.error_name?" ("+x.error_name+")":"")+(x.explanation?" · "+x.explanation:"")+(x.request_id?" · request_id "+x.request_id:"")+(x.project?" · layihə "+x.project:"")))}
 $("oaidiag").addEventListener("click",function(){
 var box=$("oaires");box.textContent="yoxlanır...";
 api("/api/diagnostics/openai-audio",{method:"POST"},"OpenAI səs diaqnostikası").then(function(r){
@@ -344,7 +344,8 @@ box.textContent="";var d=r.data||{},k=d.key||{},v=OAV[d.verdict]||[d.verdict||"?
 if(!r.ok){box.appendChild(pill("XƏTA","bad"));box.appendChild(el("div","lbl",errText(r)));return}
 box.appendChild(pill(v[0],v[1]));
 box.appendChild(el("div","lbl","Nə etməli: "+(d.action||"")));
-box.appendChild(el("div","lbl","açar: "+(OAKEY[k.shape]||k.shape)+(k.last4?" · son 4 simvol: …"+k.last4+" (OpenAI → API keys siyahısı ilə müqayisə et)":"")+(k.cleaned?" · ətrafında boşluq/dırnaq var idi (avtomatik təmizlənir)":"")+(k.has_inner_space?" · açarın içində boşluq var: yanlış yapışdırılıb":"")));
+(d.problems||[]).forEach(function(x){box.appendChild(el("div","lbl","problem: "+x))});
+box.appendChild(el("div","lbl","açar: "+(OAKEY[k.shape]||k.shape)+(k.last4?" · son 4 simvol: …"+k.last4+" (OpenAI → API keys siyahısı ilə müqayisə et)":"")+(k.cleaned?" · əlavə simvollar var idi (boşluq/dırnaq/sətir sonu avtomatik atılır)":"")+(k.usable===false?" · İSTİFADƏYƏ YARARSIZ":"")+(k.has_inner_space?" · açarın içində boşluq var: yanlış yapışdırılıb":"")));
 if(d.header)box.appendChild(el("div","lbl","Authorization başlığı: "+d.header.scheme+(d.header.well_formed?" · forma düzgündür":" · forma GÖZLƏNİLƏN DEYİL")));
 oaLine(box,"Autentifikasiya (GET /v1/models)",d.auth);
 oaLine(box,"Səs tanıma (POST /v1/audio/transcriptions, whisper-1, az)",d.stt);
