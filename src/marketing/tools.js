@@ -83,7 +83,7 @@ export function registerMarketingTools(registry, deps = {}) {
         input,
         schema: PLAN_SCHEMA,
         req: { public: { platforms, duration_sec: input.duration_sec || 25 } },
-        maxTokens: 2500,
+        maxTokens: 1500, // qısa plan (PLAN_LIMITS): əvvəl 2500
         template: () => templatePlan({ brand, input, platforms, includeCardNote: requestsDigitalCard(input) && brand.id === "qr_menu" }),
       });
       const plan = r.content;

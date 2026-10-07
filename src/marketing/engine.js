@@ -46,9 +46,17 @@ export const CALENDAR_SCHEMA = {
 const NOTICE_TEMPLATE = "Şablon qaralamadır: AI ilə yazılmayıb və sizin real məlumatlarınıza görə fərdiləşdirilməyib. Dərc etməzdən əvvəl mətni yoxlayın və öz məlumatlarınızla tamamlayın.";
 const NOTICE_AI = "AI qaralamasıdır. Dərc olunmayıb. Faktları (qiymət, endirim, nəticə) və linki dərc etməzdən əvvəl özünüz yoxlayın.";
 
+// Plan üçün qısa çıxış limitləri: model daha az token yazır (PLAN_SCHEMA xarici forması dəyişmir, yalnız POST.plan kəsir)
+export const PLAN_LIMITS = { segments: 4, script: 5, shots: 6, ab_ideas: 2, hashtags: 12, caption: 600 };
+const KIND_RULES = {
+  plan: "JSON shape (no other keys): {\"target_audience\":{\"primary\":str,\"segments\":[str, at most " + PLAN_LIMITS.segments + "]},\"hook\":str,\"script\":[2-" + PLAN_LIMITS.script + " items {\"timing\":str,\"visual\":str,\"voiceover\":str}],\"shot_list\":[2-" + PLAN_LIMITS.shots + " items {\"shot\":int,\"description\":str,\"duration_sec\":number}],\"caption\":str at most " + PLAN_LIMITS.caption + " chars,\"cta\":str,\"hashtags\":[at most " + PLAN_LIMITS.hashtags + "],\"ab_ideas\":[1-" + PLAN_LIMITS.ab_ideas + " items {\"variable\":str,\"variant_a\":str,\"variant_b\":str,\"measure\":str}],\"youtube_title\":str at most 100 chars}. Every text field is one short sentence.",
+};
+
 export function systemPrompt(kind, brand, allowCard) {
   return [
     "You are a careful Azerbaijani-language marketing copywriter. Return ONLY a JSON object that matches the given schema. Task: " + kind + ".",
+    "Be concise: short sentences, no explanations, no extra keys.",
+    KIND_RULES[kind] || "",
     "Write in Azerbaijani. Use only the verified facts in the brand block and the owner_input. Never invent prices, discounts, stock, results, awards, statistics or customer claims.",
     "Links: only the URLs listed in brand.allowed_links; never any other URL.",
     allowCard || !brand.forbidden_label ? "" : "Do NOT mention or bundle: " + brand.forbidden_label + ".",
@@ -111,10 +119,14 @@ function allProblems(obj, ctx) {
 const POST = {
   plan(res, ctx) {
     const clean = mapStrings(res, (s) => stripUnsafe(s, { allowedLinks: ctx.links }));
+    clean.target_audience.segments = clean.target_audience.segments.slice(0, PLAN_LIMITS.segments);
+    clean.script = clean.script.slice(0, PLAN_LIMITS.script);
+    clean.shot_list = clean.shot_list.slice(0, PLAN_LIMITS.shots);
+    clean.ab_ideas = clean.ab_ideas.slice(0, PLAN_LIMITS.ab_ideas);
     const problems = allProblems(clean, ctx);
     if (clean.caption.length > LIMITS.instagram.caption || clean.youtube_title.length > LIMITS.youtube.title) problems.push("too_long");
     if (clean.hook.length < 3 || clean.caption.length < 3) problems.push("empty_after_clean");
-    clean.hashtags = normalizeHashtags(clean.hashtags, LIMITS.instagram.hashtags);
+    clean.hashtags = normalizeHashtags(clean.hashtags, PLAN_LIMITS.hashtags);
     if (clean.hashtags.length < 1) problems.push("no_hashtags");
     if (clean.script.length < 2 || clean.shot_list.length < 2) problems.push("incomplete");
     return problems.length ? { ok: false, problems } : { ok: true, content: clean };
