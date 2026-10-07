@@ -10,6 +10,7 @@
 //  4. Claude yalnız mətn hazırlayır (planner.js). Bu faylda model çağırışı yoxdur.
 
 import { isValidId } from "../state/store.js";
+import { SYSTEM_RECOVERY_ACTOR } from "../approval/center.js";
 import { normalizePublishRequest, summarizeRequest, readinessIssues } from "./request.js";
 import { payloadHash } from "./canon.js";
 import { SocialError, toSocialError } from "./errors.js";
@@ -268,13 +269,15 @@ export function createSocialFlow({ env, store, approvals, audit = null, hub, coo
     const out = [];
     for (const id of ids) {
       let j = await advance(id, { deadlineMs });
+      let keep = false;
       if (!j) {
         // təsdiq alınıb, amma iş yaranmayıb (proses dayanıb): təsdiq və hash yenidən yoxlanılır
-        const s = await startJob(id);
+        const s = await startJob(id, { actor: SYSTEM_RECOVERY_ACTOR });
         j = s.ok ? await advance(id, { deadlineMs }) : null;
+        keep = !s.ok && s.error === "job_creating"; // başqa nüsxə yaradır: indeks silinmir, növbəti tick-də yenidən baxılır
       }
       if (j) out.push({ id: j.id, status: j.status });
-      else await idxDel(id);
+      else if (!keep) await idxDel(id);
     }
     try {
       await hub.adapter("instagram").maybeRefresh();

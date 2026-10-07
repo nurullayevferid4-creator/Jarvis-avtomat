@@ -621,9 +621,18 @@ test("collection.add: əlavə, artıq üzv atlanır, olmayan kolleksiya xətası
   assert.deepEqual(again.out.output.added, []);
   assert.equal(w.fake.ops().filter((o) => o === "AddToCollection").length, n, "artıq üzv olana mutasiya göndərilmir");
 
-  const bad = await proposeAndApprove(w, "shopify.collection.add", { collectionId: "gid://shopify/Collection/999", productIds: [p.id] });
-  assert.equal(bad.out.ok, false);
-  assert.equal(bad.out.error.code, "VALIDATION_ERROR");
+  assert.equal((await propose(w, "shopify.collection.add", { collectionId: "gid://shopify/Collection/999", productIds: [p.id] })).status, "invalid_input", "olmayan kolleksiya təsdiq qeydi açılmadan rədd edilir");
+  assert.equal((await propose(w, "shopify.collection.add", { collectionId: col, productIds: [p.id], collection_title: "Yanlış ad" })).status, "invalid_input", "verilən ad real adla uyğun gəlmir");
+  assert.ok(rec.payload.input.collection_title, "real ad payload-a yazılır");
+  assert.ok(rec.content.includes(rec.payload.input.collection_title), "təsdiq mətni real kolleksiya adını göstərir");
+  // təsdiqdən sonra kolleksiya avtomatikə çevrilsə və ya adı dəyişsə heç nə yazılmır
+  const w3 = await seeded();
+  const r3 = await run(w3.w, "shopify.collection.add", { collectionId: col, productIds: [w3.p.id] });
+  w3.w.fake.st.collections.get(col).title = "Başqa ad";
+  const o3 = await w3.w.runner.approveAndExecute(r3.approval_id, { actor: UI });
+  assert.equal(o3.ok, false);
+  assert.equal(o3.error.code, "CONFLICT");
+  assert.equal(w3.w.fake.ops().filter((o) => o === "AddToCollection").length, 0, "ad uyğunsuzluğunda mutasiya göndərilmir");
   assert.equal((await propose(w, "shopify.collection.add", { collectionId: col, productIds: [] })).status, "invalid_input");
   assert.equal((await propose(w, "shopify.collection.add", { collectionId: col, productIds: Array.from({ length: 21 }, (_, i) => String(i + 1)) })).status, "invalid_input");
 });

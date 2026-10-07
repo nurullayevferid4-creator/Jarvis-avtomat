@@ -184,7 +184,9 @@ api("/api/approvals/"+a.id,{method:"POST",headers:{"content-type":"application/j
 var d=r.data||{};
 if(!r.ok)setState("xəta: "+errText(r));
 else if(decision!=="approve")setState("rədd edildi");
-else setState(d.status?("nəticə: "+(LABEL[d.status]||d.status)):"təsdiq verildi");
+else if(d.status)setState("icra nəticəsi: "+(LABEL[d.status]||d.status)+(d.error&&d.error.message?" · "+d.error.message:""));
+else if(d.job)setState("paylaşım işi: "+(LABEL[String(d.job.status).toLowerCase()]||d.job.status));
+else setState("təsdiq verildi, icra statusu hələ bilinmir: siyahıya bax");
 loadApprovals();
 });
 }

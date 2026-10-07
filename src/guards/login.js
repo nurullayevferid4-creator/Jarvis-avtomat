@@ -1,3 +1,4 @@
+import { createCoordinator } from "../coord/coordinator.js";
 // Parol qorunması: sabit müddətli müqayisə + səhv cəhd limiti.
 // Cəhd sayı KV varsa orada (JARVIS_KV), yoxdursa yaddaşda saxlanılır.
 // Qeyd: yaddaş variantı zəifdir (Worker yenidən başlayanda sıfırlanır), KV variantı
@@ -38,7 +39,18 @@ export function readPasscode(req) {
   return req.headers.get("x-passcode");
 }
 
+// Durable Object bağlıdırsa sayğac ATOMİKDİR (paralel səhv cəhdləri hamısı sayılır).
+// Koordinator əlçatmazdırsa sahib bloklanmasın deyə KV/yaddaş sayğacına düşür (daha zəif, amma açıqdır).
+function coordFor(env) {
+  return env && env.COORD && typeof env.COORD.idFromName === "function" ? createCoordinator(env) : null;
+}
+const ckey = (ip) => "login:" + String(ip).slice(0, 60).replace(/[^a-z0-9_.:-]/gi, "_");
+
 async function getCount(env, ip) {
+  const c = coordFor(env);
+  if (c) {
+    try { return await c.count(ckey(ip)); } catch (e) { /* ehtiyat sayğaca düş */ }
+  }
   if (env.JARVIS_KV) {
     const v = await env.JARVIS_KV.get("login:" + ip);
     return parseInt(v, 10) || 0;
@@ -56,7 +68,15 @@ export async function isBlocked(env, ip, limits) {
   return (await getCount(env, ip)) >= limits.loginMaxFailures;
 }
 
+export async function failureCount(env, ip) {
+  return await getCount(env, ip);
+}
+
 export async function recordFailure(env, ip, limits) {
+  const c = coordFor(env);
+  if (c) {
+    try { await c.incr(ckey(ip), { ttlMs: limits.loginWindowSeconds * 1000 }); return; } catch (e) { /* ehtiyat sayğaca düş */ }
+  }
   const count = (await getCount(env, ip)) + 1;
   if (env.JARVIS_KV) {
     await env.JARVIS_KV.put("login:" + ip, String(count), { expirationTtl: limits.loginWindowSeconds });
@@ -66,6 +86,10 @@ export async function recordFailure(env, ip, limits) {
 }
 
 export async function clearFailures(env, ip) {
+  const c = coordFor(env);
+  if (c) {
+    try { await c.forget(ckey(ip)); } catch (e) { /* ehtiyat sayğac aşağıda təmizlənir */ }
+  }
   if (env.JARVIS_KV) await env.JARVIS_KV.delete("login:" + ip);
   else mem.delete(ip);
 }

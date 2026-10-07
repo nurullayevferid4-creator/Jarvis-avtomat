@@ -232,3 +232,17 @@ test("TOKEN_ENC_KEY olmadan token yazılmır (açıq mətnlə saxlanmır) və OA
   const { beginOAuth } = await import("../src/social/oauth.js");
   await assert.rejects(() => beginOAuth({ hub: w.hub, store: w.store, env: w.env, platform: "instagram" }), /TOKEN_ENC_KEY/);
 });
+
+test("cron bərpası Telegram mənşəli (origin.chat_id) təsdiqlənmiş qeydi də icra edir; sistem aktoru qərar verə bilməz", async () => {
+  const { SYSTEM_RECOVERY_ACTOR } = await import("../src/approval/center.js");
+  const w = world();
+  const calls = installSocialFetch(tgOk);
+  const origin = { channel: "telegram", chat_id: "1001" };
+  const rec = await w.flow.createDraft(TG_INPUT, { source: "test", origin });
+  assert.equal((await w.approvals.decide(rec.id, { decision: "approve", actor: SYSTEM_RECOVERY_ACTOR })).ok, false, "sistem aktoru təsdiq verə bilməz");
+  assert.equal((await w.approvals.decide(rec.id, { decision: "approve", actor: origin })).ok, true);
+  await w.store.putRaw("socialidx", { ids: [rec.id] });
+  const out = await w.flow.tick();
+  assert.deepEqual(out, [{ id: rec.id, status: "done" }]);
+  assert.equal(channelPosts(calls).length, 1);
+});

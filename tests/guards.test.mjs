@@ -104,3 +104,37 @@ test("PASSCODE təyin edilməyibsə 500 qaytarır (köhnə davranış qorunur)",
   const r = await worker.fetch(new Request("https://x.dev/api/jobs"), { ANTHROPIC_API_KEY: "a", OPENAI_API_KEY: "o" });
   assert.equal(r.status, 500);
 });
+
+// ---- Atomik giriş sayğacı (Durable Object) ----
+import { JarvisCoordinator } from "../src/coord/coordinator.js";
+import { failureCount } from "../src/guards/login.js";
+
+function fakeCoordNs({ down = false } = {}) {
+  const map = new Map();
+  const storage = { get: async (k) => { await new Promise((r) => setTimeout(r, 1)); return map.get(k); }, put: async (k, v) => { await new Promise((r) => setTimeout(r, 1)); map.set(k, v); }, delete: async (k) => { map.delete(k); } };
+  const obj = new JarvisCoordinator({ storage });
+  let chain = Promise.resolve(); // DO giriş qapısı kimi: sorğular ardıcıl
+  const fetch = (url, init) => { if (down) return Promise.reject(new Error("down")); const run = chain.then(() => obj.fetch(new Request(url, init))); chain = run.catch(() => {}); return run; };
+  return { idFromName: (n) => n, get: () => ({ fetch }) };
+}
+
+test("giriş limiti: 50 paralel səhv cəhd (DO ilə) hamısı sayılır və IP bloklanır", async () => {
+  const env = { COORD: fakeCoordNs() };
+  const limits = { loginMaxFailures: 5, loginWindowSeconds: 900 };
+  await Promise.all(Array.from({ length: 50 }, () => recordFailure(env, "9.9.1.1", limits)));
+  assert.equal(await failureCount(env, "9.9.1.1"), 50);
+  assert.equal(await isBlocked(env, "9.9.1.1", limits), true);
+  assert.equal(await isBlocked(env, "9.9.1.2", limits), false, "başqa IP təsirlənmir");
+  await clearFailures(env, "9.9.1.1");
+  assert.equal(await failureCount(env, "9.9.1.1"), 0);
+});
+
+test("giriş limiti: koordinator əlçatmaz olsa sahib bloklanmır, yaddaş sayğacına düşür", async () => {
+  const env = { COORD: fakeCoordNs({ down: true }) };
+  const limits = { loginMaxFailures: 2, loginWindowSeconds: 900 };
+  _resetLoginMemoryForTests();
+  assert.equal(await isBlocked(env, "9.9.2.2", limits), false);
+  await recordFailure(env, "9.9.2.2", limits);
+  await recordFailure(env, "9.9.2.2", limits);
+  assert.equal(await isBlocked(env, "9.9.2.2", limits), true);
+});

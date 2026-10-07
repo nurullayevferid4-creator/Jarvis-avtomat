@@ -60,6 +60,7 @@ Kod: `src/leads/`. Qoşulma: `registerLeadTools(registry, deps)` (`src/leads/ind
 
 ## İnterfeys-yalnız və yoxlanmayanlar
 
+- **Real lead axtarışı yoxdur; `lead.research`-də `source_id` hələlik heç bir mənbə ilə işləmir** (həmişə «LeadSource qoşulmayıb» → `NOT_FOUND`, saxta nəticə yoxdur). Namizədlər `candidates` ilə verilir.
 - **Real lead axtarışı yoxdur.** `LeadSource` yalnız interfeysdir (`src/leads/sources.js`); `NotConfiguredLeadSource` və hazır siyahı üçün `StaticLeadSource` var. Veb/direktoriya axtarışı və ya scraping həyata keçirilməyib. Namizədlər hazır verilir (sahib, ChatGPT-nin araşdırması).
 - ICP siyahıları (`src/leads/icp.js`) sahibin məhsulları üçün **başlanğıc fərziyyədir**, ölçülmüş bazar məlumatı deyil. `deps.icp` ilə dəyişdirilir.
 - Bal formulu deterministikdir, amma proqnoz gücü yoxlanmayıb.

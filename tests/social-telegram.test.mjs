@@ -121,12 +121,16 @@ test("Bəli düyməsi → paylaşım bir dəfə, nəticə Telegram-a yazılır; 
 });
 const bodyParamsOf = (c) => new URLSearchParams(String(c.body));
 
-test("'Bəli' mətni yeganə gözləyən paylaşımı təsdiq edir; 'Xeyr' ləğv edir", async () => {
+test("'Bəli' mətni paylaşımı İCRA ETMİR (yalnız düymələr yenidən göndərilir); 'Xeyr' ləğv edir", async () => {
   const w = await ready();
   const calls = installSocialFetch(tgServer());
   await hook(w.env, msg({ caption: POST_TEXT, photo: [{ file_id: "S", file_size: 5 }, { file_id: "F1", file_size: 20 }] }));
   await hook(w.env, msg({ text: "Bəli" }));
-  assert.equal(publishCalls(calls).length, 1);
+  assert.equal(publishCalls(calls).length, 0, "mətnlə təsdiq paylaşmamalıdır");
+  assert.ok(sent(calls).some((s) => /Mətnlə təsdiq qəbul edilmir/.test(s.text)));
+  const [pend] = await w.approvals.list({ status: "pending" });
+  await hook(w.env, press("ap:" + pend.id + ":y"));
+  assert.equal(publishCalls(calls).length, 1, "düymə ilə paylaşılır");
   await hook(w.env, msg({ caption: POST_TEXT, photo: [{ file_id: "F1", file_size: 20 }] }));
   await hook(w.env, msg({ text: "Xeyr" }));
   assert.equal(publishCalls(calls).length, 1);

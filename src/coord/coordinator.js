@@ -42,6 +42,17 @@ export async function applyOp(storage, op, now) {
       await storage.put(op.key, { kind: "once", at: now, until, meta: op.meta ? String(op.meta).slice(0, 200) : undefined });
       return { ok: true, first: true, at: now };
     }
+    case "incr": {
+      // Pəncərəli sayğac: pəncərə ilk artımda başlayır və ttlMs sonra bitir. Atomikdir (DO bir açar üçün ardıcıl icra edir).
+      if (live && rec.kind === "counter") {
+        const count = (rec.count || 0) + 1;
+        await storage.put(op.key, { ...rec, count });
+        return { ok: true, count };
+      }
+      const ttl = Math.min(Math.max(Number(op.ttlMs) || 60000, 1000), 86400000);
+      await storage.put(op.key, { kind: "counter", count: 1, until: now + ttl });
+      return { ok: true, count: 1 };
+    }
     case "peek":
       return { ok: true, exists: !!live, record: live ? rec : null };
     case "forget": {
@@ -94,6 +105,15 @@ class Base {
   }
   async peek(key) {
     return await this.call({ op: "peek", key });
+  }
+  // Pəncərəli atomik sayğac: yeni dəyəri qaytarır
+  async incr(key, { ttlMs = 60000 } = {}) {
+    const r = await this.call({ op: "incr", key, ttlMs });
+    return r.count;
+  }
+  async count(key) {
+    const r = await this.peek(key);
+    return r.record && r.record.kind === "counter" ? r.record.count || 0 : 0;
   }
   async forget(key) {
     await this.call({ op: "forget", key });

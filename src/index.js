@@ -12,7 +12,7 @@ import { createRegistry } from "./adapters/registry.js";
 import { stt, tts } from "./adapters/openaiAudio.js";
 import { ClaudeOrchestrator } from "./orchestrator/ClaudeOrchestrator.js";
 import { buildContext } from "./app/context.js";
-import { safeEqual, readPasscode, isBlocked, recordFailure, clearFailures } from "./guards/login.js";
+import { safeEqual, readPasscode, failureCount, recordFailure, clearFailures } from "./guards/login.js";
 import { createDefaultToolRegistry } from "./tools/builtin.js";
 import { beginOAuth, finishOAuth, OAUTH_PLATFORMS } from "./social/oauth.js";
 import { publicJob } from "./media/jobs.js";
@@ -181,7 +181,8 @@ export default {
 
     const limits = getLimits(env);
     const ip = req.headers.get("cf-connecting-ip") || "unknown";
-    if (await isBlocked(env, ip, limits)) {
+    const priorFailures = await failureCount(env, ip);
+    if (priorFailures >= limits.loginMaxFailures) {
       return json(
         { error: "Çox sayda səhv parol cəhdi. Bir az sonra yenidən yoxla." },
         429,
@@ -192,7 +193,8 @@ export default {
       await recordFailure(env, ip, limits);
       return json({ error: "Parol səhvdir." }, 401);
     }
-    await clearFailures(env, ip);
+    // Hər sorğuda KV yazısı etməmək üçün yalnız əvvəl səhv cəhd olubsa təmizlənir
+    if (priorFailures > 0) await clearFailures(env, ip);
 
     const features = getFeatures(env);
     const { store, audit, approvals, knowledge } = buildContext(env);
@@ -257,6 +259,8 @@ export default {
       const body = await readJson(req);
       if (!body || typeof body.tool !== "string") return json({ error: "VALIDATION_ERROR", message: "tool adı lazımdır" }, 400);
       const c = buildContext(env);
+      // Təsdiq mərkəzi söndürülübsə təsdiq tələb edən alətlər açılmır (qeyd yığılıb heç vaxt baxılmasın)
+      if (!features.approvals && c.tools.list().some((t) => t.name === body.tool && t.requiresApproval)) return json({ error: "PERMISSION_ERROR", message: "Təsdiq mərkəzi söndürülüb (FEATURE_APPROVALS=0): bu alət istifadə edilə bilməz" }, 403);
       const r = await c.tools.run(body.tool, body.input && typeof body.input === "object" ? body.input : {}, { approvals: c.approvals, origin: UI_ACTOR, source: "api", permissions: OWNER_PERMISSIONS });
       const status = r.status === "done" ? 200 : r.status === "pending_approval" ? 202 : r.status === "not_found" ? 404 : r.status === "invalid_input" || r.status === "invalid_output" ? 400 : r.status === "denied" ? 403 : r.status === "timeout" ? 504 : 502;
       return json({ status: r.status, output: r.output, approval_id: r.approval_id, errors: r.errors, error: r.error ? String(r.error).slice(0, 300) : undefined, error_code: r.error_code }, status);

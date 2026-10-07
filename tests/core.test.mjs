@@ -242,3 +242,23 @@ test("reyestr: execute üçün describe məcburidir, təsdiq növü təkrarlana 
   reg.register({ ...base, name: "t.two", approval: { kind: "k2", describe: () => "c", execute: async () => ({}) } });
   assert.throws(() => reg.register({ ...base, name: "t.three", approval: { kind: "k2", describe: () => "c", execute: async () => ({}) } }), /artıq var/);
 });
+
+test("KV yazma: 429 (açar başına saniyəlik limit) gecikmə ilə təkrarlanır; digər xəta və 3 uğursuz cəhd atılır (saxta uğur yoxdur)", async () => {
+  const { createStore, _setKvSleepForTests } = await import("../src/state/store.js");
+  const slept = [];
+  _setKvSleepForTests(async (ms) => { slept.push(ms); });
+  try {
+    let n = 0;
+    const kv = { put: async () => { if (++n < 3) throw new Error("KV PUT failed: 429 Too Many Requests"); }, get: async () => null };
+    const store = createStore({ JARVIS_KV: kv });
+    await store.putDoc("approval", "1111111111111-abcdef", { a: 1 });
+    assert.equal(n, 3);
+    assert.equal(slept.length, 2);
+    const always = { put: async () => { throw new Error("KV PUT failed: 429 Too Many Requests"); } };
+    await assert.rejects(() => createStore({ JARVIS_KV: always }).putDoc("approval", "1111111111111-abcdef", {}), /429/);
+    const other = { put: async () => { throw new Error("boom"); } };
+    slept.length = 0;
+    await assert.rejects(() => createStore({ JARVIS_KV: other }).putDoc("approval", "1111111111111-abcdef", {}), /boom/);
+    assert.equal(slept.length, 0, "429 olmayan xəta təkrarlanmır");
+  } finally { _setKvSleepForTests(null); }
+});

@@ -29,6 +29,7 @@ export class ToolRegistry {
     this.audit = audit;
     this.approvals = approvals;
     this.sleep = sleep;
+    this.baseCtx = {}; // hər çağırışa qoşulan ortaq asılılıqlar (məs. knowledge); çağıran ctx üstün gəlir
     this.tools = new Map();
     this.kinds = new Map(); // təsdiq növü -> alət
   }
@@ -107,7 +108,8 @@ export class ToolRegistry {
 
   // Qaytarır: { ok, status, output?, errors?, error?, approval_id? }
   // status: done | not_found | invalid_input | denied | pending_approval | invalid_output | timeout | error
-  async run(name, input, ctx = {}) {
+  async run(name, input, callerCtx = {}) {
+    const ctx = { ...this.baseCtx, ...callerCtx };
     const tool = this.tools.get(name);
     if (!tool) return { ok: false, status: "not_found" };
 

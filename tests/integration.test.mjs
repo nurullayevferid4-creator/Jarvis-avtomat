@@ -113,3 +113,42 @@ test("ölü alət yoxdur: təsdiq tələb edən hər alətin real icra yolu var;
     if (t.permissions.some((p) => APPROVAL_ONLY_PERMISSIONS.includes(p))) assert.equal(t.requiresApproval, true, t.name + ": yazma icazəli alət təsdiqsiz");
   }
 });
+
+test("knowledge.add və knowledge.search alətləri /api/tools/run ilə həqiqətən işləyir (ölü alət deyil)", async () => {
+  installFetch(() => new Response("x", { status: 500 }));
+  const env = { JARVIS_KV: undefined };
+  const add = await call(env, "/api/tools/run", { method: "POST", body: { tool: "knowledge.add", input: { type: "fact", title: "Ətir qeydi", text: "Oud əsaslı ətir 50 ml qiyməti 120 manat" } } });
+  const aj = await add.json();
+  assert.equal(add.status, 200, JSON.stringify(aj).slice(0, 300));
+  const s = await call(env, "/api/tools/run", { method: "POST", body: { tool: "knowledge.search", input: { query: "oud ətir" } } });
+  const sj = await s.json();
+  assert.equal(s.status, 200, JSON.stringify(sj).slice(0, 300));
+  assert.ok(sj.output.items.length >= 1);
+});
+
+test("Telegram çatından gələn social.publish alət çağırışı notify_chat və origin ilə qeyd açır", async () => {
+  const { ClaudeOrchestrator } = await import("../src/orchestrator/ClaudeOrchestrator.js");
+  const { buildContext } = await import("../src/app/context.js");
+  const { OWNER_PERMISSIONS } = await import("../src/policy.js");
+  const plan = { mode: "tools", tool_calls: [{ tool: "social.publish", input: { platform: "telegram", caption: "Salam" } }] };
+  installFetch(standardHandler({ plan }));
+  const env = { ...baseEnv() };
+  const c = buildContext(env);
+  const { getLimits } = await import("../src/config.js");
+  const o = new ClaudeOrchestrator({ env, registry: (await import("../src/adapters/registry.js")).createRegistry(env), limits: getLimits(env), store: c.store, approvals: c.approvals, tools: c.tools });
+  const r = await o.handle("telegramda paylaş", { origin: { channel: "telegram", chat_id: "1001" } });
+  assert.equal(r.status, "pending_approval");
+  const rec = await c.approvals.get(r.approval_id);
+  assert.equal(rec.payload.notify_chat, "1001");
+  assert.equal(rec.origin.chat_id, "1001");
+  assert.ok(OWNER_PERMISSIONS.length);
+});
+
+test("FEATURE_APPROVALS=0: təsdiq tələb edən alət açılmır (qeyd yığılmır), oxuma aləti işləyir", async () => {
+  installFetch(() => new Response("x", { status: 500 }));
+  const env = { FEATURE_APPROVALS: "0" };
+  const r = await call(env, "/api/tools/run", { method: "POST", body: { tool: "social.publish", input: { platform: "telegram", caption: "Salam" } } });
+  assert.equal(r.status, 403);
+  const ok = await call(env, "/api/tools/run", { method: "POST", body: { tool: "marketing.hashtags", input: { brand: "qr_menu", platform: "instagram" } } });
+  assert.equal(ok.status, 200);
+});

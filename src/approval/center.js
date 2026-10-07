@@ -29,8 +29,13 @@ async function sha256Hex(text) {
 }
 
 // Kim icazə verə bilər: origin yoxdursa hər autentifikasiyalı aktor; origin varsa yalnız həmin çat və ya UI sahibi.
-export function actorAllowed(rec, actor) {
+// SİSTEM aktoru (cron bərpası) yalnız ARTIQ təsdiqlənmiş qeydin icrasını davam etdirə bilər (verifyApproved);
+// o heç vaxt qərar verə bilməz (decide) və yalnız kodda yaradılır, sorğudan gəlmir.
+export const SYSTEM_RECOVERY_ACTOR = Object.freeze({ channel: "system", recovery: true });
+
+export function actorAllowed(rec, actor, { allowSystem = false } = {}) {
   const o = rec.origin;
+  if (allowSystem && actor && actor.channel === "system" && actor.recovery === true) return true;
   if (!o || !o.chat_id) return true;
   if (!actor) return false;
   if (actor.channel === "ui") return true;
@@ -117,7 +122,7 @@ export class ApprovalCenter {
   async decide(id, { decision, content, actor } = {}) {
     const rec = await this.get(id);
     if (!rec) return { ok: false, error: "not_found" };
-    if (!actorAllowed(rec, actor)) {
+    if ((actor && actor.channel === "system") || !actorAllowed(rec, actor)) {
       await this._log("approval.denied_actor", { id, decision, actor: cleanActor(actor) });
       return { ok: false, error: "forbidden_origin" };
     }
@@ -168,7 +173,7 @@ export class ApprovalCenter {
     if (!rec) return { ok: false, error: "not_found" };
     if (!rec.kind) return { ok: false, error: "not_executable", record: rec };
     if (kind && rec.kind !== kind) return { ok: false, error: "wrong_kind", record: rec };
-    if (!actorAllowed(rec, actor)) {
+    if (!actorAllowed(rec, actor, { allowSystem: true })) {
       await this._log("approval.denied_actor", { id, op: "execute", actor: cleanActor(actor) });
       return { ok: false, error: "forbidden_origin" };
     }

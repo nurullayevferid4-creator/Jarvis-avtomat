@@ -28,8 +28,9 @@ const PLATFORM_WORDS = {
 };
 const POST_WORDS = /paylaş|post et|yayımla|yayimla|yerləşdir|yerlesdir|publish|share|\bpost\b|yüklə/i;
 const EXT_TYPE = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", mp4: "video/mp4", mov: "video/quicktime" };
-// Mətnlə təsdiq yalnız bu dəqiq sözlərlə və son 15 dəqiqədə hazırlanmış TƏK qaralama üçün keçərlidir.
-// Qalan hallarda düymədən istifadə olunur (düymə konkret qeydə bağlıdır).
+// Mətn «Bəli» artıq paylaşımı İCRA ETMİR: təsdiq yalnız konkret qeydə bağlı düymə ilə verilir (başqa mövzuda yazılmış
+// «hə» görünməyən qaralamanı təsdiqləməsin). Mətnlə «Xeyr» təhlükəsiz tərəfdir və rədd edir.
+// Mətn «Bəli» yazılarsa son 15 dəqiqədəki TƏK qaralama xülasəsi və düymələr yenidən göndərilir.
 const TEXT_YES = new Set(["bəli", "beli", "hə", "he", "yes", "təsdiq edirəm", "paylaş"]);
 const TEXT_APPROVAL_WINDOW_MS = 15 * 60 * 1000;
 const TERMINAL_JOB = new Set(["done", "failed", "unknown", "partial"]);
@@ -291,8 +292,10 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
     if (isYes || isNo) {
       const pend = (await pendingFor(chatId)).filter((a) => Date.parse(a.ts) > Date.now() - TEXT_APPROVAL_WINDOW_MS);
       if (pend.length === 1) {
-        if (isYes) await approveAndRun(pend[0].id, chatId);
-        else await rejectIt(pend[0].id, chatId);
+        if (isYes) {
+          const a = pend[0];
+          await say(chatId, a.content + "\n\nMətnlə təsdiq qəbul edilmir. Paylaşmaq üçün aşağıdakı düyməyə bas:", { reply_markup: { inline_keyboard: [[{ text: "✅ Bəli, paylaş", callback_data: "ap:" + a.id + ":y" }, { text: "❌ Xeyr", callback_data: "ap:" + a.id + ":n" }]] } });
+        } else await rejectIt(pend[0].id, chatId);
         return { handled: "ok" };
       }
       if (pend.length > 1) {

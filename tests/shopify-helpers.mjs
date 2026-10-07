@@ -100,6 +100,10 @@ export function createFakeShopify(opts = {}) {
       }
       case "ListLocations": return { locations: { nodes: st.locations } };
       case "ListCollections": return { collections: { nodes: [...st.collections.values()].map((c) => ({ id: c.id, title: c.title, handle: c.handle, productsCount: { count: c.products.size } })) } };
+      case "CollectionInfo": {
+        const c = st.collections.get(v.id);
+        return { collection: c ? { id: c.id, title: c.title, ruleSet: c.ruleSet || null } : null };
+      }
       case "ProductCollections": {
         const p = st.products.get(v.id);
         if (!p) return { product: null };

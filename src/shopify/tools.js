@@ -15,7 +15,7 @@ import { assertNoUserErrors } from "./client.js";
 import { shopifyWebhookUri } from "./config.js";
 import {
   M_COLLECTION_ADD, M_INVENTORY_ACTIVATE, M_INVENTORY_SET, M_PRODUCT_CREATE, M_PRODUCT_UPDATE, M_VARIANTS_CREATE, M_VARIANTS_UPDATE,
-  Q_COLLECTIONS, Q_INVENTORY, Q_LOCATIONS, Q_ORDER, Q_ORDERS, Q_PRODUCTS, Q_PRODUCT_COLLECTIONS, Q_WEBHOOKS,
+  Q_COLLECTIONS, Q_COLLECTION_INFO, Q_INVENTORY, Q_LOCATIONS, Q_ORDER, Q_ORDERS, Q_PRODUCTS, Q_PRODUCT_COLLECTIONS, Q_WEBHOOKS,
 } from "./gql.js";
 import { assertShopCurrency, centsOf, findDuplicates, getInventoryLevel, getProduct, getShopInfo, sameCents, toGid } from "./ops.js";
 import { cleanLine, htmlToText, LIMITS, normalizeDescription, normalizeTags, parseMoney, pickDraft, prepareProduct } from "./prepare.js";
@@ -111,8 +111,9 @@ function describeCreate(payload) {
   if (d.tags && d.tags.length) lines.push("Etiketlər: " + d.tags.join(", "));
   if (d.productType) lines.push("Növ: " + d.productType);
   if (d.vendor) lines.push("Satıcı: " + d.vendor);
-  lines.push("Təsvir: " + htmlToText(d.descriptionHtml).length + " simvol");
+  lines.push("Təsvir (" + htmlToText(d.descriptionHtml).length + " simvol): " + q(htmlToText(d.descriptionHtml), 400));
   lines.push("SEO başlıq: " + q(d.seo && d.seo.title, 70));
+  if (d.seo && d.seo.description) lines.push("SEO təsvir: " + q(d.seo.description, 170));
   return lines.join("\n");
 }
 
@@ -649,11 +650,16 @@ export function registerShopifyTools(registry, deps) {
     approval: {
       kind: "shopify.collection.add",
       describe: describeCollection,
-      build(input) {
+      async build(input) {
         if (!input.productIds.length) bad("Məhsul siyahısı boşdur");
         const ids = [...new Set(input.productIds.map((x) => toGid("product", x)))];
         const out = { collectionId: toGid("collection", input.collectionId), productIds: ids };
-        if (input.collection_title) out.collection_title = input.collection_title;
+        // Kolleksiyanın REAL adı Shopify-dan oxunur və təsdiq mətnində göstərilir (istifadəçi mətninə etibar edilmir)
+        const info = await client.query(Q_COLLECTION_INFO, { id: out.collectionId });
+        if (!info.collection) bad("Kolleksiya tapılmadı: " + out.collectionId);
+        if (info.collection.ruleSet) bad("Bu avtomatik (qaydalı) kolleksiyadır, əl ilə məhsul əlavə edilə bilməz");
+        if (input.collection_title && input.collection_title !== info.collection.title) bad("Verilən kolleksiya adı real adla uyğun gəlmir: real ad «" + info.collection.title + "»");
+        out.collection_title = info.collection.title;
         const payload = { input: out };
         return { content: describeCollection(payload).slice(0, 4000), payload };
       },
@@ -663,6 +669,11 @@ export function registerShopifyTools(registry, deps) {
           if (!d.product) throw new AppError("NOT_FOUND", "Məhsul tapılmadı: " + pid, { source: "shopify" });
           return ((d.product.collections && d.product.collections.nodes) || []).some((c) => c.id === input.collectionId);
         };
+        // Yazmadan ƏVVƏL: kolleksiya hələ təsdiqdəki kolleksiyadır (ad dəyişibsə və ya avtomatikə çevrilibsə heç nə yazılmır)
+        const info = await client.query(Q_COLLECTION_INFO, { id: input.collectionId });
+        if (!info.collection) throw new AppError("NOT_FOUND", "Kolleksiya tapılmadı", { source: "shopify" });
+        if (info.collection.ruleSet) throw mismatch("Kolleksiya avtomatikdir, heç nə yazılmadı");
+        if (input.collection_title && info.collection.title !== input.collection_title) throw mismatch("Kolleksiyanın adı təsdiqdəkindən fərqlidir, heç nə yazılmadı", info.collection.title);
         const toAdd = [];
         for (const pid of input.productIds) if (!(await member(pid))) toAdd.push(pid);
         if (toAdd.length) {

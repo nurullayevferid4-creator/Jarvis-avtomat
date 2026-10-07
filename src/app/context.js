@@ -34,6 +34,7 @@ export function buildContext(env, { fetchImpl } = {}) {
   const llm = providers.asLlm();
 
   const tools = createDefaultToolRegistry({ audit, approvals });
+  tools.baseCtx = { knowledge };
   const shopify = createShopify({ env, store, audit, coord, fetchImpl });
   registerShopifyTools(tools, { client: shopify.client, vault: shopify.vault, audit, env });
   const library = createMediaLibrary({ media: hub.media, store, audit });

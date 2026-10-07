@@ -288,6 +288,23 @@ test("silmə: media.delete təsdiq tələb edir, təsdiqsiz fayl qalır, təsdiq
   assert.equal((await w.runner.execute(r.approval_id, { actor: { channel: "ui" } })).status, "already_executed");
 });
 
+test("silmə: təsdiq mətni real fayl məlumatını göstərir (istifadəçi etiketi yox); olmayan media qeyd açmır; fayl dəyişsə silinmir", async () => {
+  const w = world();
+  const v = await up(w, buildJpeg(), "image/jpeg", "real-ad.jpg");
+  const r = await w.tools.run("media.delete", { media_id: v.id, label: "YALAN ETİKET" }, { permissions: OWNER_PERMISSIONS, approvals: w.approvals });
+  const rec = await w.approvals.get(r.approval_id);
+  assert.ok(!rec.content.includes("YALAN ETİKET"));
+  assert.ok(rec.content.includes("real-ad.jpg") && rec.content.includes(v.id));
+  assert.equal((await w.tools.run("media.delete", { media_id: "a".repeat(24) }, { permissions: OWNER_PERMISSIONS, approvals: w.approvals })).status, "invalid_input");
+  // təsdiqdən sonra fayl başqası ilə əvəzlənsə (kitabxana qeydi dəyişsə) silinmir
+  const doc = await w.library.get(v.id);
+  await w.store.putRaw("mediameta:" + v.id, { ...doc, size: doc.size + 5000 });
+  const ex = await w.runner.approveAndExecute(r.approval_id, { actor: { channel: "ui" } });
+  assert.equal(ex.ok, false);
+  assert.equal(ex.error.code, "CONFLICT");
+  assert.ok(await w.media.size(v.id), "bayt silinməməlidir");
+});
+
 test("saxlama siyasəti: törəmə fayl 14 gündən sonra təmizlənir, sahibin yüklədiyinə toxunulmur", async () => {
   const w = world({ processor: fakeProcessor() });
   const v = await up(w, buildMp4({ width: 640, height: 360 }), "video/mp4");

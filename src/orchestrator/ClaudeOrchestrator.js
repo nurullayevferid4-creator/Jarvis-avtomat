@@ -129,7 +129,7 @@ export class ClaudeOrchestrator {
       const input = call && call.input && typeof call.input === "object" ? call.input : {};
       let r;
       try {
-        r = await this.tools.run(name, input, { approvals: this.approvals, origin, source: "chat", permissions: OWNER_PERMISSIONS });
+        r = await this.tools.run(name, input, { approvals: this.approvals, origin, source: "chat", permissions: OWNER_PERMISSIONS, notifyChat: origin && origin.channel === "telegram" && origin.chat_id !== undefined ? String(origin.chat_id) : undefined });
       } catch (e) {
         r = { ok: false, status: "error", error: publicError(e, name).message };
       }
@@ -176,7 +176,7 @@ export class ClaudeOrchestrator {
       if (gate.save) await this.store.save(state);
       // Söhbətdə "hə/yox" deyiləndə təsdiq mərkəzindəki qeyd də bağlanır
       if (this.approvals && pendingBefore && pendingBefore.approval_id && gate.decision) {
-        try { await this.approvals.decide(pendingBefore.approval_id, { decision: gate.decision === "approved" ? "approve" : "reject" }); } catch (e) { /* əsas axın pozulmasın */ }
+        try { await this.approvals.decide(pendingBefore.approval_id, { decision: gate.decision === "approved" ? "approve" : "reject", actor: origin }); } catch (e) { /* əsas axın pozulmasın */ }
       }
       return gate.response;
     }
@@ -263,7 +263,7 @@ export class ClaudeOrchestrator {
       spoken += " «" + plan.external_action + "» üçün təsdiq lazımdır. İcra edim? Hə və ya yox de.";
       if (this.approvals) {
         try {
-          const ap = await this.approvals.create({ action: plan.external_action, content: screen.slice(0, 4000), risk: "medium", source: "orchestrator" });
+          const ap = await this.approvals.create({ action: plan.external_action, content: screen.slice(0, 4000), risk: "medium", source: "orchestrator", origin });
           approvalId = ap.id;
         } catch (e) { /* qeyd açılmasa da söhbətdəki təsdiq qapısı işləyir */ }
       }

@@ -85,5 +85,9 @@ CSP hər sorğuda yeni nonce ilə verilir (`script-src 'nonce-…'`, `unsafe-inl
 - Durable Object çox-məntəqəli davranışı yalnız lokal workerd-də (bir nüsxə) yoxlanıb; Cloudflare-də real deploydan sonra `docs/SMOKE.md` ilə təkrar yoxlanmalıdır.
 - Video emalı Worker-də deyil, sahibin öz serverindəki ffmpeg xidmətindədir (`docs/VIDEO.md`); xidmət olmadan video "emal olundu" deyilmir, redaktə tələb edən iş `FAILED` olur (plan göstərilir).
 - Platforma video qaydaları (müddət, tərəflər nisbəti) rəsmi sənədlə təsdiqlənməmiş **tövsiyələrdir**; faktiki həddlər (ölçü, MIME) kodda sərtdir.
-- Telegram-da mətnlə təsdiq yalnız `Bəli/hə/yes/təsdiq edirəm/paylaş` sözləri ilə, son 15 dəqiqədə hazırlanmış TƏK qaralama üçün keçərlidir; digər hallarda konkret qeydə bağlı düymə lazımdır.
-- Parol limiti KV ilə də tam dəqiq deyil; Cloudflare Rate Limiting qaydası əlavə etmək məsləhətdir.
+- Telegram-da mətn «Bəli/hə» **icra etmir**: bot xülasəni düymələrlə yenidən göndərir, paylaşım yalnız konkret qeydə bağlı düymə ilə (həmin çatdan) təsdiqlənir. Mətn «Xeyr» təhlükəsiz tərəf olduğu üçün ləğv edir.
+- Parol limiti: `COORD` (Durable Object) bağlıdırsa sayğac atomikdir: 50 paralel səhv cəhd hamısı sayılır (testlə), real workerd-də 20 paralel cəhddən sonra IP bloklanır. Eyni anda gələn sorğular blokdan əvvəl yoxlandığı üçün qısa pəncərədə limitdən bir qədər çox cəhd yoxlana bilər (real workerd-də 5 əvəzinə 10), sonrakılar 429 alır. `COORD` yoxdursa və ya əlçatmazdırsa KV/yaddaş sayğacına düşür, o isə paralel sorğularla yan keçilə bilər; Cloudflare Rate Limiting qaydası əlavə etmək məsləhətdir.
+- KV eyni açara saniyədə ~1 yazı icazə verir (429). Yazma 429-da gecikmə ilə 3 dəfə təkrarlanır, yenə alınmasa xəta atılır (yazıldı kimi göstərilmir). Real Cloudflare-də yük altında yoxlanmayıb.
+- Shopify webhook-da `X-Shopify-Topic` başlığı imzaya daxil deyil (HMAC yalnız gövdəni əhatə edir). Webhook yalnız hadisə qeydi yazır və heç bir əməliyyat icra etmir; təkrar `webhook-id` ilə bloklanır.
+- Cron/`waitUntil` ilə icra edilən uzun platforma addımları Cloudflare-in vaxt limitinə düşə bilər; yarımçıq iş `unknown`/bərpa axını ilə idarə olunur, real yük altında yoxlanmayıb.
+- Söhbət (veb) gate-i («İcra edim? Hə/yox») tək-sahibli ümumi vəziyyətdir; real əməliyyatları yalnız strukturlu təsdiq qeydi icra edir, bu gate etmir.

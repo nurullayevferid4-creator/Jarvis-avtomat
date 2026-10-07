@@ -10,6 +10,8 @@ const pub = (d) => d && ({ id: d.id, kind: d.kind, content_type: d.content_type,
 
 export const MEDIA_PERMISSIONS = ["read.media", "write.media"];
 
+const mediaLabel = (d) => (String(d.kind) + " " + (d.filename ? "«" + String(d.filename).slice(0, 60) + "» " : "") + Math.max(1, Math.round((d.size || 0) / 1024)) + " KB").slice(0, 200);
+
 export function registerMediaTools(registry, { library, jobs, media }) {
   const base = { risk: "low", requiresApproval: false, timeoutMs: 20000 };
 
@@ -87,7 +89,7 @@ export function registerMediaTools(registry, { library, jobs, media }) {
   registry.register({
     name: "media.delete",
     description: "Yüklənmiş media faylını (bayt + metadata) SİLİR. Geri qaytarılmaz, həmişə təsdiq tələb edir.",
-    inputSchema: { type: "object", required: ["media_id", "label"], additionalProperties: false, properties: { media_id: idProp, label: { type: "string", maxLength: 200 } } },
+    inputSchema: { type: "object", required: ["media_id"], additionalProperties: false, properties: { media_id: idProp, label: { type: "string", maxLength: 200 } } }, // label verilsə də nəzərə alınmır: real ad sistemdən oxunur
     outputSchema: { type: "object", required: ["deleted"], properties: { deleted: { type: "boolean" }, media_id: { type: "string" } } },
     permissions: ["delete.data"],
     risk: "high",
@@ -96,11 +98,19 @@ export function registerMediaTools(registry, { library, jobs, media }) {
     auditEvent: "media.delete",
     approval: {
       kind: "media.delete",
-      // label təsdiq mətnində görünür; icra anında faylın real adı/növü ilə uyğunluğu yoxlanır
+      // Təsdiq mətnindəki təsvir istifadəçi mətni deyil, kitabxanadan oxunan REAL fayl məlumatıdır;
+      // icra anında fayl dəyişibsə (başqa fayl/ölçü) silinmir.
+      async build(input) {
+        const d = await library.get(input.media_id);
+        if (!d) throw new Error("Media tapılmadı: " + input.media_id);
+        const payload = { input: { media_id: input.media_id, label: mediaLabel(d) } };
+        return { content: ("Media SİLİNƏCƏK: id " + input.media_id + " (" + payload.input.label + "). Geri qaytarılmaz.").slice(0, 4000), payload };
+      },
       describe: (p) => "Media SİLİNƏCƏK: id " + p.input.media_id + " (" + p.input.label + "). Geri qaytarılmaz.",
       async execute(input) {
         const d = await library.get(input.media_id);
         if (!d) throw new AppError("NOT_FOUND", "Media artıq yoxdur");
+        if (mediaLabel(d) !== input.label) throw new AppError("CONFLICT", "Fayl təsdiqdən sonra dəyişib, silinmədi");
         const ok = await library.remove(input.media_id);
         const still = await media.size(input.media_id);
         if (!ok || still) throw new AppError("PROVIDER_ERROR", "Media silinmədi, yoxlayın");
