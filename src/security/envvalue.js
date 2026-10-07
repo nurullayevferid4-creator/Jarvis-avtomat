@@ -45,5 +45,6 @@ export function inspectOpenAIKey(env) {
   const k = openaiKey(env);
   if (!k) return { set: false, shape: "missing", cleaned: false };
   const shape = /^sk-admin-/.test(k) ? "admin" : /^sk-proj-/.test(k) ? "project" : /^sk-svcacct-/.test(k) ? "service_account" : /^sk-[A-Za-z0-9_-]+$/.test(k) ? "legacy" : "unexpected";
-  return { set: true, shape, cleaned: raw !== k, has_inner_space: /\s/.test(k) };
+  // Son 4 simvol: OpenAI Dashboard → API keys siyahısı açarları məhz belə göstərir («sk-...abcd»), uyğunluğu yoxlamaq üçün.
+  return { set: true, shape, cleaned: raw !== k, has_inner_space: /\s/.test(k), last4: k.length >= 24 ? k.slice(-4) : null };
 }
