@@ -67,6 +67,22 @@ export class TelegramAdapter extends BaseAdapter {
     return await this.api("sendMessage", { chat_id: chatId, text: String(text).slice(0, MAX_TEXT), disable_web_page_preview: true, ...extra });
   }
 
+  // Səsli mesaj (Telegram sənədi: sendVoice — OGG/OPUS). bytes: ArrayBuffer.
+  async sendVoice(chatId, bytes, { caption = "" } = {}) {
+    if (!bytes || !bytes.byteLength) throw new SocialError("media_error", "səs faylı boşdur", { platform: "telegram" });
+    if (bytes.byteLength > 20 * 1024 * 1024) throw new SocialError("media_error", "səs faylı çox böyükdür", { platform: "telegram" });
+    const fd = new FormData();
+    fd.set("chat_id", String(chatId));
+    if (caption) fd.set("caption", String(caption).slice(0, 1024));
+    fd.set("voice", new Blob([bytes], { type: "audio/ogg" }), "jarvis.ogg");
+    return await this.api("sendVoice", fd);
+  }
+
+  // "yazır…" / "səs yazır…" göstəricisi (uzun emal zamanı)
+  async sendChatAction(chatId, action = "typing") {
+    return await this.api("sendChatAction", { chat_id: chatId, action: action === "record_voice" ? "record_voice" : "typing" });
+  }
+
   async answerCallbackQuery(id, text = "") {
     return await this.api("answerCallbackQuery", { callback_query_id: id, text: String(text).slice(0, 190) });
   }

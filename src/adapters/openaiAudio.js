@@ -1,7 +1,8 @@
 // OpenAI-ın SƏS xidmətləri: danışığı mətnə çevirmək (STT) və cavabı səsləndirmək (TTS).
 // Bu, köməkçi AI deyil, səs interfeysidir, ona görə adapterdən ayrıdır.
-// Formatlar (whisper-1, tts-1) köhnə işləyən koddan olduğu kimi saxlanılıb;
-// rəsmi sənədlə təzədən yoxlanmayıb və real API ilə sınaqdan keçməyib.
+// Modellər və parametrlər OpenAI API sənədinə görədir (audio/transcriptions: model, file, language, prompt,
+// response_format=json, temperature; audio/speech: model, voice, input, instructions, response_format mp3|opus).
+// Real açarla sınaq: NOT TESTED — REAL CREDENTIAL REQUIRED.
 
 import { httpRequest } from "../guards/http.js";
 import { DEFAULTS } from "../config.js";
@@ -60,31 +61,68 @@ function audioError(label, status, body) {
   return err;
 }
 
-export async function stt(env, file, timeoutMs) {
-  const type = file.type || "";
-  const name = type.includes("mp4") || type.includes("m4a") || type.includes("aac") ? "audio.mp4" : type.includes("ogg") ? "audio.ogg" : type.includes("wav") ? "audio.wav" : "audio.webm";
-  const fd = new FormData();
-  fd.append("file", file, name);
-  fd.append("model", "whisper-1");
-  fd.append("language", "az");
-  const r = await httpRequest("https://api.openai.com/v1/audio/transcriptions", { method: "POST", headers: { authorization: openaiAuthHeader(env) }, body: fd }, timeoutMs);
-  if (!r.ok) throw audioError("Səs tanıma xətası", r.status, r.data);
-  return String(r.data.text || "").trim();
+// Səs faylının OpenAI-a göndərilən adı (format adı ilə müəyyən edilir)
+function audioName(type) {
+  const t = String(type || "");
+  return t.includes("mp4") || t.includes("m4a") || t.includes("aac") ? "audio.mp4" : t.includes("ogg") || t.includes("opus") ? "audio.ogg" : t.includes("wav") ? "audio.wav" : t.includes("mpeg") || t.includes("mp3") ? "audio.mp3" : "audio.webm";
+}
+
+const safeModel = (m, def) => (/^[a-z0-9][a-z0-9.\-]{1,60}$/i.test(String(m || "")) ? String(m) : def);
+
+// Səs → mətn. opts.prompt: terminlər və son söhbət (tanıma keyfiyyəti üçün ipucu, əmr deyil).
+// Seçilmiş model layihədə yoxdursa (400/404) bir dəfə ehtiyat modelə (whisper-1) keçir.
+// Qaytarır: { text, model, fallback }
+export async function sttDetailed(env, file, timeoutMs, opts = {}) {
+  const primary = safeModel(opts.model || env.STT_MODEL, DEFAULTS.sttModel);
+  const models = primary === DEFAULTS.sttFallbackModel ? [primary] : [primary, DEFAULTS.sttFallbackModel];
+  let lastErr = null;
+  for (const model of models) {
+    const fd = new FormData();
+    fd.append("file", file, audioName(file.type));
+    fd.append("model", model);
+    fd.append("language", "az");
+    fd.append("response_format", "json");
+    fd.append("temperature", "0");
+    if (opts.prompt) fd.append("prompt", String(opts.prompt).slice(0, 800));
+    const r = await httpRequest("https://api.openai.com/v1/audio/transcriptions", { method: "POST", headers: { authorization: openaiAuthHeader(env) }, body: fd }, timeoutMs);
+    if (r.ok) return { text: String((r.data && r.data.text) || "").trim(), model, fallback: model !== primary };
+    lastErr = audioError("Səs tanıma xətası", r.status, r.data);
+    // Yalnız "model yoxdur/qəbul edilmir" halında ehtiyat modelə keçilir; açar/limit xətası təkrarlanmır.
+    if (!(r.status === 400 || r.status === 404) || /api key|scope|quota/i.test(String(r.data || ""))) break;
+  }
+  throw lastErr;
+}
+
+export async function stt(env, file, timeoutMs, opts = {}) {
+  return (await sttDetailed(env, file, timeoutMs, opts)).text;
+}
+
+const TTS_INSTRUCTIONS = "Azərbaycan dilində təbii, sakit və aydın danış. Dost köməkçi kimi, robot kimi yox. Rəqəmləri və adları düzgün tələffüz et.";
+
+// Mətn → səs. format: "mp3" (veb) və ya "opus" (Ogg/Opus: Telegram səsli mesajı üçün).
+// Qaytarır: ArrayBuffer. tts() köhnə davranış üçün base64 MP3 qaytarır.
+export async function ttsBytes(env, text, timeoutMs, { format = "mp3" } = {}) {
+  const primary = safeModel(env.TTS_MODEL, DEFAULTS.ttsModel);
+  const models = primary === DEFAULTS.ttsFallbackModel ? [primary] : [primary, DEFAULTS.ttsFallbackModel];
+  let lastErr = null;
+  for (const model of models) {
+    const body = { model, voice: safeModel(env.TTS_VOICE, DEFAULTS.ttsVoice), input: String(text).slice(0, 1500), response_format: format === "opus" ? "opus" : "mp3" };
+    if (!/^tts-1/.test(model)) body.instructions = TTS_INSTRUCTIONS;
+    const r = await httpRequest(
+      "https://api.openai.com/v1/audio/speech",
+      { method: "POST", headers: { "content-type": "application/json", authorization: openaiAuthHeader(env) }, body: JSON.stringify(body) },
+      timeoutMs,
+      "buffer",
+    );
+    if (r.ok) return r.data;
+    lastErr = audioError("Səsləndirmə xətası", r.status, typeof r.data === "string" ? r.data : "");
+    if (!(r.status === 400 || r.status === 404) || /api key|scope|quota/i.test(String(r.data || ""))) break;
+  }
+  throw lastErr;
 }
 
 export async function tts(env, text, timeoutMs) {
-  const r = await httpRequest(
-    "https://api.openai.com/v1/audio/speech",
-    {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: openaiAuthHeader(env) },
-      body: JSON.stringify({ model: "tts-1", voice: env.TTS_VOICE || DEFAULTS.ttsVoice, input: text.slice(0, 900), response_format: "mp3" }),
-    },
-    timeoutMs,
-    "buffer",
-  );
-  if (!r.ok) throw audioError("Səsləndirmə xətası", r.status, typeof r.data === "string" ? r.data : "");
-  return b64(r.data);
+  return b64(await ttsBytes(env, String(text).slice(0, 900), timeoutMs, { format: "mp3" }));
 }
 
 // Diaqnostika: 1 saniyəlik səssiz WAV (16 kHz, mono). Real STT çağırışı ilə açarın audio üçün işlədiyini yoxlayır.
@@ -164,10 +202,22 @@ export async function diagnoseOpenAI(env, timeoutMs, fetchImpl = (...a) => globa
   out.auth = { endpoint: "GET /v1/models", ...(await probe(fetchImpl, "https://api.openai.com/v1/models", { method: "GET", headers: { authorization: auth } }, timeoutMs)) };
   const fd = new FormData();
   fd.append("file", new Blob([silentWav()], { type: "audio/wav" }), "audio.wav");
-  fd.append("model", "whisper-1");
+  const sttModel = safeModel(env.STT_MODEL, DEFAULTS.sttModel);
+  fd.append("model", sttModel);
   fd.append("language", "az");
-  out.stt = { endpoint: "POST /v1/audio/transcriptions", model: "whisper-1", language: "az", ...(await probe(fetchImpl, "https://api.openai.com/v1/audio/transcriptions", { method: "POST", headers: { authorization: auth }, body: fd }, timeoutMs)) };
+  out.stt = { endpoint: "POST /v1/audio/transcriptions", model: sttModel, language: "az", ...(await probe(fetchImpl, "https://api.openai.com/v1/audio/transcriptions", { method: "POST", headers: { authorization: auth }, body: fd }, timeoutMs)) };
 
+  // Əsas model layihədə yoxdursa (400/404) iş vaxtı ehtiyat modelə keçilir; diaqnostika da onu yoxlayır.
+  if (!out.stt.ok && (out.stt.http === 400 || out.stt.http === 404) && sttModel !== DEFAULTS.sttFallbackModel) {
+    const fd2 = new FormData();
+    fd2.append("file", new Blob([silentWav()], { type: "audio/wav" }), "audio.wav");
+    fd2.append("model", DEFAULTS.sttFallbackModel);
+    fd2.append("language", "az");
+    const fb = { endpoint: "POST /v1/audio/transcriptions", model: DEFAULTS.sttFallbackModel, language: "az", ...(await probe(fetchImpl, "https://api.openai.com/v1/audio/transcriptions", { method: "POST", headers: { authorization: auth }, body: fd2 }, timeoutMs)) };
+    out.stt_primary = out.stt;
+    out.stt = fb;
+    out.note = sttModel + " bu layihədə əlçatan deyil, iş vaxtı avtomatik " + DEFAULTS.sttFallbackModel + " istifadə olunur.";
+  }
   const a = out.auth;
   const t = out.stt;
   if (t.ok) {

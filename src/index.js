@@ -9,7 +9,10 @@ import { renderPage, pageCsp } from "./ui/page.js";
 import { json } from "./util.js";
 import { getLimits, getFeatures, DEFAULTS, VERSION } from "./config.js";
 import { createRegistry } from "./adapters/registry.js";
-import { stt, tts, diagnoseOpenAI } from "./adapters/openaiAudio.js";
+import { stt, tts, diagnoseOpenAI, sttDetailed, ttsBytes } from "./adapters/openaiAudio.js";
+import { ConversationMemory } from "./conversation/memory.js";
+import { CallBudget } from "./guards/budget.js";
+import { SUMMARY_SYSTEM } from "./prompts.js";
 import { inspectOpenAIKey } from "./security/envvalue.js";
 import { ClaudeOrchestrator } from "./orchestrator/ClaudeOrchestrator.js";
 import { buildContext } from "./app/context.js";
@@ -141,17 +144,27 @@ export default {
       const d = buildSocial(env);
       const limits = getLimits(env);
       const features = getFeatures(env);
-      const runChat = async (text, origin) => {
+      const runChat = async (text, origin, context = null) => {
         if (!env.ANTHROPIC_API_KEY || !env.OPENAI_API_KEY) throw new AppError("AUTH_ERROR", "ANTHROPIC_API_KEY və ya OPENAI_API_KEY təyin edilməyib", { source: "chat" });
         const orchestrator = new ClaudeOrchestrator({ env, registry: createRegistry(env), limits, store: d.store, approvals: features.approvals ? d.approvals : null, tools: features.approvals ? d.tools : null });
-        return await orchestrator.handle(text, { origin });
+        return await orchestrator.handle(text, { origin, context });
       };
-      // Telegram səsli mesajı: veb səs əmri ilə eyni STT (OpenAI whisper-1, dil "az")
-      const transcribe = async (blob) => {
+      // Telegram səsli mesajı: veb səs əmri ilə eyni STT (OpenAI, dil "az"), terminlər/son söhbət ipucu ilə
+      const transcribe = async (blob, opts = {}) => {
         if (!env.OPENAI_API_KEY) throw new AppError("AUTH_ERROR", "OPENAI_API_KEY təyin edilməyib", { source: "voice" });
-        return await stt(env, blob, limits.callTimeoutMs);
+        return await sttDetailed(env, blob, Math.max(limits.callTimeoutMs, 30000), opts);
       };
-      const handler = createTelegramHandler({ env, hub: d.hub, flow: d.flow, approvals: d.approvals, store: d.store, audit: d.audit, runChat, runner: d.runner, library: d.library, transcribe, voiceEnabled: features.voice });
+      // Səsli cavab: OpenAI TTS → Ogg/Opus → Telegram sendVoice
+      const speak = env.OPENAI_API_KEY && features.voice ? async (text) => await ttsBytes(env, text, limits.callTimeoutMs, { format: "opus" }) : null;
+      // Söhbət yaddaşı: köhnə mesajlar Claude ilə qısa xülasəyə çevrilir (alınmasa sadə sıxışdırma)
+      const summarize = env.ANTHROPIC_API_KEY
+        ? async (prev, turnsText) => {
+            const claude = createRegistry(env).get("claude");
+            return await claude.complete(SUMMARY_SYSTEM, [{ role: "user", content: (prev ? "Previous summary:\n" + prev + "\n\n" : "") + "New messages:\n" + turnsText }], 500, { budget: new CallBudget(1), timeoutMs: limits.callTimeoutMs });
+          }
+        : null;
+      const memory = new ConversationMemory(d.store, { summarize });
+      const handler = createTelegramHandler({ env, hub: d.hub, flow: d.flow, approvals: d.approvals, store: d.store, audit: d.audit, runChat, runner: d.runner, library: d.library, transcribe, voiceEnabled: features.voice, memory, speak });
       const work = handler.handleUpdate(update).catch(() => null);
       if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(work);
       else await work;

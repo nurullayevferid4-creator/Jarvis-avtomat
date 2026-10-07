@@ -16,6 +16,12 @@ export const DEFAULTS = {
   claudeModel: "claude-sonnet-5-5",
   openaiModel: "gpt-4o",
   ttsVoice: "onyx",
+  // Səs tanıma: gpt-4o-transcribe (çoxdilli keyfiyyət daha yüksəkdir); layihədə əlçatan deyilsə avtomatik whisper-1.
+  sttModel: "gpt-4o-transcribe",
+  sttFallbackModel: "whisper-1",
+  // Səsləndirmə: gpt-4o-mini-tts "instructions" qəbul edir (tts-1 qəbul etmir); alınmasa tts-1.
+  ttsModel: "gpt-4o-mini-tts",
+  ttsFallbackModel: "tts-1",
   openaiWebSearchTool: "web_search",
 };
 

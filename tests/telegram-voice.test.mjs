@@ -54,7 +54,7 @@ test("aşkarlama: voice, audio və audio sənəd səsli mesajdır; mətn, video,
   assert.equal(voiceFromMessage(null), null);
 });
 
-test("voice note: getFile → fayl endirilir → OpenAI STT whisper-1, language=az; menyu QAYTARILMIR", async () => {
+test("voice note: getFile → fayl endirilir → OpenAI STT (gpt-4o-transcribe), language=az, terminlər ipucu; menyu QAYTARILMIR", async () => {
   const w = await ready();
   const calls = installSocialFetch(server({ transcript: "Jarvis, platformaların vəziyyətini göstər" }));
   const r = await hook(w.env, voiceMsg());
@@ -66,7 +66,9 @@ test("voice note: getFile → fayl endirilir → OpenAI STT whisper-1, language=
   const [s] = sttCalls(calls);
   assert.ok(s, "STT çağırılmalıdır");
   assert.ok(s.body instanceof FormData);
-  assert.equal(s.body.get("model"), "whisper-1");
+  assert.equal(s.body.get("model"), "gpt-4o-transcribe");
+  assert.match(s.body.get("prompt"), /QR Menu/);
+  assert.equal(s.body.get("temperature"), "0");
   assert.equal(s.body.get("language"), "az");
   const f = s.body.get("file");
   assert.equal(f.name, "audio.ogg");
@@ -128,7 +130,7 @@ test("transkripsiya uğursuzluğu: aydın xəta mesajı, help menyusu yox, plann
   const cases = [
     [{ stt: () => new Response("server err", { status: 500 }) }, /Səsli mesajı mətnə çevirə bilmədim/],
     [{ stt: () => new Response("unauthorized", { status: 401 }) }, /Səsli mesajı mətnə çevirə bilmədim/],
-    [{ transcript: "" }, /eşitmədim/],
+    [{ transcript: "" }, /eşidilmədi/],
     [{ transcript: "Thanks for watching." }, /Aydın əmr eşidilmədi/],
     [{ extra: [[/\/getFile/, () => json({ ok: false, error_code: 400, description: "Bad Request: file is too big" }, 400)]] }, /mətnə çevirə bilmədim/],
   ];

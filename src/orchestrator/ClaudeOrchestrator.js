@@ -164,14 +164,17 @@ export class ClaudeOrchestrator {
   }
 
   // origin: sorğunun mənşəyi ({channel:"ui"} və ya {channel:"telegram", chat_id}). Təsdiq qeydləri buna bağlanır.
-  async handle(text, { origin = null, attachments = [] } = {}) {
+  // context (istəyə bağlı, Telegram/söhbət yaddaşı): { history: [{role,content}], block: "<conversation_context>…", voice: bool }.
+  // Verilsə qlobal state.history əvəzinə bu çatın öz tarixi işlənir və köhnə mətn-təsdiq qapısı atlanır
+  // (Telegram-da mətnlə/səslə "hə" heç nəyi təsdiqləmir; təsdiq yalnız düymə ilə).
+  async handle(text, { origin = null, attachments = [], context = null } = {}) {
     const budget = new CallBudget(this.limits.maxModelCalls);
     const ctx = { budget, timeoutMs: this.limits.callTimeoutMs };
     const state = await this.store.load();
     const norm = normalize(text);
 
     const pendingBefore = state.pending;
-    const gate = resolvePending(state, norm);
+    const gate = context ? { handled: false } : resolvePending(state, norm);
     if (gate.handled) {
       if (gate.save) await this.store.save(state);
       // Söhbətdə "hə/yox" deyiləndə təsdiq mərkəzindəki qeyd də bağlanır
@@ -181,14 +184,17 @@ export class ClaudeOrchestrator {
       return gate.response;
     }
 
-    const hist = state.history.slice(-8);
+    const hist = context && Array.isArray(context.history) ? context.history.slice(-10) : state.history.slice(-8);
+    const said = (context && context.voice ? "[səsdən] " : "") + text;
+    const ctxBlock = context && context.block ? "\n\n" + String(context.block).slice(0, 9000) : "";
     // Əlavə olunan media: id-lər sistemdən gəlir (etibarlı), fayl adı təmizlənib
     const attach = attachments.length ? "\n\n[Attached media, usable as media_id in tools]\n" + attachments.slice(0, 5).map((a) => "- media_id=" + a.id + " kind=" + a.kind + (a.analysis && a.analysis.duration_s ? " " + a.analysis.width + "x" + a.analysis.height + " " + a.analysis.duration_s + "s" : a.analysis && a.analysis.width ? " " + a.analysis.width + "x" + a.analysis.height : "")).join("\n") : "";
-    const leadRaw = await this.lead.complete(buildLeadSystem(this.registry.helpers(), this.limits, this.tools ? this.toolList() : null), [...hist, { role: "user", content: text + attach }], 1200, ctx);
+    const leadRaw = await this.lead.complete(buildLeadSystem(this.registry.helpers(), this.limits, this.tools ? this.toolList() : null), [...hist, { role: "user", content: said + attach + ctxBlock }], 1200, ctx);
     let plan;
     try { plan = parseJson(leadRaw); } catch (e) { plan = { mode: "chat", reply: leadRaw.slice(0, 600) }; }
 
     const remember = async (spoken) => {
+      if (context) return; // çat yaddaşını çağıran tərəf yazır (src/conversation/memory.js)
       state.history.push({ role: "user", content: text }, { role: "assistant", content: spoken });
       state.history = state.history.slice(-12);
       await this.store.save(state);
@@ -196,6 +202,7 @@ export class ClaudeOrchestrator {
 
     if (this.tools && plan.mode === "tools" && Array.isArray(plan.tool_calls) && plan.tool_calls.length) {
       const r = await this.handleTools(text, plan, ctx, origin);
+      r.mode = "tools";
       await remember(r.spoken);
       await this.store.saveJob({ ts: new Date().toISOString(), request: text, status: r.status, spoken: r.spoken, tools: r.tools.map((t) => ({ tool: t.tool, status: t.status })) });
       return r;
@@ -203,7 +210,7 @@ export class ClaudeOrchestrator {
 
     if (plan.clarification) {
       await remember(plan.clarification);
-      return { status: "clarification", spoken: plan.clarification, screen: plan.clarification, tasks: [] };
+      return { status: "clarification", mode: "clarification", spoken: plan.clarification, screen: plan.clarification, tasks: [] };
     }
 
     const seen = new Set();
@@ -222,7 +229,7 @@ export class ClaudeOrchestrator {
     if (plan.mode !== "task" || !subtasks.length) {
       const reply = plan.reply || "Başa düşmədim, bir də de.";
       await remember(reply);
-      return { status: "chat", spoken: reply, screen: reply, tasks: [] };
+      return { status: "chat", mode: "chat", spoken: reply, screen: reply, tasks: [] };
     }
 
     const { tasks, done } = await this.runPlan(subtasks, ctx);
@@ -271,7 +278,7 @@ export class ClaudeOrchestrator {
     }
     await remember(spoken);
     await this.store.saveJob({ ts: new Date().toISOString(), request: text, status, spoken, tasks: ClaudeOrchestrator.publicTasks(tasks) });
-    const result = { status, spoken, screen, tasks: ClaudeOrchestrator.publicTasks(tasks) };
+    const result = { status, mode: "task", spoken, screen, tasks: ClaudeOrchestrator.publicTasks(tasks) };
     if (approvalId) result.approval_id = approvalId;
     return result;
   }
