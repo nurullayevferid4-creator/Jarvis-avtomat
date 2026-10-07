@@ -19,6 +19,7 @@ import { MEDIA_TYPES } from "../social/media.js";
 import { formatResult } from "../social/flow.js";
 import { publicError } from "../errors.js";
 import { cleanEnvValue } from "../security/envvalue.js";
+import { checkAudioFile, parseVoiceCommand, MAX_AUDIO_BYTES } from "../voice/command.js";
 
 const ID_RE = /^\d{13}-[0-9a-f]{6}$/;
 const PLATFORM_WORDS = {
@@ -79,6 +80,16 @@ function mediaFromMessage(m) {
   return null;
 }
 
+// Səsli mesaj: voice note (OGG/Opus), audio fayl və ya audio sənəd. Video note (dairəvi video) səs əmri sayılmır.
+const AUDIO_EXT = { oga: "audio/ogg", ogg: "audio/ogg", opus: "audio/ogg", mp3: "audio/mpeg", m4a: "audio/mp4", mp4: "audio/mp4", wav: "audio/wav", webm: "audio/webm", aac: "audio/aac" };
+export function voiceFromMessage(m) {
+  if (!m || typeof m !== "object") return null;
+  if (m.voice && m.voice.file_id) return { file_id: m.voice.file_id, size: m.voice.file_size || 0, mime: m.voice.mime_type || "audio/ogg", duration: m.voice.duration || 0, kind: "voice" };
+  if (m.audio && m.audio.file_id) return { file_id: m.audio.file_id, size: m.audio.file_size || 0, mime: m.audio.mime_type || "audio/mpeg", duration: m.audio.duration || 0, kind: "audio" };
+  if (m.document && m.document.file_id && /^audio\//.test(m.document.mime_type || "")) return { file_id: m.document.file_id, size: m.document.file_size || 0, mime: m.document.mime_type, duration: 0, kind: "document" };
+  return null;
+}
+
 const HELP = [
   "JARVIS Telegram idarəsi.",
   "Paylaşım: video/şəkil göndər və yaz: «Jarvis, bunu Instagram, TikTok və YouTube-da paylaş. Mövzu: ...».",
@@ -87,10 +98,13 @@ const HELP = [
   "/pending – təsdiq gözləyənlər",
   "/jobs – son paylaşımlar",
   "/connect instagram|tiktok|youtube – hesab qoşma linki",
+  "Səsli mesaj da göndərə bilərsən: mətnə çevirib yazılı əmr kimi icra edirəm (təsdiq yenə yalnız düymə ilə).",
 ].join("\n");
 
 // runner (istəyə bağlı): strukturlu (sosial olmayan) təsdiq qeydlərini icra edir (Shopify yazma və s.).
-export function createTelegramHandler({ env, hub, flow, approvals, store, audit = null, runChat = null, runner = null, library = null }) {
+// transcribe (istəyə bağlı): (Blob) => mətn. Səsli mesaj mətnə çevrilir və YAZILI mesajla eyni yoldan keçir
+// (eyni icazə siyahısı, eyni təsdiq qaydası; səs heç nəyi birbaşa icra etmir).
+export function createTelegramHandler({ env, hub, flow, approvals, store, audit = null, runChat = null, runner = null, library = null, transcribe = null, voiceEnabled = true }) {
   const tg = () => hub.adapter("telegram");
 
   async function say(chatId, text, extra) {
@@ -250,6 +264,37 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
     return say(chatId, "Naməlum əmr. /help");
   }
 
+  // Səsli mesajı mətnə çevirir. Uğursuz olarsa istifadəçiyə aydın səbəb yazılır və null qaytarılır.
+  async function voiceToText(v, chatId) {
+    const fail = async (why) => {
+      await log("telegram.voice_failed", { kind: v.kind, reason: String(why).slice(0, 120) });
+      await say(chatId, "🎤 Səsli mesajı mətnə çevirə bilmədim: " + why + "\nYenidən göndər və ya yazı ilə yaz.");
+      return null;
+    };
+    if (!voiceEnabled) return await fail("səs əmrləri söndürülüb (FEATURE_VOICE=0)");
+    if (!transcribe) return await fail("səs tanıma xidməti qoşulmayıb");
+    if (v.size && v.size > MAX_AUDIO_BYTES) return await fail("səs yazısı çox uzundur (maksimum 8 MB)");
+    let raw;
+    try {
+      const { bytes, path } = await tg().downloadFile(v.file_id);
+      const ext = (path.split(".").pop() || "").toLowerCase();
+      const mime = String(v.mime || AUDIO_EXT[ext] || "audio/ogg").split(";")[0].toLowerCase();
+      const blob = checkAudioFile(new Blob([bytes], { type: mime }));
+      raw = await transcribe(blob);
+    } catch (e) {
+      return await fail(publicError(e, "voice").message.slice(0, 160));
+    }
+    let cmd;
+    try {
+      cmd = parseVoiceCommand(raw);
+    } catch (e) {
+      return await fail(publicError(e, "voice").message.slice(0, 160));
+    }
+    await log("telegram.voice_transcribed", { kind: v.kind, duration: v.duration || 0, chars: cmd.text.length });
+    await say(chatId, "🎤 Eşitdim: «" + cmd.text.slice(0, 500) + "»");
+    return cmd.text;
+  }
+
   // Qaytarır: { handled: "duplicate"|"unauthorized"|"ignored"|"ok" }
   async function handleUpdate(update) {
     if (!update || typeof update !== "object") return { handled: "ignored" };
@@ -279,7 +324,14 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
       return { handled: "ok" };
     }
 
-    const raw = String(msg.text || msg.caption || "");
+    let raw = String(msg.text || msg.caption || "");
+    const voice = !msg.text ? voiceFromMessage(msg) : null;
+    if (voice) {
+      // Səs → mətn. Sonra yazılı mesajla TAM eyni yol (komandalar, qaralama, söhbət, təsdiq qaydaları).
+      const heard = await voiceToText(voice, chatId);
+      if (heard === null) return { handled: "ok" };
+      raw = heard;
+    }
     const text = cleanText(raw, 2000).text.trim();
     if (text.startsWith("/")) {
       const parts = text.split(/\s+/);

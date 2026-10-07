@@ -23,6 +23,9 @@
 | `PUBLIC_BASE_URL` Cloudflare-də yazılıb, amma Worker onu «boş» görür | Dashboard-da **Text** kimi yazılan dəyişən `wrangler deploy` zamanı silinir (Cloudflare: «Wrangler will override them the next time you deploy»). `wrangler.toml`-da indi `keep_vars = true` var; **secret-lər bundan təsirlənmir** | Dəyişən bir dəfə silinibsə, `keep_vars = true` ilə deploy-dan sonra onu **bir dəfə** yenidən yaz (və ya «Secret» kimi yaz). Telegram webhook-u üçün Worker ehtiyat olaraq öz ünvanını işlədir və bunu bildirir |
 | UI-da heç nə işləmir, boş səhifə | Çox köhnə brauzer (CSP/ES5 xaric funksiyalar) | Başqa/yeni brauzer; səhifə `fetch` və `TextEncoder` tələb edir |
 | Səs işləmir | Mikrofon icazəsi, `FEATURE_VOICE=0`, brauzer `MediaRecorder` dəstəkləmir | Mətnlə yaz; icazə ver |
+| Telegram səsli mesajına «🎤 Səsli mesajı mətnə çevirə bilmədim: …» | Səbəb mesajdadır: `OPENAI_API_KEY` yoxdur/səhvdir (401), OpenAI xətası, fayl 8 MB-dan böyükdür, səs aydın deyil, `FEATURE_VOICE=0` | Səbəbə görə düzəlt; və ya yazı ilə yaz |
+| Telegram səsli mesajına cavab gəlmir | Göndərən `TELEGRAM_ALLOWED_CHAT_IDS`-də deyil və ya qrup çatıdır (bilərəkdən cavab yoxdur), webhook qurulmayıb | «Telegram webhook-u yoxla»; ID-ni yoxla |
+| Səsli mesaja Telegram menyusu (/help) gəlir | Köhnə versiya deploy olunub (səsli mesaj dəstəyindən əvvəlki) | `feature/jarvis-production`-u `main`-ə merge et, deploy-u gözlə |
 
 ## Telegram webhook qurulması: dəqiq səbəblər
 
