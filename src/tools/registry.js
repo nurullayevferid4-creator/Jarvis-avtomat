@@ -178,7 +178,8 @@ export class ToolRegistry {
         clearTimeout(timer);
       }
     }
+    // Jurnala texniki təfərrüat, istifadəçiyə yalnız təhlükəsiz mesaj (naməlum xətanın mətni çıxmır)
     await this._log("tool.error", { tool: name, error: lastError, code: lastErr && lastErr.code });
-    return { ok: false, status: "error", error: lastError, error_code: lastErr ? lastErr.code : "INTERNAL_ERROR" };
+    return { ok: false, status: "error", error: lastErr ? lastErr.toPublic().message : "Daxili xəta baş verdi. Əməliyyat tamamlanmadı.", error_code: lastErr ? lastErr.code : "INTERNAL_ERROR" };
   }
 }

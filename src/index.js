@@ -18,6 +18,9 @@ import { beginOAuth, finishOAuth, OAUTH_PLATFORMS } from "./social/oauth.js";
 import { MEDIA_TYPES, MAX_MEDIA_BYTES } from "./social/media.js";
 import { SocialError } from "./social/errors.js";
 import { createTelegramHandler, verifyWebhook } from "./telegram/handler.js";
+import { handleShopifyPublicRoute, handleShopifyApiRoute } from "./shopify/index.js";
+import { OWNER_PERMISSIONS } from "./policy.js";
+import { AppError, publicError, toAppError } from "./errors.js";
 
 const MAX_BODY_BYTES = 20000;
 // Parolla daxil olan istifadəçi (sahib). Telegram çatları handler-də öz çat id-si ilə təqdim olunur.
@@ -36,8 +39,9 @@ async function readJson(req) {
 }
 
 // Sistem vəziyyəti. Açarların YALNIZ təyin olunub-olunmadığı göstərilir, dəyərləri heç vaxt.
-function statusInfo(env, limits, features, tools) {
+function statusInfo(env, limits, features, tools, extra = {}) {
   return {
+    ...extra,
     version: VERSION,
     storage: env.JARVIS_KV ? "kv" : "memory",
     secrets: { ANTHROPIC_API_KEY: !!env.ANTHROPIC_API_KEY, OPENAI_API_KEY: !!env.OPENAI_API_KEY, PASSCODE: !!env.PASSCODE },
@@ -50,7 +54,7 @@ function statusInfo(env, limits, features, tools) {
       loginMaxFailures: limits.loginMaxFailures,
       loginWindowSeconds: limits.loginWindowSeconds,
     },
-    tools,
+    tools: tools.map((t) => ({ name: t.name, description: t.description, risk: t.risk, requiresApproval: t.requiresApproval, executable: t.executable, permissions: t.permissions })),
     // Yalnız "təyin olunub/olunmayıb" göstərilir, dəyərlər heç vaxt.
     social: {
       public_base_url: !!env.PUBLIC_BASE_URL,
@@ -85,8 +89,30 @@ function buildSocial(env) {
   return buildContext(env);
 }
 
+// Təhlükəsizlik başlıqları: bütün cavablara əlavə olunur (mövcud başlıq varsa toxunulmur).
+function secure(res) {
+  const h = new Headers(res.headers);
+  const set = (k, v) => { if (!h.has(k)) h.set(k, v); };
+  set("x-content-type-options", "nosniff");
+  set("referrer-policy", "no-referrer");
+  set("x-frame-options", "DENY");
+  set("cross-origin-resource-policy", "same-origin");
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
+}
+
 export default {
+  // Gözlənilməyən xəta stack və ya daxili mətn göstərmir: yalnız vahid kod.
   async fetch(req, env, ctx) {
+    try {
+      return secure(await this.handle(req, env, ctx));
+    } catch (e) {
+      const err = toAppError(e, "worker");
+      try { await buildContext(env).audit.log("worker.unhandled", { code: err.code, detail: err.detail || undefined }); } catch (x) { /* jurnal yazıla bilməsə də cavab verilir */ }
+      return secure(json({ error: err.code, message: err.toPublic().message }, err.httpStatus >= 400 ? err.httpStatus : 500));
+    }
+  },
+
+  async handle(req, env, ctx) {
     const url = new URL(req.url);
     if (req.method === "GET" && url.pathname === "/") {
       return new Response(PAGE, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
@@ -104,16 +130,23 @@ export default {
       const d = buildSocial(env);
       const limits = getLimits(env);
       const features = getFeatures(env);
-      const runChat = async (text) => {
-        if (!env.ANTHROPIC_API_KEY || !env.OPENAI_API_KEY) throw new Error("ANTHROPIC_API_KEY və ya OPENAI_API_KEY təyin edilməyib");
-        const orchestrator = new ClaudeOrchestrator({ env, registry: createRegistry(env), limits, store: d.store, approvals: features.approvals ? d.approvals : null });
-        return await orchestrator.handle(text);
+      const runChat = async (text, origin) => {
+        if (!env.ANTHROPIC_API_KEY || !env.OPENAI_API_KEY) throw new AppError("AUTH_ERROR", "ANTHROPIC_API_KEY və ya OPENAI_API_KEY təyin edilməyib", { source: "chat" });
+        const orchestrator = new ClaudeOrchestrator({ env, registry: createRegistry(env), limits, store: d.store, approvals: features.approvals ? d.approvals : null, tools: features.approvals ? d.tools : null });
+        return await orchestrator.handle(text, { origin });
       };
       const handler = createTelegramHandler({ env, hub: d.hub, flow: d.flow, approvals: d.approvals, store: d.store, audit: d.audit, runChat, runner: d.runner });
       const work = handler.handleUpdate(update).catch(() => null);
       if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(work);
       else await work;
       return new Response("ok", { status: 200 });
+    }
+
+    // Shopify: OAuth callback (HMAC + state) və webhook (HMAC). İkisi də imza olmadan heç nə etmir.
+    if ((url.pathname === "/oauth/shopify/callback" && req.method === "GET") || (url.pathname === "/shopify/webhook" && req.method === "POST")) {
+      const c = buildContext(env);
+      const r = await handleShopifyPublicRoute(req, c.shopify.ctx);
+      if (r) return r;
     }
 
     // OAuth callback: doğru bir dəfəlik state olmadan heç nə etmir.
@@ -159,7 +192,12 @@ export default {
 
     // Model açarı tələb etməyən yollar: açar çatışmasa da vəziyyəti görmək olsun
     if (req.method === "GET" && url.pathname === "/api/status") {
-      return json(statusInfo(env, limits, features, createDefaultToolRegistry({ audit, approvals }).list()));
+      const c = buildContext(env);
+      return json(statusInfo(env, limits, features, c.tools.list(), {
+        coordinator: c.coord.kind === "durable_object" ? "durable_object" : "memory (tək nüsxə daxilində; Durable Object bağlanmayıb)",
+        providers: c.providers.status(),
+        shopify: { configured: !!(env.SHOPIFY_API_KEY && env.SHOPIFY_API_SECRET) },
+      }));
     }
 
     if (url.pathname === "/api/audit" && req.method === "GET") {
@@ -183,10 +221,38 @@ export default {
         const job = await d.flow.advance(apMatch[1], { deadlineMs: 20000 });
         return json({ record: (await approvals.get(apMatch[1])) || a.record, job: job || a.job });
       }
+      if (peek && peek.kind && peek.kind !== "social.publish") {
+        // Strukturlu alət qeydi: təsdiq + bir dəfəlik icra (ActionRunner)
+        const c = buildContext(env);
+        const x = await c.runner.approveAndExecute(apMatch[1], { actor: UI_ACTOR });
+        const st = x.ok ? 200 : x.status === "unknown" ? 202 : x.error && x.error.code === "NOT_FOUND" ? 404 : x.error && x.error.code === "CONFLICT" ? 409 : x.error && x.error.code === "PERMISSION_ERROR" ? 403 : 400;
+        return json({ status: x.status, output: x.output, error: x.error, note: x.note, record: await approvals.get(apMatch[1]) }, st);
+      }
       const r = await approvals.decide(apMatch[1], { decision: body.decision, content: body.content, actor: UI_ACTOR });
       if (r.ok) return json({ record: r.record });
       const code = r.error === "not_found" ? 404 : r.error === "already_decided" || r.error === "expired" ? 409 : 400;
       return json({ error: r.error }, code);
+    }
+
+    if (url.pathname.startsWith("/api/shopify/")) {
+      const c = buildContext(env);
+      const r = await handleShopifyApiRoute(req, c.shopify.ctx, url);
+      if (r) return r;
+      return new Response("Not found", { status: 404 });
+    }
+
+    if (url.pathname === "/api/tools" && req.method === "GET") {
+      const c = buildContext(env);
+      return json({ tools: c.tools.list().map((t) => ({ name: t.name, description: t.description, risk: t.risk, requiresApproval: t.requiresApproval, executable: t.executable, permissions: t.permissions, timeoutMs: t.timeoutMs, inputSchema: t.inputSchema })) });
+    }
+    // Alət çağırışı (parollu sahib): təsdiq tələb edən alət icra olunmur, təsdiq qeydi açılır.
+    if (url.pathname === "/api/tools/run" && req.method === "POST") {
+      const body = await readJson(req);
+      if (!body || typeof body.tool !== "string") return json({ error: "VALIDATION_ERROR", message: "tool adı lazımdır" }, 400);
+      const c = buildContext(env);
+      const r = await c.tools.run(body.tool, body.input && typeof body.input === "object" ? body.input : {}, { approvals: c.approvals, origin: UI_ACTOR, source: "api", permissions: OWNER_PERMISSIONS });
+      const status = r.status === "done" ? 200 : r.status === "pending_approval" ? 202 : r.status === "not_found" ? 404 : r.status === "invalid_input" || r.status === "invalid_output" ? 400 : r.status === "denied" ? 403 : r.status === "timeout" ? 504 : 502;
+      return json({ status: r.status, output: r.output, approval_id: r.approval_id, errors: r.errors, error: r.error ? String(r.error).slice(0, 300) : undefined, error_code: r.error_code }, status);
     }
 
     if (features.knowledge && url.pathname === "/api/knowledge") {
@@ -269,18 +335,20 @@ export default {
           text = String(b.text || "");
         }
       } catch (e) {
-        return json({ error: String((e && e.message) || e).slice(0, 300) }, 502);
+        const pe = publicError(e, "voice");
+        return json({ error: pe.message, code: pe.code }, toAppError(e).httpStatus >= 400 ? toAppError(e).httpStatus : 502);
       }
       text = text.trim();
       if (!text) return json({ error: "Səs və ya mətn boşdur." }, 400);
 
       let result;
       try {
-        const orchestrator = new ClaudeOrchestrator({ env, registry: createRegistry(env), limits, store, approvals: features.approvals ? approvals : null });
-        result = await orchestrator.handle(text);
+        const c = buildContext(env);
+        const orchestrator = new ClaudeOrchestrator({ env, registry: createRegistry(env), limits, store, approvals: features.approvals ? approvals : null, tools: features.approvals ? c.tools : null });
+        result = await orchestrator.handle(text, { origin: UI_ACTOR });
       } catch (e) {
-        const msg = String((e && e.message) || e).slice(0, 300);
-        result = { status: "blocked", spoken: "Xəta baş verdi. Təfərrüat ekranda yazılıb.", screen: msg, tasks: [] };
+        const pe = publicError(e, "chat");
+        result = { status: "blocked", spoken: "Xəta baş verdi. Təfərrüat ekranda yazılıb.", screen: pe.message + " (" + pe.code + ")", tasks: [] };
       }
       await audit.log("talk", { status: result.status, chars: text.length, tasks: (result.tasks || []).length });
       let audio = null;

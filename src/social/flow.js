@@ -204,6 +204,7 @@ export function createSocialFlow({ env, store, approvals, audit = null, hub, coo
       await idxDel(job.id);
       await approvals.setExecution(job.approval_id, job.status);
       await log("social.job_finished", { job_id: job.id, status: job.status });
+      if (approvals.events) { try { await approvals.events.emit("job.finished", { id: job.id, status: job.status }); } catch (e) { /* əhəmiyyətsiz */ } }
       await notify(job);
     }
   }

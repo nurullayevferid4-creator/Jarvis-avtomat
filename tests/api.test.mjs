@@ -31,7 +31,10 @@ test("status: parolsuz 401, düzgün parolla vəziyyət görünür", async () =>
   assert.deepEqual(d.secrets, { ANTHROPIC_API_KEY: true, OPENAI_API_KEY: true, PASSCODE: true });
   assert.equal(d.models.claude, "claude-sonnet-5-5");
   assert.equal(d.features.approvals, true);
-  assert.equal(d.tools.length, 4);
+  for (const n of ["web.fetch", "knowledge.search", "knowledge.add", "social.publish", "shopify.product.create", "lead.outreach.prepare", "marketing.campaign.plan", "manager.report"]) assert.ok(d.tools.some((t) => t.name === n), n);
+  assert.ok(d.tools.every((t) => !t.inputSchema && !t.handler), "status-da sxem/handler olmamalıdır");
+  assert.equal(d.coordinator.startsWith("memory"), true);
+  assert.ok(Array.isArray(d.providers));
 });
 
 test("status: açarlar çatışmasa da işləyir və dəyərləri ASLA göstərmir", async () => {

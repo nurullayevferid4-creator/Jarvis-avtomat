@@ -10,16 +10,33 @@ import { createSocialFlow } from "../social/flow.js";
 import { KnowledgeBase } from "../knowledge/KnowledgeBase.js";
 import { createDefaultToolRegistry } from "../tools/builtin.js";
 import { createActionRunner } from "../actions/runner.js";
+import { createProviderRouter } from "../providers/router.js";
+import { createShopify, registerShopifyTools } from "../shopify/index.js";
+import { registerLeadTools } from "../leads/index.js";
+import { registerMarketingTools } from "../marketing/index.js";
+import { createAgentRegistry, registerAgentTools, createApprovalProvider, createJobProvider, createEventBus } from "../agents/index.js";
 
-export function buildContext(env) {
+export function buildContext(env, { fetchImpl } = {}) {
   const store = createStore(env);
   const audit = createAudit(store);
   const coord = createCoordinator(env);
   const approvals = new ApprovalCenter(store, audit, () => Date.now(), coord);
+  const events = createEventBus({ store });
+  approvals.events = events;
   const knowledge = new KnowledgeBase(store, audit);
   const hub = createSocialHub(env, store);
   const flow = createSocialFlow({ env, store, approvals, audit, hub, coord });
+  const providers = createProviderRouter(env);
+  const llm = providers.asLlm();
+
   const tools = createDefaultToolRegistry({ audit, approvals });
+  const shopify = createShopify({ env, store, audit, coord, fetchImpl });
+  registerShopifyTools(tools, { client: shopify.client, vault: shopify.vault, audit, env });
+  const leads = registerLeadTools(tools, { store, coord, events });
+  registerMarketingTools(tools, { llm });
+  const agents = createAgentRegistry({ tools, store, events, providers: { leads: leads.provider, approvals: createApprovalProvider(approvals), jobs: createJobProvider(store) } });
+  registerAgentTools(tools, agents);
+
   const runner = createActionRunner({ approvals, registry: tools, audit });
-  return { env, store, audit, coord, approvals, knowledge, hub, flow, tools, runner };
+  return { env, store, audit, coord, approvals, events, knowledge, hub, flow, providers, llm, tools, shopify, leads, agents, runner };
 }

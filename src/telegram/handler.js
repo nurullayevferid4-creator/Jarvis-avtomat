@@ -305,7 +305,7 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
 
     if (text && runChat) {
       try {
-        const r = await runChat(text);
+        const r = await runChat(text, actorOf(chatId));
         await say(chatId, String(r.screen || r.spoken || "Cavab yoxdur").slice(0, 4000));
       } catch (e) {
         await say(chatId, "Xəta baş verdi: " + publicError(e, "chat").message.slice(0, 160));

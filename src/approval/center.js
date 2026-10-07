@@ -48,6 +48,16 @@ export class ApprovalCenter {
     this.audit = audit;
     this.now = now;
     this.coord = coord || new MemoryCoordinator(now);
+    this.events = null; // istəyə bağlı EventBus (approval.created/decided)
+  }
+
+  async _emit(type, data) {
+    if (!this.events) return;
+    try {
+      await this.events.emit(type, data);
+    } catch (e) {
+      /* hadisə yazılmasa təsdiq axını dayanmasın */
+    }
   }
 
   async _log(event, data) {
@@ -83,6 +93,7 @@ export class ApprovalCenter {
     }
     await this.store.putDoc("approval", id, rec, 30 * 86400);
     await this._log("approval.created", { id, action: a, risk, source: rec.source });
+    await this._emit("approval.created", { id, action: a, risk, kind: rec.kind || null });
     return rec;
   }
 
@@ -146,6 +157,7 @@ export class ApprovalCenter {
 
     await this.store.putDoc("approval", id, rec, 30 * 86400);
     await this._log("approval." + decision, { id, action: rec.action, risk: rec.risk, status: rec.status });
+    if (decision === "approve" || decision === "reject") await this._emit("approval.decided", { id, status: rec.status });
     return { ok: true, record: rec };
   }
 

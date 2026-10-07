@@ -13,7 +13,7 @@ export const FACT_CHECK_SYSTEM = "You are a strict fact checker. " + UNTRUSTED_R
 
 // Claude lider modeldir. Köməkçi modellər (hazırda yalnız "gpt") reyestrdən oxunur,
 // ona görə yeni adapter əlavə edəndə bu mətni əl ilə dəyişmək lazım deyil.
-export function buildLeadSystem(helpers, limits) {
+export function buildLeadSystem(helpers, limits, toolList = null) {
   const helperList = helpers.length
     ? helpers.map((h) => '"' + h.id + '" (' + h.description + ")").join(", ")
     : "none";
@@ -31,5 +31,14 @@ Rules:
 ${searchRule}
 - external_action: set it (one short Azerbaijani sentence) only when the request would publish something, change prices or stock, spend money, send messages to other people or delete something. Otherwise null. Subtasks then only prepare drafts. You cannot perform external actions yourself.
 - If the request is too ambiguous to act on, set "clarification" to one short Azerbaijani question and return no subtasks.
-- Never claim that anything was done. Only plan.`;
+- Never claim that anything was done. Only plan.${toolList ? toolRules(toolList, limits) : ""}`;
+}
+
+// Alət siyahısı: Claude alətləri YALNIZ adı və giriş sxemi ilə seçir. Təsdiq tələb edən alət icra olunmur, təsdiq qeydi açır.
+function toolRules(toolList, limits) {
+  const lines = toolList.map((t) => "- " + t.name + (t.requiresApproval ? " [APPROVAL]" : "") + ": " + t.description.slice(0, 160) + " input=" + JSON.stringify(t.inputSchema && t.inputSchema.properties ? Object.keys(t.inputSchema.properties) : []) + " required=" + JSON.stringify((t.inputSchema && t.inputSchema.required) || []));
+  return `
+Tools: when the request is best served by running a registered tool (look up data, prepare a draft, propose an action), use mode "tools" and add "tool_calls":[{"tool":"<name>","input":{...}}] (at most ${Math.min(4, limits.maxSubtasks)} calls, run in order). Tools marked [APPROVAL] never run directly: they create an approval request that Farid must approve himself; propose them only when he clearly asked for that action. Never invent tool names or input fields; if a required input is missing, ask via "clarification" instead. Never put secrets in tool input.
+Available tools:
+${lines.join("\n")}`;
 }

@@ -1,4 +1,5 @@
 // Alət reyestri: icazə, təsdiq, vaxt limiti, təkrar cəhd, sxem yoxlaması.
+import { AppError } from "../src/errors.js";
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { createStore, _resetMemoryForTests } from "../src/state/store.js";
@@ -142,11 +143,31 @@ test("run: təkrar cəhd (retries) keçici xətanı aradan qaldırır", async ()
 test("run: təkrar cəhd də alınmasa xəta qaytarılır (saxta uğur yoxdur)", async () => {
   let n = 0;
   const reg = new ToolRegistry();
-  reg.register(okTool({ retries: 2, handler: async () => { n++; throw new Error("həmişə pozulur"); } }));
+  reg.register(okTool({ retries: 2, backoffMs: 0, handler: async () => { n++; throw new AppError("PROVIDER_ERROR", "həmişə pozulur"); } }));
   const r = await reg.run("demo.tool", {});
   assert.equal(r.status, "error");
   assert.equal(n, 3);
   assert.match(r.error, /həmişə pozulur/);
+  assert.equal(r.error_code, "PROVIDER_ERROR");
+});
+
+test("run: naməlum (daxili) xətanın mətni istifadəçiyə çıxmır, yalnız jurnala düşür", async () => {
+  const logs = [];
+  const reg = new ToolRegistry({ audit: { log: async (e, d) => logs.push([e, d]) } });
+  reg.register(okTool({ handler: async () => { throw new Error("parol=hunter2 at /src/x.js:1"); } }));
+  const r = await reg.run("demo.tool", {});
+  assert.equal(r.status, "error");
+  assert.ok(!r.error.includes("hunter2"));
+  assert.equal(r.error_code, "INTERNAL_ERROR");
+});
+
+test("run: təsdiq alətinin vahid xəta kodları (VALIDATION_ERROR təkrar edilmir)", async () => {
+  let n = 0;
+  const reg = new ToolRegistry();
+  reg.register(okTool({ retries: 2, backoffMs: 0, handler: async () => { n++; throw new AppError("VALIDATION_ERROR", "səhv giriş"); } }));
+  const r = await reg.run("demo.tool", {});
+  assert.equal(n, 1);
+  assert.equal(r.error_code, "VALIDATION_ERROR");
 });
 
 test("run: vaxt limiti aşılanda timeout qaytarılır", async () => {
