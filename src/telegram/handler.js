@@ -109,6 +109,8 @@ const HELP = [
 // memory (istəyə bağlı): ConversationMemory — çat konteksti (tarix, iş yaddaşı, seçimlər).
 // speak (istəyə bağlı): async (text) => ArrayBuffer (Ogg/Opus) — səsli girişə səsli cavab.
 // runChat(text, origin, context): Claude lideri (kontekst bloku və çat tarixi ilə).
+const CHAT_DEADLINE_MS = 26000;
+
 export function createTelegramHandler({ env, hub, flow, approvals, store, audit = null, runChat = null, runner = null, library = null, transcribe = null, voiceEnabled = true, memory = null, speak = null }) {
   const tg = () => hub.adapter("telegram");
 
@@ -505,7 +507,10 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
       }
       let r;
       try {
-        r = await runChat(text, origin, context);
+        // Worker arxa plan işi ~30 s-dən sonra səssiz kəsilir; ondan əvvəl istifadəçiyə cavab verilsin (səssizlik olmasın)
+        let timer;
+        const limit = new Promise((_, rej) => { timer = setTimeout(() => rej(Object.assign(new Error("Cavab çox gecikdi"), { code: "TIMEOUT", retryable: true })), CHAT_DEADLINE_MS); });
+        try { r = await Promise.race([runChat(text, origin, context), limit]); } finally { clearTimeout(timer); }
       } catch (e) {
         const pe = publicError(e, "chat");
         await say(chatId, "Bunu indi edə bilmədim: " + pe.message.slice(0, 160) + (pe.retryable ? " Bir az sonra yenidən sına." : ""));

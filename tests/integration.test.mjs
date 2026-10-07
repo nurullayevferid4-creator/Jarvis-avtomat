@@ -152,3 +152,12 @@ test("FEATURE_APPROVALS=0: təsdiq tələb edən alət açılmır (qeyd yığıl
   const ok = await call(env, "/api/tools/run", { method: "POST", body: { tool: "marketing.hashtags", input: { brand: "qr_menu", platform: "instagram" } } });
   assert.equal(ok.status, 200);
 });
+
+test("orkestrator: 'QR Menu' + 3 marketing aləti paralel işləyir, hamısı done (brend 'QR Menu' kimi gəlsə də)", async () => {
+  const plan = { mode: "tools", tool_calls: [{ tool: "marketing.campaign.plan", input: { brand: "QR Menu" } }, { tool: "marketing.hooks", input: { brand: "QR Menu" } }, { tool: "marketing.captions", input: { brand: "QR Menu", platform: "instagram" } }] };
+  installFetch(standardHandler({ plan }));
+  const d = await (await talk(baseEnv(), "QR Menu üçün reklam hazırla")).json();
+  assert.equal(d.tools.length, 3, JSON.stringify(d).slice(0, 400));
+  assert.deepEqual(d.tools.map((t) => t.status), ["done", "done", "done"]);
+  assert.deepEqual(d.tools.map((t) => t.tool), ["marketing.campaign.plan", "marketing.hooks", "marketing.captions"]);
+});

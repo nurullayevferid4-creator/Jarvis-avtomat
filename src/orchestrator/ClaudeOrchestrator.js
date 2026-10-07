@@ -123,8 +123,8 @@ export class ClaudeOrchestrator {
   // Alət çağırışları ardıcıl icra olunur. Təsdiq tələb edən alət yalnız təsdiq qeydi açır.
   async handleTools(text, plan, ctx, origin) {
     const maxCalls = Math.min(4, this.limits.maxSubtasks);
-    const results = [];
-    for (const call of plan.tool_calls.slice(0, maxCalls)) {
+    const calls = plan.tool_calls.slice(0, maxCalls);
+    const runOne = async (call) => {
       const name = String((call && call.tool) || "");
       const input = call && call.input && typeof call.input === "object" ? call.input : {};
       let r;
@@ -133,8 +133,20 @@ export class ClaudeOrchestrator {
       } catch (e) {
         r = { ok: false, status: "error", error: publicError(e, name).message };
       }
-      results.push({ tool: name, status: r.status, approval_id: r.approval_id || null, output: r.ok ? r.output : null, error: r.ok ? null : (r.error || (r.errors && r.errors.join("; ")) || r.status) });
-      if (r.status === "not_found") break; // uydurma alət adı: davam etmirik
+      return { tool: name, status: r.status, approval_id: r.approval_id || null, output: r.ok ? r.output : null, error: r.ok ? null : (r.error || (r.errors && r.errors.join("; ")) || r.status) };
+    };
+    // Hamısı təsdiqsiz oxu/qaralama alətidirsə PARALEL işlənir: Worker-in arxa plan vaxtı (~30 s) ardıcıl 3 model çağırışına çatmır
+    // (bu halda Telegram-da cavab heç gəlmirdi). Təsdiq tələb edən alət varsa əvvəlki kimi ardıcıl.
+    const known = new Map(this.tools.list().map((t) => [t.name, t]));
+    const parallel = calls.length > 1 && calls.every((c) => known.has(String((c && c.tool) || "")) && known.get(String(c.tool)).requiresApproval === false);
+    let results = [];
+    if (parallel) results = await Promise.all(calls.map(runOne));
+    else {
+      for (const call of calls) {
+        const one = await runOne(call);
+        results.push(one);
+        if (one.status === "not_found") break; // uydurma alət adı: davam etmirik
+      }
     }
     const done = results.filter((r) => r.status === "done").length;
     const pending = results.filter((r) => r.status === "pending_approval");
