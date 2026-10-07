@@ -1,157 +1,82 @@
 # JARVIS Voice Hub
 
-Səsli şəxsi köməkçi. Sən danışırsan, **Claude** işi anlayır və idarə edir, lazım olanda **OpenAI**-a köməkçi iş verir, nəticəni yoxlayır və sənə azərbaycanca səslə cavab verir. Cloudflare Worker kimi işləyir.
+Fərid-in şəxsi idarəetmə köməkçisi. Səslə və ya yazı ilə tapşırıq verirsən; **Claude** işi anlayıb idarə edir, lazım olanda **OpenAI** (axtarış, səs) və istəyə bağlı **Kimi** kömək edir. Riskli əməliyyatlar (paylaşım, Shopify yazması, mesaj, silmə) **yalnız sənin təsdiqindən sonra** icra olunur. Cloudflare Worker kimi işləyir.
 
-## JARVIS nədir?
+> **Dürüst status (kod və testlərlə təsdiqlənən):** kod, testlər və lokal real-runtime (`wrangler dev --local`, workerd) yoxlanıb. **Real Claude / OpenAI / Kimi / Telegram / Instagram / TikTok / YouTube / Shopify hesabları ilə sınaq hələ keçirilməyib**: onlar sənin açar və hesablarını tələb edir. Real sınaq üçün `docs/SMOKE.md`. Real sınaqdan keçməyənə qədər sistemi "canlı işləyir" hesab etmə.
 
-JARVIS bir "idarəçidir". Sən ona səslə və ya yazı ilə tapşırıq verirsən. O özü qərar verir: sadə sualı birbaşa cavablayır, böyük işi kiçik addımlara bölür. Heç vaxt sənin təsdiqin olmadan real iş (paylaşım, mesaj, pul, qiymət dəyişikliyi) etmir.
+## Nə var, nə yoxdur
 
-## Claude nə edir?
+| Hissə | Vəziyyət | Necə yoxlanıb |
+|---|---|---|
+| Parol girişi (Base64 başlıq, ə/ı/ş/ğ parolu), cəhd limiti | işləyir | testlər + real Chromium (`scripts/ui-smoke.mjs`) |
+| Claude lider + OpenAI köməkçi + Kimi ikinci rəy, avtomatik ehtiyat | kod hazır | saxta API testləri; real açarla sınanmayıb |
+| Səs: STT → əmr («Jarvis, ...») → plan → alətlər → azərbaycanca cavab → TTS | kod hazır | saxta OpenAI testləri; real səs sınanmayıb |
+| Təsdiq mərkəzi + atomik icra (Durable Object), çatlar arası qoruma | işləyir | testlər + real workerd-də 6 paralel təsdiq → 1 icra |
+| Alət reyestri (45 alət) | işləyir | testlər |
+| Media: axınla R2 yükləmə, MP4 analizi, növ/ölçü yoxlaması, silmə (təsdiqlə) | işləyir | testlər + real workerd + real ffmpeg fayllarla |
+| Video iş axını (yüklə → yoxla → analiz → plan → emal → nəticəni yoxla → saxla) | emal addımı **sənin ffmpeg serverin** tələb edir | `docs/VIDEO.md`; xidmət yoxdursa redaktə lazım olan iş `FAILED` olur (plan göstərilir), "hazırdır" deyilmir |
+| Telegram (webhook, düymələr, kanal paylaşımı) | kod hazır | saxta API; BotFather tokeni lazım |
+| Instagram / TikTok / YouTube (OAuth, yükləmə, status, təsdiqlə paylaşım) | kod hazır | saxta API; hər biri üçün real tətbiq + platforma təsdiqi (audit/review) lazım, bax `docs/INTEGRATIONS.md` |
+| Shopify (OAuth, məhsul/qiymət/stok/kolleksiya/webhook, DRAFT-by-default, silmə yox) | kod hazır | saxta API + HMAC testləri; real mağaza lazım |
+| Lead sistemi (yalnız ictimai/qanuni mənbə, kütləvi göndəriş YOX) | kod hazır | testlər |
+| Marketinq planlayıcı (QR Menu ayrıca iş axını) | kod hazır | testlər |
+| Agent reyestri + Manager hesabatı | kod hazır | testlər; saxta agent yoxdur |
+| Dropshipping / e-commerce | **yalnız interfeys** (`src/commerce/interfaces.js`); real təchizatçı/ödəniş yoxdur | — |
+| UI paneli | işləyir | real Chromium tüstü yoxlaması |
+| GitHub Actions (CI sirsiz, Claude workflow qorunur) | YAML hazır | real GitHub-da işə salınmayıb |
 
-Claude **əsas modeldir (lider)**:
+Hər cavabın statusunu sistem təyin edir (`achieved`, `partial`, `blocked`, `pending_approval`, `clarification`, `chat`). API cavab verməsə, JARVIS bunu açıq yazır; saxta uğur bildirmir.
 
-- tapşırığı anlayır;
-- sadə şeyləri özü cavablayır;
-- böyük işi 1-4 alt tapşırığa bölür;
-- lazım olanda alt tapşırığı OpenAI-a verir;
-- OpenAI-ın cavabını **yoxlayır** (uydurma link, rəqəm, səhv fakt axtarır);
-- yekun cavabı hazırlayır.
+## Sənədlər
 
-## OpenAI nə edir?
-
-OpenAI **köməkçidir**. Claude-un yerini tutmur. Yalnız Claude ona alt tapşırıq verəndə işləyir, əsasən canlı internet axtarışı, təzə məlumat və araşdırma üçün. OpenAI Claude-un cavabını yoxlamır. Bundan əlavə OpenAI **səs xidməti** kimi də işləyir (danışığı mətnə çevirir və cavabı səsləndirir).
-
-## Sistem necə işləyir?
-
-```
-SƏN
- ↓
-JARVIS
- ↓
-CLAUDE (əsas AI)
- ↓  lazım olsa
-OPENAI (köməkçi)
- ↓
-CLAUDE nəticəni yoxlayır və yekunlaşdırır
- ↓
-JARVIS
- ↓
-SƏN
-```
-
-1. Səsin `/api/talk` ünvanına gedir, OpenAI Whisper onu mətnə çevirir (dil: az).
-2. Claude sorğunu qiymətləndirir: söhbətdirsə birbaşa cavab verir, işdirsə alt tapşırıqlara bölür.
-3. Asılılığı olmayan addımlar paralel işləyir.
-4. Köməkçinin nəticəsini Claude yoxlayır. Problem tapsa, bir neçə dəfəyə qədər yenidən cəhd edilir.
-5. Claude qısa səsli və tam ekran cavabı yazır, OpenAI səsləndirir.
-6. Paylaşım, qiymət dəyişikliyi, pul xərcləmək, mesaj göndərmək, silmək kimi işlər üçün JARVIS "İcra edim?" deyə soruşur. **Bu versiyada real icra inteqrasiyası yoxdur**: "hə" desən belə yalnız qaralama qaytarılır, özün icra etməlisən.
-
-Hər cavabın statusu sistem tərəfindən təyin olunur: `achieved`, `partial`, `blocked`, `pending_approval`, `clarification`, `chat`. API cavab verməsə, JARVIS bunu açıq yazır, saxta uğur bildirmir.
-
-### Təhlükəsizlik limitləri
-
-| Limit | Standart |
+| Fayl | Nə üçün |
 |---|---|
-| Bir sorğuda alt tapşırıq | 4 |
-| Bir sorğuda ümumi model çağırışı | 12 |
-| Hər API çağırışının gözləmə vaxtı | 25 saniyə |
-| Səhv parol cəhdi (sonra bloklanır) | 5 cəhd, 15 dəqiqə |
+| `docs/SETUP.md` | Sıfırdan quraşdırma (brauzerlə, addım-addım) |
+| `docs/ENVIRONMENT.md` | Bütün mühit dəyişənləri və sirlər |
+| `docs/DEPLOYMENT.md` | Deploy, dry-run, geri qaytarma |
+| `docs/SMOKE.md` | Real açarlar əlavə olunandan sonra ilk sınaq |
+| `docs/API.md` | HTTP ünvanları |
+| `docs/INTEGRATIONS.md` | Telegram / Instagram / TikTok / YouTube / Shopify / Kimi: nə lazımdır, hansı icazələr |
+| `docs/VIDEO.md` | Video emal xidməti |
+| `docs/TROUBLESHOOTING.md` | Tipik xətalar |
+| `SECURITY.md`, `APPROVALS.md`, `TOOLS.md`, `SOCIAL.md`, `docs/SHOPIFY.md`, `docs/LEADS.md`, `docs/MARKETING.md`, `docs/AGENTS.md` | Hissə üzrə təfərrüat |
 
-Hamısı dəyişdirilə bilər (`.env.example` faylına bax), amma həmişə təhlükəsiz aralıqda qalır.
-
-## API açarları hara yazılacaq?
-
-**Açarları heç vaxt GitHub-a yazma.** Repo açıqdır, hər kəs görər.
-
-- **Cloudflare-də (real istifadə):** Worker → Settings → Variables and Secrets bölməsində **Secret** kimi əlavə et:
-  - `ANTHROPIC_API_KEY`
-  - `OPENAI_API_KEY`
-  - `PASSCODE` (tətbiqə girmək üçün öz seçdiyin parol)
-- **Lokal sınaq üçün:** `.dev.vars.example` faylını kopyala, adını `.dev.vars` qoy, açarları orada yaz. `.dev.vars` və `.env` faylları `.gitignore` ilə qorunur.
-- `.env.example` yalnız **nümunədir**: adları göstərir, dəyərləri boşdur.
-
-## Lokal test necə ediləcək?
-
-Node.js lazımdır. Repo qovluğunda:
+## Sistem necə işləyir
 
 ```
-npm test
+SƏN (səs / yazı / Telegram)
+ ↓ səs: STT → «Jarvis, ...» təmizlənir
+JARVIS orkestratoru
+ ↓ Claude planlaşdırır: söhbət | alt tapşırıqlar | alətlər
+ALƏT REYESTRİ (giriş sxemi, icazə, risk, vaxt limiti, təkrar, audit)
+ ├─ oxuma/hazırlama alətləri → dərhal icra
+ └─ riskli alətlər → YALNIZ təsdiq qeydi açır
+        ↓ sən UI/Telegram-da təsdiq edirsən
+     ActionRunner / social flow → bir dəfə icra (atomik) → audit
+ ↓
+Claude nəticəni yoxlayır, azərbaycanca cavab yazır → TTS → SƏN
 ```
 
-Bu, **açarsız** işləyir, çünki testlər saxta API cavabları ilə gedir. Test nələri yoxlayır: söhbət, iş bölgüsü, Claude-un yoxlaması, limitlər, xəta halları, təsdiq qapısı, parol limiti, gizli açar qoruması.
+Təsdiq tələb edənlər: sosial paylaşım, Shopify yazması, kritik müştəri mesajı (lead outreach), silmə, hesab/credential dəyişikliyi, maliyyə əməliyyatı, real reklam aktivləşdirmə. Səslə «hə» demək bunları icra etmir.
 
-**Real API testi** ayrıdır və yalnız açarları əlavə etdikdən sonra işlədilir. Özünün açarlarını mühit dəyişəni kimi ver, sonra:
+## Lokal yoxlama
 
-```
-npm run test:live
-```
-
-> **Vacib:** saxta testlərin keçməsi o demək deyil ki, real API ilə işləyir. Real açarlarla sınaq hələ keçirilməyib. Real testi keçməyənə qədər sistemi "işləyir" hesab etmə.
-
-Real testdə yoxlanmalı ola biləcək iki şey: `OPENAI_MODEL` (standart `gpt-4o`, hesabında işləyən modeli seç) və `OPENAI_WEB_SEARCH_TOOL` (standart `web_search`, köhnəsi `web_search_preview`).
-
-## Gələcəkdə Cloudflare-ə necə yerləşdiriləcək?
-
-1. Cloudflare-də pulsuz hesab aç.
-2. Workers & Pages bölməsində bu GitHub repo-nu Git ilə bağla. Cloudflare `wrangler.toml` faylını (`main = "worker.js"`) oxuyub bütün `src/` qovluğunu özü birləşdirir.
-3. Yuxarıdakı 3 Secret-i əlavə et.
-4. Tövsiyə: KV namespace yarat, `JARVIS_KV` adı ilə Worker-ə bağla (`wrangler.toml` içindəki `kv_namespaces` blokunu aç, id-ni yaz). KV olmasa söhbət yaddaşı, gözləyən təsdiq və parol cəhd sayğacı Worker yenidən başlayanda silinir.
-5. Worker ünvanını Safari-də aç, parolu yaz, "Danış" düyməsinə bas, mikrofon icazəsini ver. Paylaş menyusundan "Ana ekrana əlavə et" seç.
-
-> **Dəyişiklik:** kod indi bir neçə fayla bölünüb. Əvvəlki kimi `worker.js` mətnini Cloudflare redaktoruna **yapışdırmaq artıq işləmir**. Git ilə bağlamaq lazımdır (yuxarıdakı 2-ci addım).
-
-Parol limiti KV olmadan zəifdir, KV ilə də tam dəqiq deyil. Güclü qoruma üçün Cloudflare-in öz Rate Limiting qaydasını da əlavə etmək məsləhətdir.
-
-## Gələcəkdə Kimi (və ya başqa AI) necə əlavə edilə bilər?
-
-**Kimi hələlik sistemdə YOXDUR.** Amma quruluş buna hazırdır. Yeni model əlavə etmək 3 addımdır və orkestratora toxunmur:
-
-1. `src/adapters/KimiAdapter.js` yarat. `BaseAdapter`-dən törət və `run(task, ctx)` funksiyasını yaz. API formatını **Kimi-nin rəsmi sənədindən** götür, təxmini yazma. Şablon `src/adapters/BaseAdapter.js` içindəki izahatdadır (hər API çağırışından əvvəl `ctx.budget.spend()`, sorğunu `httpRequest` ilə göndər).
-2. `src/adapters/registry.js` içində adapteri import et və `createRegistry` funksiyasına bir sətir əlavə et (orada nümunə şərh kimi yazılıb).
-3. Lazım olan açarı (məsələn `KIMI_API_KEY`) Cloudflare Secrets-ə yaz.
-
-Claude lider modelin təlimatı köməkçi siyahısını reyestrdən özü oxuyur, ona görə yeni model avtomatik planlamaya düşür. Bunun mümkün olduğunu `tests/registry.test.mjs` göstərir (saxta adapterlə).
-
-## Fayl quruluşu
+Node.js 22 lazımdır (Windows 7-də işləmir, bax `docs/SETUP.md`).
 
 ```
-worker.js                  Cloudflare giriş faylı (src/index.js-i çağırır)
-src/index.js               ünvanlar, parol, parol cəhd limiti
-src/orchestrator/          ClaudeOrchestrator (planlama, yoxlama, yekun cavab)
-src/adapters/              ClaudeAdapter, OpenAIAdapter, səs, reyestr, BaseAdapter
-src/guards/                limitlər (çağırış sayı, vaxt, parol)
-src/approval/              söhbət təsdiq qapısı (gate.js) və təsdiq mərkəzi (center.js)
-src/security/              SSRF qoruması, xarici məzmunun təmizlənməsi (prompt injection)
-src/tools/                 alət reyestri və daxili alətlər (hələ orkestratora qoşulmayıb)
-src/knowledge/             bilik bazası
-src/audit/                 audit jurnalı
-src/policy.js              risk səviyyələri və icazələr
-src/validate.js            sxem yoxlayıcı
-src/state/                 söhbət yaddaşı, iş tarixçəsi, ümumi sənəd anbarı
-src/ui/                    telefon səhifəsi
-SECURITY.md, APPROVALS.md, TOOLS.md   1-ci mərhələnin sənədləri
-tests/                     yeni testlər
-test.mjs                   köhnə testlər (dəyişdirilməyib)
-.env.example               açar adlarının nümunəsi (dəyərlər boş)
+npm run check        # sintaksis + statik audit + bütün testlər (açarsız, real API çağırmır)
+npm run test:ui      # real Chromium-da UI yoxlaması (playwright lazım)
+npm run test:live    # real Claude/OpenAI testi (yalnız öz açarlarınla, az pul xərcləyir)
 ```
 
-`CLAUDE.md`, `AGENTS.md`, `TEAM.md` və `.github/` GitHub Issue ilə üçlü iş qaydasına aiddir və bu sistemdən ayrıdır.
-
-## Mərhələlər
-
-Böyük plan 4 mərhələyə bölünüb, hər biri ayrı PR və ayrı test ilə gedir:
-
-1. **Təməl və təhlükəsizlik** (bu mərhələ): təsdiq mərkəzi, alət reyestri, SSRF və prompt injection qoruması, audit jurnalı, bilik bazası, `/api/status`. Bax `SECURITY.md`, `APPROVALS.md`, `TOOLS.md`.
-2. Agentlər və Shopify / sosial şəbəkə / CRM mock-ları (real API olmadan).
-3. Öyrənmə dövrü (Learning Agent) və workflow mühərriki.
-4. Telefon səhifəsinə yeni tablar (təsdiq, bilik, status) və qalan sənədlər.
-
-Əvvəlki mərhələlərin həqiqi vəziyyəti `/api/status` və bu sənədlərdədir. Hələ qurulmayan şey burada "var" kimi yazılmır.
+`wrangler dev --local` + `scripts/runtime-smoke.mjs` real Cloudflare runtime-da (KV/R2/Durable Object lokal) tüstü yoxlamasıdır.
 
 ## Məhdudiyyətlər
 
+- Real xarici hesablarla sınaq yoxdur (yuxarıdakı cədvələ bax).
+- Video emalı üçün ayrı server lazımdır (Worker ffmpeg işlədə bilmir).
+- Instagram/TikTok/YouTube üçün təsdiqlənməmiş tətbiqlər məhdudiyyətlə işləyir (TikTok yalnız `SELF_ONLY`, YouTube yalnız `private` ola bilər); bax `docs/INTEGRATIONS.md`.
 - Düyməyə basıb danışmaq rejimidir, canlı zəng deyil.
-- Shopify, Instagram, Telegram inteqrasiyaları hələ yoxdur. Paylaşım tapşırıqlarında yalnız qaralama hazırlanır.
-- Real API ilə sınaq hələ keçirilməyib (yuxarıya bax).
-- API açarlarını heç vaxt bu repo-ya yazma. Repo açıqdırsa hər kəs görür.
-Üçlü komanda testi: Fərid + Claude + ChatGPT
+- API açarlarını heç vaxt bu repo-ya yazma. Repo açıqdır.
+
+`CLAUDE.md`, `AGENTS.md`, `TEAM.md`, `.github/` GitHub Issue ilə üçlü iş qaydasına aiddir (Fərid + Claude + ChatGPT) və bu sistemdən ayrıdır.

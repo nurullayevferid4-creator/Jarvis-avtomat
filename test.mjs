@@ -45,7 +45,7 @@ let r = await req("/");
 const html = await r.text();
 assert.equal(r.status, 200);
 assert.ok(html.includes("JARVIS"));
-const script = html.split("<script>")[1].split("</script>")[0];
+const script = /<script nonce="[^"]+">([\s\S]*)<\/script>/.exec(html)[1];
 new vm.Script(script);
 console.log("1 page + client script parse OK");
 

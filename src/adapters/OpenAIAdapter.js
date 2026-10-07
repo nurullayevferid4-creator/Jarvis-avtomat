@@ -12,6 +12,7 @@ import { DEFAULTS } from "../config.js";
 import { WORKER_SYSTEM } from "../prompts.js";
 import { httpRequest } from "../guards/http.js";
 import { BudgetExceededError } from "../guards/budget.js";
+import { providerHttpError } from "../providers/http.js";
 
 export class OpenAIAdapter extends BaseAdapter {
   constructor(env) {
@@ -52,7 +53,7 @@ export class OpenAIAdapter extends BaseAdapter {
       { method: "POST", headers, body: JSON.stringify({ model, messages: [{ role: "system", content: WORKER_SYSTEM }, { role: "user", content: task.prompt }] }) },
       ctx.timeoutMs,
     );
-    if (!r2.ok) throw new Error("OpenAI " + r2.status + ": " + r2.data);
+    if (!r2.ok) throw providerHttpError("OpenAI", r2.status, r2.data);
     const c = r2.data.choices && r2.data.choices[0] && r2.data.choices[0].message;
     return { text: (c && c.content) || "", web: false };
   }

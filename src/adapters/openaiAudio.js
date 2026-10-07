@@ -6,6 +6,14 @@
 import { httpRequest } from "../guards/http.js";
 import { DEFAULTS } from "../config.js";
 import { b64 } from "../util.js";
+import { AppError } from "../errors.js";
+import { providerHttpError } from "../providers/http.js";
+
+// Səs xətaları da vahid kodlarla çıxır (AUTH_ERROR, RATE_LIMIT, ...), provider gövdəsi istifadəçiyə getmir.
+function audioError(label, status, body) {
+  const e = providerHttpError("openai-audio", status, body);
+  return new AppError(e.code, label + " " + status, { source: "openai-audio", retryable: e.retryable });
+}
 
 export async function stt(env, file, timeoutMs) {
   const type = file.type || "";
@@ -15,7 +23,7 @@ export async function stt(env, file, timeoutMs) {
   fd.append("model", "whisper-1");
   fd.append("language", "az");
   const r = await httpRequest("https://api.openai.com/v1/audio/transcriptions", { method: "POST", headers: { authorization: "Bearer " + env.OPENAI_API_KEY }, body: fd }, timeoutMs);
-  if (!r.ok) throw new Error("Səs tanıma xətası " + r.status + ": " + r.data);
+  if (!r.ok) throw audioError("Səs tanıma xətası", r.status, r.data);
   return String(r.data.text || "").trim();
 }
 
@@ -30,6 +38,6 @@ export async function tts(env, text, timeoutMs) {
     timeoutMs,
     "buffer",
   );
-  if (!r.ok) throw new Error("Səsləndirmə xətası " + r.status);
+  if (!r.ok) throw audioError("Səsləndirmə xətası", r.status, "");
   return b64(r.data);
 }

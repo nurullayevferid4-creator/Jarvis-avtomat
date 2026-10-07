@@ -18,6 +18,8 @@ import { resolvePending } from "../approval/gate.js";
 import { CallBudget } from "../guards/budget.js";
 import { buildLeadSystem, FINAL_SYSTEM, FACT_CHECK_SYSTEM } from "../prompts.js";
 import { wrapExternal } from "../security/sanitize.js";
+import { publicError } from "../errors.js";
+import { OWNER_PERMISSIONS } from "../policy.js";
 
 // Köməkçi modelin (məs. veb axtarışlı OpenAI) cavabı xarici məzmun sayılır:
 // başqa modelə verilərkən <external_content> qutusuna qoyulur, əmr kimi qəbul edilmir.
@@ -25,7 +27,9 @@ const HELPER_MAX_CHARS = 20000;
 
 export class ClaudeOrchestrator {
   // approvals (istəyə bağlı): təsdiq mərkəzi. Verilməsə köhnə davranış dəyişmir.
-  constructor({ env, registry, limits, store, approvals = null }) {
+  // tools (istəyə bağlı): ToolRegistry. Verilsə Claude "tools" rejimində alət çağırışı planlaya bilər.
+  constructor({ env, registry, limits, store, approvals = null, tools = null }) {
+    this.tools = tools;
     this.env = env;
     this.registry = registry;
     this.limits = limits;
@@ -111,11 +115,56 @@ export class ClaudeOrchestrator {
     }
   }
 
+  // Claude-a göstərilən alət siyahısı (handler olmadan)
+  toolList() {
+    return this.tools.list().map((t) => ({ name: t.name, description: t.description, requiresApproval: t.requiresApproval, inputSchema: t.inputSchema }));
+  }
+
+  // Alət çağırışları ardıcıl icra olunur. Təsdiq tələb edən alət yalnız təsdiq qeydi açır.
+  async handleTools(text, plan, ctx, origin) {
+    const maxCalls = Math.min(4, this.limits.maxSubtasks);
+    const results = [];
+    for (const call of plan.tool_calls.slice(0, maxCalls)) {
+      const name = String((call && call.tool) || "");
+      const input = call && call.input && typeof call.input === "object" ? call.input : {};
+      let r;
+      try {
+        r = await this.tools.run(name, input, { approvals: this.approvals, origin, source: "chat", permissions: OWNER_PERMISSIONS, notifyChat: origin && origin.channel === "telegram" && origin.chat_id !== undefined ? String(origin.chat_id) : undefined });
+      } catch (e) {
+        r = { ok: false, status: "error", error: publicError(e, name).message };
+      }
+      results.push({ tool: name, status: r.status, approval_id: r.approval_id || null, output: r.ok ? r.output : null, error: r.ok ? null : (r.error || (r.errors && r.errors.join("; ")) || r.status) });
+      if (r.status === "not_found") break; // uydurma alət adı: davam etmirik
+    }
+    const done = results.filter((r) => r.status === "done").length;
+    const pending = results.filter((r) => r.status === "pending_approval");
+    let status = done === results.length ? "achieved" : pending.length && done + pending.length === results.length ? "pending_approval" : done || pending.length ? "partial" : "blocked";
+    const body = results.map((r) => "[" + r.tool + " / " + r.status + "]\n" + (r.status === "done" ? wrapExternal(JSON.stringify(r.output), { source: "tool:" + r.tool, maxLen: 6000 }).text : r.status === "pending_approval" ? "Təsdiq qeydi açıldı (id: " + r.approval_id + "). Hələ icra OLUNMAYIB." : "XƏTA: " + String(r.error).slice(0, 300))).join("\n\n");
+    let spoken = "";
+    let screen = "";
+    try {
+      const fin = parseJson(await this.lead.complete(FINAL_SYSTEM, [{ role: "user", content: "User said: " + text + "\nOverall status: " + status + "\n\nTool results (nothing outside these happened):\n" + body }], 1800, ctx));
+      spoken = String(fin.spoken || "");
+      screen = String(fin.screen || "");
+    } catch (e) { /* xam nəticələrə qayıdılır */ }
+    if (!spoken) spoken = status === "achieved" ? "Alətlər işlədi, nəticə ekranda." : status === "pending_approval" ? "Təsdiq lazımdır, hələ heç nə icra olunmayıb." : "İş tam alınmadı, təfərrüat ekranda.";
+    if (!screen) screen = body;
+    if (pending.length) {
+      const note = "Təsdiq gözləyir: " + pending.map((p) => p.approval_id).join(", ") + ". Təsdiq panelindən (və ya Telegram düyməsindən) özün qərar ver; səslə «hə» ilə icra olunmur.";
+      spoken += " " + note;
+      screen += "\n\n" + note;
+    }
+    const out = { status, spoken, screen, tasks: [], tools: results.map((r) => ({ tool: r.tool, status: r.status, approval_id: r.approval_id, error: r.error && String(r.error).slice(0, 200) })) };
+    if (pending.length) out.approval_id = pending[0].approval_id;
+    return out;
+  }
+
   static publicTasks(tasks) {
     return tasks.map((t) => ({ id: t.id, owner: t.owner, instruction: t.instruction, status: t.status, error: t.error || null, note: t.note || null }));
   }
 
-  async handle(text) {
+  // origin: sorğunun mənşəyi ({channel:"ui"} və ya {channel:"telegram", chat_id}). Təsdiq qeydləri buna bağlanır.
+  async handle(text, { origin = null, attachments = [] } = {}) {
     const budget = new CallBudget(this.limits.maxModelCalls);
     const ctx = { budget, timeoutMs: this.limits.callTimeoutMs };
     const state = await this.store.load();
@@ -127,13 +176,15 @@ export class ClaudeOrchestrator {
       if (gate.save) await this.store.save(state);
       // Söhbətdə "hə/yox" deyiləndə təsdiq mərkəzindəki qeyd də bağlanır
       if (this.approvals && pendingBefore && pendingBefore.approval_id && gate.decision) {
-        try { await this.approvals.decide(pendingBefore.approval_id, { decision: gate.decision === "approved" ? "approve" : "reject" }); } catch (e) { /* əsas axın pozulmasın */ }
+        try { await this.approvals.decide(pendingBefore.approval_id, { decision: gate.decision === "approved" ? "approve" : "reject", actor: origin }); } catch (e) { /* əsas axın pozulmasın */ }
       }
       return gate.response;
     }
 
     const hist = state.history.slice(-8);
-    const leadRaw = await this.lead.complete(buildLeadSystem(this.registry.helpers(), this.limits), [...hist, { role: "user", content: text }], 1200, ctx);
+    // Əlavə olunan media: id-lər sistemdən gəlir (etibarlı), fayl adı təmizlənib
+    const attach = attachments.length ? "\n\n[Attached media, usable as media_id in tools]\n" + attachments.slice(0, 5).map((a) => "- media_id=" + a.id + " kind=" + a.kind + (a.analysis && a.analysis.duration_s ? " " + a.analysis.width + "x" + a.analysis.height + " " + a.analysis.duration_s + "s" : a.analysis && a.analysis.width ? " " + a.analysis.width + "x" + a.analysis.height : "")).join("\n") : "";
+    const leadRaw = await this.lead.complete(buildLeadSystem(this.registry.helpers(), this.limits, this.tools ? this.toolList() : null), [...hist, { role: "user", content: text + attach }], 1200, ctx);
     let plan;
     try { plan = parseJson(leadRaw); } catch (e) { plan = { mode: "chat", reply: leadRaw.slice(0, 600) }; }
 
@@ -142,6 +193,13 @@ export class ClaudeOrchestrator {
       state.history = state.history.slice(-12);
       await this.store.save(state);
     };
+
+    if (this.tools && plan.mode === "tools" && Array.isArray(plan.tool_calls) && plan.tool_calls.length) {
+      const r = await this.handleTools(text, plan, ctx, origin);
+      await remember(r.spoken);
+      await this.store.saveJob({ ts: new Date().toISOString(), request: text, status: r.status, spoken: r.spoken, tools: r.tools.map((t) => ({ tool: t.tool, status: t.status })) });
+      return r;
+    }
 
     if (plan.clarification) {
       await remember(plan.clarification);
@@ -205,7 +263,7 @@ export class ClaudeOrchestrator {
       spoken += " «" + plan.external_action + "» üçün təsdiq lazımdır. İcra edim? Hə və ya yox de.";
       if (this.approvals) {
         try {
-          const ap = await this.approvals.create({ action: plan.external_action, content: screen.slice(0, 4000), risk: "medium", source: "orchestrator" });
+          const ap = await this.approvals.create({ action: plan.external_action, content: screen.slice(0, 4000), risk: "medium", source: "orchestrator", origin });
           approvalId = ap.id;
         } catch (e) { /* qeyd açılmasa da söhbətdəki təsdiq qapısı işləyir */ }
       }

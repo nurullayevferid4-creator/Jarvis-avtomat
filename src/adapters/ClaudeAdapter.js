@@ -6,6 +6,7 @@ import { BaseAdapter } from "./BaseAdapter.js";
 import { DEFAULTS } from "../config.js";
 import { WORKER_SYSTEM } from "../prompts.js";
 import { httpRequest } from "../guards/http.js";
+import { providerHttpError } from "../providers/http.js";
 
 export class ClaudeAdapter extends BaseAdapter {
   constructor(env) {
@@ -29,7 +30,7 @@ export class ClaudeAdapter extends BaseAdapter {
       },
       ctx.timeoutMs,
     );
-    if (!r.ok) throw new Error("Claude " + r.status + ": " + r.data);
+    if (!r.ok) throw providerHttpError("Claude", r.status, r.data);
     return (r.data.content || []).map((b) => b.text || "").join("");
   }
 

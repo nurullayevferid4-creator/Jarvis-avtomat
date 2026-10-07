@@ -13,6 +13,10 @@ export const RISK_POLICY = {
 // Alətlərə standart verilən icazələr (yalnız oxuma və daxili bilik bazası).
 export const DEFAULT_PERMISSIONS = ["read.web", "read.knowledge", "write.knowledge"];
 
+// Parollu sahibin (UI/Telegram söhbəti) alətlərə verdiyi icazələr. Təsdiq tələb edənlər bura düşmür:
+// onlar APPROVAL_ONLY_PERMISSIONS ilə həmişə təsdiq qeydi açır.
+export const OWNER_PERMISSIONS = [...DEFAULT_PERMISSIONS, "read.leads", "write.leads", "use.marketing", "read.agents", "read.reports", "read.media", "write.media"];
+
 // Bu icazələrdən birinə sahib alət həmişə "high" riskdədir və təsdiqsiz işləmir.
 export const APPROVAL_ONLY_PERMISSIONS = [
   "publish.social",

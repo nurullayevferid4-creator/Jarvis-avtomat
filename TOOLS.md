@@ -2,7 +2,7 @@
 
 `src/tools/registry.js` JARVIS-in istifadə edə biləcəyi alətləri təsvir edir. Daxili alətlər `src/tools/builtin.js`-dədir.
 
-**Status:** reyestr hazırdır və testlərlə yoxlanıb, amma alətlər hələ **orkestratora qoşulmayıb**. Onlar yalnız `/api/status`-da siyahıda görünür. Qoşulma sonrakı mərhələdir.
+**Status:** reyestr orkestratora və `/api/tools`, `/api/tools/run` ünvanlarına qoşulub (45 alət: veb oxuma, bilik, sosial paylaşım, Shopify, media, lead, marketinq, agent hesabatı). Təsdiq tələb edən hər alət yalnız təsdiq qeydi açır; real icra təsdiqdən sonra `ActionRunner` (və ya sosial paylaşım üçün `social flow`) ilə bir dəfə olur. Real xarici API ilə sınaq hələ keçirilməyib. Siyahı: `GET /api/tools`.
 
 ## Hər alətin sahələri
 
@@ -43,7 +43,7 @@ Siyasət bir yerdə dəyişdirilir: `src/policy.js`.
 | `web.fetch` | low | Açıq HTTPS səhifəni oxuyur (SSRF qorumalı). Nəticə `<external_content>` qutusunda gəlir. Real internetlə sınanmayıb, yalnız saxta fetch ilə test olunub. |
 | `knowledge.search` | low | Bilik bazasında axtarış |
 | `knowledge.add` | low | Bilik bazasına qeyd (təkrar saxlanmır) |
-| `social.publish` | high | **Real paylaşım etmir.** Təsdiq qeydi açır. Təsdiqdən sonra da icra yoxdur ("API integration pending"). |
+| `social.publish` | high | Paylaşım aləti (Instagram, TikTok, YouTube, Telegram). **Özü paylaşmır:** strukturlu təsdiq qeydi (`payload` + hash) açır. Real paylaşımı təsdiqdən sonra `src/social/flow.js` edir. Sahələr: `platform`/`platforms`, `caption`, `title`, `description`, `hashtags`, `media_id`/`media_url`, `media_type`, `thumbnail_media_id`, `privacy` (standart `private`), `made_for_kids`. Bax `SOCIAL.md`. |
 
 ## Yeni alət əlavə etmək
 

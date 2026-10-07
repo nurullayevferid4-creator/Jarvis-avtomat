@@ -1,0 +1,35 @@
+name: CI
+
+# Sirsiz yoxlama: heç bir repository secret-i istifadə olunmur, real API çağırılmır.
+# pull_request istifadə olunur (pull_request_target YOX): fork-dan gələn kod secret görmür.
+on:
+  push:
+    branches: [main, "feature/**", "fix/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Sintaksis (lint)
+        run: npm run lint
+      - name: Statik audit (TODO/STUB/sirr nümunəsi/hardcoded)
+        run: node scripts/static-audit.mjs
+      - name: Testlər (heç bir real API çağırılmır)
+        run: npm test
+      - name: Wrangler dry-run (deploy EDİLMİR)
+        run: npx --yes wrangler@4 deploy --dry-run --outdir "$RUNNER_TEMP/wrangler-out"

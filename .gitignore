@@ -17,3 +17,4 @@ node_modules/
 
 # Sistem faylları
 .DS_Store
+.claude/

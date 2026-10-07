@@ -1,13 +1,15 @@
 // Daxili alətlər. Hazırda orkestratora QOŞULMAYIB: yalnız /api/status-da siyahıda görünür
 // və testlərdə yoxlanır. Qoşulması sonrakı mərhələdir (Learning Agent).
 //
-// "social.publish" real paylaşım etmir: yüksək riskli, təsdiqsiz işləmir və təsdiqdən sonra da
-// inteqrasiya olmadığı üçün icra edilmir ("API integration pending").
+// "social.publish": yüksək riskli. Alət özü paylaşmır, yalnız strukturlu təsdiq qeydi açır.
+// Real icra yalnız təsdiqdən sonra src/social/flow.js-də olur.
 
 import { ToolRegistry } from "./registry.js";
 import { safeFetch } from "../security/ssrf.js";
 import { wrapExternal } from "../security/sanitize.js";
 import { KNOWLEDGE_TYPES } from "../knowledge/KnowledgeBase.js";
+import { buildApproval } from "../social/flow.js";
+import { PLATFORMS } from "../social/platforms.js";
 
 export function createDefaultToolRegistry({ audit = null, approvals = null } = {}) {
   const reg = new ToolRegistry({ audit, approvals });
@@ -77,14 +79,34 @@ export function createDefaultToolRegistry({ audit = null, approvals = null } = {
 
   reg.register({
     name: "social.publish",
-    description: "Sosial şəbəkədə paylaşım. API integration pending: təsdiqdən sonra da icra olunmur.",
-    inputSchema: { type: "object", required: ["platform", "caption"], additionalProperties: false, properties: { platform: { type: "string", enum: ["instagram", "tiktok", "telegram"] }, caption: { type: "string", minLength: 1, maxLength: 2200 } } },
+    description: "Sosial şəbəkədə paylaşım (Instagram, TikTok, YouTube, Telegram). Həmişə təsdiq tələb edir: bu alət yalnız təsdiq qeydi açır, paylaşımı təsdiqdən sonra social flow edir.",
+    inputSchema: {
+      type: "object",
+      required: ["caption"],
+      additionalProperties: false,
+      properties: {
+        platform: { type: "string", enum: PLATFORMS },
+        platforms: { type: "array", maxItems: 4, items: { type: "string", enum: PLATFORMS } },
+        caption: { type: "string", minLength: 1, maxLength: 2200 },
+        title: { type: "string", maxLength: 100 },
+        description: { type: "string", maxLength: 1000 },
+        hashtags: { type: "array", maxItems: 30, items: { type: "string", maxLength: 60 } },
+        media_id: { type: "string", maxLength: 24 },
+        media_url: { type: "string", maxLength: 2048 },
+        media_type: { type: "string", enum: ["image", "video"] },
+        thumbnail_media_id: { type: "string", maxLength: 24 },
+        privacy: { type: "string", enum: ["private", "unlisted", "public"] },
+        made_for_kids: { type: "boolean" },
+      },
+    },
     outputSchema: { type: "object", required: ["published"], properties: { published: { type: "boolean" } } },
     permissions: ["publish.social"],
     risk: "high",
     requiresApproval: true,
+    approval: { kind: "social.publish", via: "social.flow", build: (input, ctx) => buildApproval(input, { notifyChat: ctx && ctx.notifyChat }) },
     async handler() {
-      throw new Error("API integration pending");
+      // Bura heç vaxt çatmır: requiresApproval alətləri registry-də icra olunmur.
+      throw new Error("social.publish yalnız təsdiq axını ilə icra olunur");
     },
   });
 
