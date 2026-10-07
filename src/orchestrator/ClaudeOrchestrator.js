@@ -20,6 +20,7 @@ import { buildLeadSystem, FINAL_SYSTEM, FACT_CHECK_SYSTEM } from "../prompts.js"
 import { wrapExternal } from "../security/sanitize.js";
 import { publicError } from "../errors.js";
 import { OWNER_PERMISSIONS } from "../policy.js";
+import { isMarketingTool, formatMarketingReply } from "./marketingReply.js";
 
 // Köməkçi modelin (məs. veb axtarışlı OpenAI) cavabı xarici məzmun sayılır:
 // başqa modelə verilərkən <external_content> qutusuna qoyulur, əmr kimi qəbul edilmir.
@@ -157,14 +158,21 @@ export class ClaudeOrchestrator {
     const body = results.map((r) => "[" + r.tool + " / " + r.status + "]\n" + (r.status === "done" ? wrapExternal(JSON.stringify(r.output), { source: "tool:" + r.tool, maxLen: 6000 }).text : r.status === "pending_approval" ? "Təsdiq qeydi açıldı (id: " + r.approval_id + "). Hələ icra OLUNMAYIB." : "XƏTA: " + String(r.error).slice(0, 300))).join("\n\n");
     let spoken = "";
     let screen = "";
-    try {
-      if (Date.now() - t0 > 14000) throw new Error("vaxt azdır: xam nəticələr");
-      const tFinal = Date.now();
-      const fin = parseJson(await this.lead.complete(FINAL_SYSTEM, [{ role: "user", content: "User said: " + text + "\nOverall status: " + status + "\n\nTool results (nothing outside these happened):\n" + body }], 1800, ctx));
-      if (trace) trace.final_ms = Date.now() - tFinal;
-      spoken = String(fin.spoken || "");
-      screen = String(fin.screen || "");
-    } catch (e) { /* xam nəticələrə qayıdılır */ }
+    // Yalnız marketing.* alətləri: çıxış artıq strukturludur, FINAL model çağırışı atlanır (Worker vaxtı tool-lara qalır)
+    const marketingOnly = calls.length > 0 && calls.every((c) => isMarketingTool(c && c.tool));
+    if (marketingOnly) {
+      try { ({ spoken, screen } = formatMarketingReply(results)); } catch (e) { /* xam nəticələrə qayıdılır */ }
+      if (trace) trace.final_skipped = "marketing_only";
+    } else {
+      try {
+        if (Date.now() - t0 > 14000) throw new Error("vaxt azdır: xam nəticələr");
+        const tFinal = Date.now();
+        const fin = parseJson(await this.lead.complete(FINAL_SYSTEM, [{ role: "user", content: "User said: " + text + "\nOverall status: " + status + "\n\nTool results (nothing outside these happened):\n" + body }], 1800, ctx));
+        if (trace) trace.final_ms = Date.now() - tFinal;
+        spoken = String(fin.spoken || "");
+        screen = String(fin.screen || "");
+      } catch (e) { /* xam nəticələrə qayıdılır */ }
+    }
     if (!spoken) spoken = status === "achieved" ? "Alətlər işlədi, nəticə ekranda." : status === "pending_approval" ? "Təsdiq lazımdır, hələ heç nə icra olunmayıb." : "İş tam alınmadı, təfərrüat ekranda.";
     if (!screen) screen = body;
     if (pending.length) {

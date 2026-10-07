@@ -399,3 +399,57 @@ test("model gec cavab verəndə marketing alətləri vaxtında şablon qaralama 
   assert.equal(r.output.fallback_reason, "llm_timeout");
   assert.ok(Date.now() - t >= LLM_DEADLINE_MS - 200);
 });
+
+// ---- Issue #27: qısa plan, AI generasiyası qalır ----
+test("#27: plan model cavab verəndə AI-dır; qısa təlimat + kiçik max_tokens; artıq bəndlər limitə kəsilir, xarici forma eynidir", async () => {
+  const { PLAN_LIMITS } = await import("../src/marketing/engine.js");
+  const big = goodPlan({
+    target_audience: { primary: "Kafe sahibləri", segments: ["Kafe", "Restoran", "Bar", "Lounge", "Fast food", "Qəhvəxana"] },
+    script: Array.from({ length: 8 }, (_, i) => ({ timing: i * 3 + "-" + (i * 3 + 3) + " san", visual: "Kadr " + i, voiceover: "Mətn " + i })),
+    shot_list: Array.from({ length: 10 }, (_, i) => ({ shot: i + 1, description: "Kadr " + i, duration_sec: 2 })),
+    hashtags: Array.from({ length: 20 }, (_, i) => "#menyu" + i),
+    ab_ideas: Array.from({ length: 5 }, (_, i) => ({ variable: "Hook " + i, variant_a: "A", variant_b: "B", measure: "izləmə" })),
+  });
+  const llm = fakeLlm(() => big);
+  const r = await setup(llm).run("marketing.campaign.plan", { brand: "Qara menyu", platforms: ["instagram"] });
+  assert.equal(r.status, "done", JSON.stringify(r).slice(0, 300));
+  const o = r.output;
+  assert.equal(o.brand, "qr_menu");
+  assert.equal(o.source, "claude");
+  assert.equal(o.ai_generated, true);
+  assert.equal(o.fallback_reason, undefined);
+  assert.equal(llm.calls.length, 1);
+  assert.ok(llm.calls[0].maxTokens <= 1500, "plan max_tokens kiçildilib");
+  assert.match(llm.calls[0].system, /Be concise/);
+  assert.match(llm.calls[0].system, /at most 600 chars/);
+  const p = o.plan;
+  assert.equal(p.target_audience.segments.length, PLAN_LIMITS.segments);
+  assert.equal(p.script.length, PLAN_LIMITS.script);
+  assert.equal(p.shot_list.length, PLAN_LIMITS.shots);
+  assert.equal(p.ab_ideas.length, PLAN_LIMITS.ab_ideas);
+  assert.equal(p.hashtags.length, PLAN_LIMITS.hashtags);
+  assert.ok(validate(PLAN_SCHEMA, p).ok, "xarici plan forması dəyişməyib");
+  assert.ok(o.publishing_plan.instagram);
+});
+
+test("#27: deterministik marketinq cavabı: şablon nəticə açıq deyilir, xəta göstərilir, model çağırılmır", async () => {
+  const { formatMarketingReply, isMarketingTool } = await import("../src/orchestrator/marketingReply.js");
+  assert.ok(isMarketingTool("marketing.hooks") && !isMarketingTool("social.publish"));
+  const { run } = setup();
+  const plan = await run("marketing.campaign.plan", { brand: "qr_menu" });
+  const tags = await run("marketing.hashtags", { brand: "qr_menu" });
+  const results = [
+    { tool: "marketing.campaign.plan", status: plan.status, output: plan.output },
+    { tool: "marketing.hashtags", status: tags.status, output: tags.output },
+    { tool: "marketing.hooks", status: "invalid_input", output: null, error: "Naməlum brend" },
+  ];
+  const f = formatMarketingReply(results);
+  assert.match(f.spoken, /Marketinq qaralamaları hazırdır: kampaniya planı, hashteqlər\./);
+  assert.match(f.spoken, /Bəzi hissələr alınmadı/);
+  assert.match(f.spoken, /şablon/);
+  assert.match(f.screen, /Kampaniya planı \(şablon qaralama \(səbəb: llm_unavailable\)\)/);
+  assert.match(f.screen, /Hook-lar: alınmadı \(Naməlum brend\)/);
+  assert.ok(f.screen.includes(tags.output.hashtags[0]));
+  assert.match(f.screen, /Heç nə dərc olunmayıb/);
+  assert.equal(netCalls, 0);
+});
