@@ -52,6 +52,7 @@ export class ToolRegistry {
       name: def.name,
       description: String(def.description),
       inputSchema: def.inputSchema,
+      normalizeInput: typeof def.normalizeInput === "function" ? def.normalizeInput : null,
       outputSchema: def.outputSchema,
       permissions,
       risk: def.risk,
@@ -113,6 +114,7 @@ export class ToolRegistry {
     const tool = this.tools.get(name);
     if (!tool) return { ok: false, status: "not_found" };
 
+    if (tool.normalizeInput) input = tool.normalizeInput(input);
     const inCheck = validate(tool.inputSchema, input);
     if (!inCheck.ok) {
       await this._log("tool.invalid_input", { tool: name });

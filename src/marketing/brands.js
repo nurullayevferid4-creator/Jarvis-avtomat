@@ -70,6 +70,16 @@ export const BRANDS = {
 
 export const BRAND_IDS = Object.keys(BRANDS);
 
+// "QR Menu", "qr-menu", "QRMenu", "FN Parfum" → kanonik id (qr_menu, fn_parfum). Tanınmayan dəyər olduğu kimi qalır.
+export function normalizeBrandId(v) {
+  if (typeof v !== "string") return v;
+  if (BRANDS[v]) return v;
+  const key = v.toLocaleLowerCase("en").replace(/[\s_-]+/g, "_").replace(/^_+|_+$/g, "");
+  if (BRANDS[key]) return key;
+  const squash = key.replace(/_/g, "");
+  return BRAND_IDS.find((id) => id.replace(/_/g, "") === squash) || v;
+}
+
 export function getBrand(id) {
   return BRANDS[id] || null;
 }

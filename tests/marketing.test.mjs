@@ -374,3 +374,16 @@ test("şablon planı sxemə uyğundur (model sxemi ilə eyni forma) və claim-si
     assert.deepEqual(findClaims(JSON.stringify(plan)), [], id);
   }
 });
+
+test("QR Menu üçün reklam: 'QR Menu' brendi kanonik qr_menu-ya çevrilir, üç alət də keçir", async () => {
+  const { run } = setup();
+  for (const [name, extra] of [["marketing.campaign.plan", {}], ["marketing.hooks", {}], ["marketing.captions", { platform: "instagram" }]]) {
+    for (const b of ["QR Menu", "qr-menu", "qr_menu"]) {
+      const r = await run(name, { brand: b, ...extra });
+      assert.equal(r.status, "done", name + " / " + b + ": " + JSON.stringify(r.errors || r.error));
+      assert.equal(r.output.brand.id || r.output.brand, "qr_menu");
+    }
+  }
+  assert.equal((await run("marketing.hooks", { brand: "FN Parfum" })).status, "done");
+  assert.equal((await run("marketing.hooks", { brand: "naməlum" })).status, "invalid_input");
+});
