@@ -9,7 +9,8 @@ import { renderPage, pageCsp } from "./ui/page.js";
 import { json } from "./util.js";
 import { getLimits, getFeatures, DEFAULTS, VERSION } from "./config.js";
 import { createRegistry } from "./adapters/registry.js";
-import { stt, tts } from "./adapters/openaiAudio.js";
+import { stt, tts, diagnoseOpenAI } from "./adapters/openaiAudio.js";
+import { inspectOpenAIKey } from "./security/envvalue.js";
 import { ClaudeOrchestrator } from "./orchestrator/ClaudeOrchestrator.js";
 import { buildContext } from "./app/context.js";
 import { safeEqual, readPasscode, failureCount, recordFailure, clearFailures } from "./guards/login.js";
@@ -48,6 +49,8 @@ function statusInfo(env, limits, features, tools, extra = {}) {
     version: VERSION,
     storage: env.JARVIS_KV ? "kv" : "memory",
     secrets: { ANTHROPIC_API_KEY: !!env.ANTHROPIC_API_KEY, OPENAI_API_KEY: !!env.OPENAI_API_KEY, PASSCODE: !!env.PASSCODE },
+    // Açarın yalnız forması (dəyəri yox): project/legacy/admin/unexpected, təmizlənibmi
+    openai_key: { ...inspectOpenAIKey(env), last4: undefined },
     models: { claude: env.CLAUDE_MODEL || DEFAULTS.claudeModel, openai: env.OPENAI_MODEL || DEFAULTS.openaiModel },
     features,
     limits: {
@@ -382,6 +385,11 @@ export default {
         return socialErrorResponse(e);
       }
       return new Response("Not found", { status: 404 });
+    }
+
+    // OpenAI səs tanıma diaqnostikası (parolla): açarın forması + 1 san. səssiz faylla real STT sorğusu. Açar göstərilmir.
+    if (req.method === "POST" && url.pathname === "/api/diagnostics/openai-audio") {
+      return json(await diagnoseOpenAI(env, getLimits(env).callTimeoutMs));
     }
 
     if (!env.ANTHROPIC_API_KEY || !env.OPENAI_API_KEY) return json({ error: "ANTHROPIC_API_KEY və ya OPENAI_API_KEY təyin edilməyib." }, 500);

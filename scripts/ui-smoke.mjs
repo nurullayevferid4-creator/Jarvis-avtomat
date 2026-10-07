@@ -21,6 +21,7 @@ const env = { ANTHROPIC_API_KEY: "test-a", OPENAI_API_KEY: "test-o", PASSCODE: "
 const tgState = { url: "", allowed_updates: undefined, rejectToken: false };
 const realFetch = globalThis.fetch;
 globalThis.fetch = async (u, init = {}) => {
+  if (String(u) === "https://api.openai.com/v1/audio/transcriptions" || String(u) === "https://api.openai.com/v1/models") return new Response(JSON.stringify({ error: { message: "Incorrect API key provided: test****. You can find your API key at https://platform.openai.com/account/api-keys.", code: "invalid_api_key" } }), { status: 401, headers: { "content-type": "application/json" } });
   const m = String(u).match(/^https:\/\/api\.telegram\.org\/bot([^/]+)\/(\w+)$/);
   if (!m) return realFetch(u, init);
   const jr = (o, st = 200) => new Response(JSON.stringify(o), { status: st, headers: { "content-type": "application/json" } });
@@ -96,6 +97,13 @@ problems.push(...tgNoise);
 const tgAll = Object.values(tg).join(" | ") + (await page.textContent("#errs")) + (await page.textContent("#state"));
 const tgLeak = tgAll.includes(TG_TOKEN) || tgAll.includes("UI-SMOKE-BOT-TOKEN") || tgAll.includes(TG_SECRET);
 if (/\b409\b/.test(tg.rejected)) problems.push("token rədd halı 409 kimi göstərilir");
+// OpenAI səs diaqnostikası düyməsi (saxta OpenAI 401 qaytarır)
+await page.evaluate(() => { document.getElementById("d-status").open = true; });
+await page.click("#oaidiag");
+await page.waitForFunction(() => /AÇAR ETİBARSIZDIR/.test(document.getElementById("oaires").textContent), null, { timeout: 5000 }).catch(() => problems.push("OpenAI diaqnostikası nəticə göstərmədi"));
+const oaiText = await page.textContent("#oaires");
+if (!/invalid_api_key/.test(oaiText) || /test-o|platform\.openai/.test(oaiText)) problems.push("OpenAI diaqnostika mətni gözlənilən deyil: " + oaiText);
+tg.openai_diag = oaiText;
 const before = problems.length;
 await page.fill("#pass", "yanlış");
 await page.click("#login");

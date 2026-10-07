@@ -67,7 +67,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
 <div class="row"><span class="lbl">Platforma vəziyyəti</span><span><button id="spv" class="s" type="button">Canlı yoxla</button> <button id="spr" class="s" type="button">Yenilə</button></span></div>
 <div id="sp"></div><div class="row"><button id="tgsetup" class="s" type="button">Telegram webhook-u qur</button> <button id="tgcheck" class="s" type="button">Telegram webhook-u yoxla</button></div><div id="tgres" aria-live="polite"></div></div></details>
 <details id="d-audit"><summary>Audit jurnalı</summary><div class="sub gap"><button id="r-audit" class="s" type="button">Yenilə</button><div id="audit"></div></div></details>
-<details id="d-status"><summary>Sistem vəziyyəti</summary><div class="sub gap"><button id="r-status" class="s" type="button">Yenilə</button><div id="status"></div></div></details>
+<details id="d-status"><summary>Sistem vəziyyəti</summary><div class="sub gap"><button id="r-status" class="s" type="button">Yenilə</button> <button id="oaidiag" class="s" type="button">OpenAI səs tanımanı yoxla</button><div id="oaires" aria-live="polite"></div><div id="status"></div></div></details>
 <details id="d-err"><summary>Xətalar (bu sessiya)</summary><div class="sub gap"><div id="errs" class="lbl">Xəta yoxdur.</div></div></details>
 </main>
 <script nonce="__NONCE__">
@@ -334,6 +334,23 @@ box.appendChild(el("div","lbl","«təyin olunub» yalnız sirrin mövcudluğunu 
 });
 }
 $("r-status").addEventListener("click",loadStatus);
+var OAKEY={missing:"təyin edilməyib",project:"layihə açarı (sk-proj-)",legacy:"köhnə tip açar (sk-)",service_account:"servis hesabı açarı",admin:"ADMIN açarı: model API-ləri üçün yaramır",unexpected:"gözlənilməz format (sk- ilə başlamır)"};
+var OAV={ok:["OPENAI İŞLƏYİR","ok"],secret_missing:["SECRET YOXDUR","bad"],admin_key:["ADMIN AÇARI","bad"],key_invalid:["AÇAR ETİBARSIZDIR","bad"],missing_audio_scope:["AUDIO İCAZƏSİ YOXDUR","bad"],billing:["BILLING","bad"],rate_limited:["LİMİT","warn"],account_or_project:["HESAB/LAYİHƏ PROBLEMİ","bad"],unreachable:["ÇATMIR","warn"],stt_error:["STT XƏTASI","bad"]};
+function oaLine(box,label,x){if(!x)return;box.appendChild(el("div","lbl",label+": HTTP "+x.http+" · "+x.reason+(x.explanation?" · "+x.explanation:"")+(x.request_id?" · request_id "+x.request_id:"")+(x.project?" · layihə "+x.project:"")))}
+$("oaidiag").addEventListener("click",function(){
+var box=$("oaires");box.textContent="yoxlanır...";
+api("/api/diagnostics/openai-audio",{method:"POST"},"OpenAI səs diaqnostikası").then(function(r){
+box.textContent="";var d=r.data||{},k=d.key||{},v=OAV[d.verdict]||[d.verdict||"?","warn"];
+if(!r.ok){box.appendChild(pill("XƏTA","bad"));box.appendChild(el("div","lbl",errText(r)));return}
+box.appendChild(pill(v[0],v[1]));
+box.appendChild(el("div","lbl","Nə etməli: "+(d.action||"")));
+box.appendChild(el("div","lbl","açar: "+(OAKEY[k.shape]||k.shape)+(k.last4?" · son 4 simvol: …"+k.last4+" (OpenAI → API keys siyahısı ilə müqayisə et)":"")+(k.cleaned?" · ətrafında boşluq/dırnaq var idi (avtomatik təmizlənir)":"")+(k.has_inner_space?" · açarın içində boşluq var: yanlış yapışdırılıb":"")));
+if(d.header)box.appendChild(el("div","lbl","Authorization başlığı: "+d.header.scheme+(d.header.well_formed?" · forma düzgündür":" · forma GÖZLƏNİLƏN DEYİL")));
+oaLine(box,"Autentifikasiya (GET /v1/models)",d.auth);
+oaLine(box,"Səs tanıma (POST /v1/audio/transcriptions, whisper-1, az)",d.stt);
+setState("OpenAI: "+v[0]);
+});
+});
 $("d-status").addEventListener("toggle",function(){if($("d-status").open)loadStatus()});
 
 // ---- Hesablar ----
