@@ -387,3 +387,15 @@ test("QR Menu üçün reklam: 'QR Menu' brendi kanonik qr_menu-ya çevrilir, ü�
   assert.equal((await run("marketing.hooks", { brand: "FN Parfum" })).status, "done");
   assert.equal((await run("marketing.hooks", { brand: "naməlum" })).status, "invalid_input");
 });
+
+test("model gec cavab verəndə marketing alətləri vaxtında şablon qaralama qaytarır (LLM_DEADLINE_MS)", async () => {
+  const { LLM_DEADLINE_MS } = await import("../src/marketing/engine.js");
+  assert.ok(LLM_DEADLINE_MS <= 15000);
+  const { run } = setup({ provider: "claude", completeJson: () => new Promise(() => {}) });
+  const t = Date.now();
+  const r = await Promise.race([run("marketing.hooks", { brand: "QR Menu" }), new Promise((res) => setTimeout(() => res("late"), LLM_DEADLINE_MS + 3000))]);
+  assert.notEqual(r, "late");
+  assert.equal(r.status, "done");
+  assert.equal(r.output.fallback_reason, "llm_timeout");
+  assert.ok(Date.now() - t >= LLM_DEADLINE_MS - 200);
+});
