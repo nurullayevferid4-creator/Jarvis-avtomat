@@ -2,6 +2,7 @@
 // Standart: SÖNDÜRÜLÜB. Yalnız DAILY_REPORT_HOUR (Bakı saatı, 0-23) təyin olunanda işləyir.
 // Yalnız TELEGRAM_ALLOWED_CHAT_IDS siyahısındakı öz söhbətinə göndərilir; heç nə dərc/icra olunmur.
 import { allowedIds } from "./handler.js";
+import { autonomyLines } from "../autonomy/scheduler.js";
 
 const BAKU_OFFSET_MS = 4 * 3600 * 1000;
 
@@ -12,7 +13,7 @@ export function reportHour(env) {
   return h >= 0 && h <= 23 ? h : null;
 }
 
-export function buildReportText({ pending = 0, jobs = [], sinceMs }) {
+export function buildReportText({ pending = 0, jobs = [], sinceMs, auto = [] }) {
   const recent = jobs.filter((j) => Number(j.updated_at || j.created_at || 0) >= sinceMs);
   const by = {};
   for (const j of recent) by[j.status] = (by[j.status] || 0) + 1;
@@ -22,7 +23,8 @@ export function buildReportText({ pending = 0, jobs = [], sinceMs }) {
   lines.push("• Paylaşım işləri: " + recent.length + (recent.length ? " (" + Object.entries(by).map(([k, v]) => k + ": " + v).join(", ") + ")" : ""));
   if (failed.length) lines.push("• ⚠️ Problemli işlər: " + failed.slice(0, 5).map((j) => String(j.id).slice(-8) + "/" + j.status).join(", ") + " — /jobs yaz");
   if (pending) lines.push("• Qərar üçün /pending yaz.");
-  if (!pending && !recent.length) lines.push("• Yeni iş yoxdur.");
+  if (auto.length) lines.push("🤖 Avtonom işlər:", ...auto);
+  if (!pending && !recent.length && !auto.length) lines.push("• Yeni iş yoxdur.");
   return lines.join("\n");
 }
 
@@ -41,10 +43,21 @@ export async function maybeSendDailyReport({ env, hub, flow, approvals, store, n
   let jobs = [];
   try { pending = (await approvals.list({ status: "pending", limit: 30 })).length; } catch (e) { /* hesabat yenə də gedir */ }
   try { jobs = await flow.listJobs(30); } catch (e) { /* hesabat yenə də gedir */ }
-  const text = buildReportText({ pending, jobs, sinceMs: now - 24 * 3600 * 1000 });
+  let auto = [];
+  try { auto = await autonomyLines(store); } catch (e) { /* hesabat yenə də gedir */ }
+  const text = buildReportText({ pending, jobs, sinceMs: now - 24 * 3600 * 1000, auto });
   let sent = 0;
   for (const id of ids) {
     try { await hub.adapter("telegram").sendMessage(id, text); sent++; } catch (e) { /* göndərilməsə də cron pozulmasın */ }
   }
   return { sent };
+}
+
+// Yalnız icazəli söhbətlərə (TELEGRAM_ALLOWED_CHAT_IDS) xəbərdarlıq
+export async function notifyOwners({ env, hub, text }) {
+  let sent = 0;
+  for (const id of allowedIds(env)) {
+    try { await hub.adapter("telegram").sendMessage(id, String(text).slice(0, 3500)); sent++; } catch (e) { /* göndərilməsə də davam */ }
+  }
+  return sent;
 }
