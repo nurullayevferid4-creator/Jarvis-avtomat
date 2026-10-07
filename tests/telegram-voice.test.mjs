@@ -192,3 +192,17 @@ test("eyni səsli mesaj (update_id təkrarı) bir dəfə transkripsiya olunur; y
   assert.equal(sttCalls(calls).length, 1, "yazılı mesaj STT çağırmamalıdır");
   assert.ok(replies(calls).some((t) => /^JARVIS Telegram idarəsi/.test(t)), "/help yazılı əmri əvvəlki kimi işləyir");
 });
+
+test("runChat gecikəndə: istifadəçiyə «Daxili xəta» yox, vaxt limiti mesajı gedir (səssizlik də yox)", async () => {
+  const w = await ready();
+  const calls = installSocialFetch(server());
+  const h = createTelegramHandler({
+    env: w.env, hub: w.hub, flow: w.flow, approvals: w.approvals, store: w.store, audit: w.audit, chatDeadlineMs: 30,
+    runChat: async () => new Promise(() => {}),
+    transcribe: async () => "QR Menu üçün reklam hazırla.",
+  });
+  await h.handleUpdate(voiceMsg());
+  const out = replies(calls).join("\n");
+  assert.match(out, /Bunu indi edə bilmədim: Vaxt limiti|Bunu indi edə bilmədim: Cavab hazırlanması çox çəkdi/);
+  assert.doesNotMatch(out, /Daxili xəta/);
+});

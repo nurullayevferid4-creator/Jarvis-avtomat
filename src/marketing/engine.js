@@ -164,15 +164,22 @@ const POST = {
 
 // kind: plan | hooks | captions | hashtags | calendar
 // Qaytarır: { source, provider, ai_generated, personalized, fallback_reason?, notice, content }
+// Telegram arxa plan işi ~30 s-də kəsilir: model bu müddətdə cavab vermirsə şablon qaralama qaytarılır (səssiz çökmə yox)
+export const LLM_DEADLINE_MS = 13000;
+
 export async function produce({ kind, llm, brand, input, schema, req = {}, template, maxTokens = 2000 }) {
   const ctx = contextFor(brand, input);
   let fallback = null;
   if (llm && llm.provider !== "template" && typeof llm.completeJson === "function") {
     let res = null;
     try {
-      res = await llm.completeJson({ system: systemPrompt(kind, brand, ctx.allowCard), user: userPrompt(kind, brand, input, { request: req.public || {} }), schema, maxTokens });
+      let timer;
+      const deadline = new Promise((_, rej) => { timer = setTimeout(() => rej(Object.assign(new Error("llm deadline"), { llmDeadline: true })), LLM_DEADLINE_MS); });
+      try {
+        res = await Promise.race([llm.completeJson({ system: systemPrompt(kind, brand, ctx.allowCard), user: userPrompt(kind, brand, input, { request: req.public || {} }), schema, maxTokens }), deadline]);
+      } finally { clearTimeout(timer); }
     } catch (e) {
-      fallback = "llm_error";
+      fallback = e && e.llmDeadline ? "llm_timeout" : "llm_error";
     }
     if (!fallback) {
       const v = validate(schema, res);

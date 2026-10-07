@@ -122,6 +122,7 @@ export class ClaudeOrchestrator {
 
   // Alət çağırışları ardıcıl icra olunur. Təsdiq tələb edən alət yalnız təsdiq qeydi açır.
   async handleTools(text, plan, ctx, origin) {
+    const t0 = Date.now();
     const maxCalls = Math.min(4, this.limits.maxSubtasks);
     const calls = plan.tool_calls.slice(0, maxCalls);
     const runOne = async (call) => {
@@ -155,6 +156,7 @@ export class ClaudeOrchestrator {
     let spoken = "";
     let screen = "";
     try {
+      if (Date.now() - t0 > 14000) throw new Error("vaxt azdır: xam nəticələr");
       const fin = parseJson(await this.lead.complete(FINAL_SYSTEM, [{ role: "user", content: "User said: " + text + "\nOverall status: " + status + "\n\nTool results (nothing outside these happened):\n" + body }], 1800, ctx));
       spoken = String(fin.spoken || "");
       screen = String(fin.screen || "");

@@ -17,7 +17,7 @@ import { draftCopy } from "../social/planner.js";
 import { beginOAuth, OAUTH_PLATFORMS } from "../social/oauth.js";
 import { MEDIA_TYPES } from "../social/media.js";
 import { formatResult } from "../social/flow.js";
-import { publicError } from "../errors.js";
+import { publicError, AppError } from "../errors.js";
 import { cleanEnvValue } from "../security/envvalue.js";
 import { checkAudioFile, parseVoiceCommand, MAX_AUDIO_BYTES, speakable } from "../voice/command.js";
 import { normalizeTranscript, sttPrompt, looksLikePromptEcho } from "../voice/normalize.js";
@@ -111,7 +111,7 @@ const HELP = [
 // runChat(text, origin, context): Claude lideri (kontekst bloku və çat tarixi ilə).
 const CHAT_DEADLINE_MS = 26000;
 
-export function createTelegramHandler({ env, hub, flow, approvals, store, audit = null, runChat = null, runner = null, library = null, transcribe = null, voiceEnabled = true, memory = null, speak = null }) {
+export function createTelegramHandler({ env, hub, flow, approvals, store, audit = null, runChat = null, runner = null, library = null, transcribe = null, voiceEnabled = true, memory = null, speak = null, chatDeadlineMs = CHAT_DEADLINE_MS }) {
   const tg = () => hub.adapter("telegram");
 
   async function say(chatId, text, extra) {
@@ -509,7 +509,7 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
       try {
         // Worker arxa plan işi ~30 s-dən sonra səssiz kəsilir; ondan əvvəl istifadəçiyə cavab verilsin (səssizlik olmasın)
         let timer;
-        const limit = new Promise((_, rej) => { timer = setTimeout(() => rej(Object.assign(new Error("Cavab çox gecikdi"), { code: "TIMEOUT", retryable: true })), CHAT_DEADLINE_MS); });
+        const limit = new Promise((_, rej) => { timer = setTimeout(() => rej(new AppError("TIMEOUT", "Cavab hazırlanması çox çəkdi", { source: "chat" })), chatDeadlineMs); });
         try { r = await Promise.race([runChat(text, origin, context), limit]); } finally { clearTimeout(timer); }
       } catch (e) {
         const pe = publicError(e, "chat");
