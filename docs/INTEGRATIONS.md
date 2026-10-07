@@ -10,7 +10,7 @@ Hamısında: real paylaşım yalnız təsdiqdən sonra; token kodda yox, `TOKEN_
 |---|---|
 | Lazım | BotFather-dan bot (`TELEGRAM_BOT_TOKEN`), `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_ALLOWED_CHAT_IDS` (öz Telegram ID-n), kanal üçün `TELEGRAM_CHANNEL_ID` (bot kanalda admin) |
 | Webhook | UI > Qoşulu hesablar > «Telegram webhook-u qur» (`PUBLIC_BASE_URL` lazım) |
-| Edir | Komandalar, mətn əmri, səs/foto/video qəbulu (endirmə limiti ≤20 MB), təsdiq düymələri, kanala paylaşım |
+| Edir | Komandalar, mətn əmri, foto/video (və şəkil/video sənəd) qəbulu (endirmə limiti ≤20 MB). Telegram səs mesajı (voice note) **dəstəklənmir**: səs əmri yalnız veb səhifədədir, təsdiq düymələri, kanala paylaşım |
 | Qoruma | Secret başlıq (sabit vaxtlı), icazə siyahısı (boşdursa heç kim), `update_id` təkrarı bir dəfə, düymə yalnız qeydin öz çatından |
 | Sınanmayıb | Real bot, real kanal |
 
