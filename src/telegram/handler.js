@@ -17,6 +17,7 @@ import { draftCopy } from "../social/planner.js";
 import { beginOAuth, OAUTH_PLATFORMS } from "../social/oauth.js";
 import { MEDIA_TYPES } from "../social/media.js";
 import { formatResult } from "../social/flow.js";
+import { publicError } from "../errors.js";
 
 const ID_RE = /^\d{13}-[0-9a-f]{6}$/;
 const PLATFORM_WORDS = {
@@ -86,7 +87,8 @@ const HELP = [
   "/connect instagram|tiktok|youtube – hesab qoşma linki",
 ].join("\n");
 
-export function createTelegramHandler({ env, hub, flow, approvals, store, audit = null, runChat = null }) {
+// runner (istəyə bağlı): strukturlu (sosial olmayan) təsdiq qeydlərini icra edir (Shopify yazma və s.).
+export function createTelegramHandler({ env, hub, flow, approvals, store, audit = null, runChat = null, runner = null }) {
   const tg = () => hub.adapter("telegram");
 
   async function say(chatId, text, extra) {
@@ -101,28 +103,45 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
     if (audit) await audit.log(event, data);
   }
 
-  async function pendingFor(chatId) {
-    const list = await approvals.list({ status: "pending", limit: 30 });
-    return list.filter((a) => a.kind === "social.publish" && a.payload && String(a.payload.notify_chat) === String(chatId));
+  // Qeyd bu söhbətə məxsusdur: mənşə (origin) və ya köhnə qeydlərdə notify_chat bu çatdır.
+  function belongsTo(a, chatId) {
+    if (a.origin && a.origin.chat_id) return a.origin.channel === "telegram" && String(a.origin.chat_id) === String(chatId);
+    return !!(a.payload && a.payload.notify_chat && String(a.payload.notify_chat) === String(chatId));
   }
 
-  // Qeyd yalnız öz söhbətinə aiddirsə (notify_chat) Telegram-dan idarə oluna bilər.
+  async function pendingFor(chatId) {
+    const list = await approvals.list({ status: "pending", limit: 30 });
+    return list.filter((a) => a.kind && belongsTo(a, chatId));
+  }
+
+  // Qeyd yalnız öz söhbətinə aiddirsə Telegram-dan idarə oluna bilər.
   async function ownRecord(id, chatId) {
     const rec = await approvals.get(id);
-    if (!rec || rec.kind !== "social.publish") {
+    if (!rec || !rec.kind) {
       await say(chatId, "Belə təsdiq qeydi tapılmadı.");
       return null;
     }
-    if (!rec.payload || String(rec.payload.notify_chat) !== String(chatId)) {
+    if (!belongsTo(rec, chatId)) {
       await say(chatId, "Bu qeyd bu söhbətə aid deyil.");
       return null;
     }
     return rec;
   }
 
+  const actorOf = (chatId) => ({ channel: "telegram", chat_id: String(chatId), user_id: String(chatId) });
+
   async function approveAndRun(id, chatId) {
-    if (!(await ownRecord(id, chatId))) return;
-    const a = await flow.approveAndStart(id);
+    const own = await ownRecord(id, chatId);
+    if (!own) return;
+    if (own.kind !== "social.publish") {
+      if (!runner) return say(chatId, "Bu əməliyyat növü üçün icra qoşulmayıb.");
+      await say(chatId, "Təsdiq alındı. İcra edirəm...");
+      const r = await runner.approveAndExecute(id, { actor: actorOf(chatId) });
+      if (r.ok) return say(chatId, "✅ Edildi: " + String(own.content).slice(0, 300));
+      if (r.status === "unknown") return say(chatId, "⚠️ Nəticə bilinmir: " + (r.note || "xarici sistemdə yoxlayın") + " Təkrar edilmədi.");
+      return say(chatId, "❌ İcra olunmadı (" + (r.error && r.error.code) + ").");
+    }
+    const a = await flow.approveAndStart(id, { actor: actorOf(chatId) });
     if (!a.ok) {
       const m = a.error === "already_decided" ? "Bu qeyd üçün artıq qərar verilib." : a.error === "expired" ? "Qeydin vaxtı bitib. Yenidən hazırlayım." : a.error === "payload_modified" ? "Qeydin məzmunu dəyişdirilib, paylaşım bloklandı." : "Paylaşım başlamadı (" + a.error + ").";
       return say(chatId, m);
@@ -134,7 +153,7 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
 
   async function rejectIt(id, chatId) {
     if (!(await ownRecord(id, chatId))) return;
-    const r = await approvals.decide(id, { decision: "reject" });
+    const r = await approvals.decide(id, { decision: "reject", actor: actorOf(chatId) });
     return say(chatId, r.ok ? "Ləğv etdim. Heç nə paylaşılmadı." : r.error === "already_decided" ? "Bu qeyd üçün artıq qərar verilib." : "Qeyd tapılmadı.");
   }
 
@@ -172,7 +191,7 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
     try {
       rec = await flow.createDraft(
         { platforms: intent.platforms, caption: copy.caption, title: copy.title, description: copy.description, hashtags: copy.hashtags, media_id: media ? media.id : undefined, media_type: media ? media.type : undefined, privacy: intent.privacy },
-        { source: "telegram:" + chatId, notifyChat: String(chatId) },
+        { source: "telegram:" + chatId, notifyChat: String(chatId), origin: actorOf(chatId) },
       );
     } catch (e) {
       return say(chatId, "Qaralama hazırlanmadı: " + toSocialError(e).message);
@@ -289,7 +308,7 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
         const r = await runChat(text);
         await say(chatId, String(r.screen || r.spoken || "Cavab yoxdur").slice(0, 4000));
       } catch (e) {
-        await say(chatId, "Xəta baş verdi: " + String((e && e.message) || e).slice(0, 160));
+        await say(chatId, "Xəta baş verdi: " + publicError(e, "chat").message.slice(0, 160));
       }
       return { handled: "ok" };
     }

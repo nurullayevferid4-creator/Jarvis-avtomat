@@ -7,14 +7,30 @@
 
 import { validate } from "../validate.js";
 import { RISKS, RISK_POLICY, DEFAULT_PERMISSIONS, APPROVAL_ONLY_PERMISSIONS, FORBIDDEN_PERMISSIONS } from "../policy.js";
+import { toAppError } from "../errors.js";
 
+const NO_RETRY = new Set(["VALIDATION_ERROR", "SECURITY_ERROR", "PERMISSION_ERROR", "AUTH_ERROR", "NOT_FOUND", "CONFLICT", "APPROVAL_REQUIRED"]);
 const NAME_RE = /^[a-z][a-z0-9_.]{1,62}$/;
 
+// approval: { kind?, build(input, ctx) -> {content, payload}, describe(payload), execute(input, ctx) }
+// Yalnız describe+execute verilsə build avtomatik qurulur: payload = { input }, content = describe(payload).
+function normalizeApproval(a) {
+  if (!a) return null;
+  if (typeof a.build === "function") return a;
+  if (typeof a.describe === "function") {
+    return { ...a, build: (input) => { const payload = { input }; return { content: String(a.describe(payload)).slice(0, 4000), payload }; } };
+  }
+  return null;
+}
+
 export class ToolRegistry {
-  constructor({ audit = null, approvals = null } = {}) {
+  // sleep: təkrar cəhd gecikməsi (testdə sıfırlanır)
+  constructor({ audit = null, approvals = null, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
     this.audit = audit;
     this.approvals = approvals;
+    this.sleep = sleep;
     this.tools = new Map();
+    this.kinds = new Map(); // təsdiq növü -> alət
   }
 
   register(def) {
@@ -40,12 +56,28 @@ export class ToolRegistry {
       risk: def.risk,
       timeoutMs: Math.min(60000, Math.max(1000, def.timeoutMs || 10000)),
       retries: Math.min(2, Math.max(0, def.retries | 0)),
+      backoffMs: Math.min(5000, Math.max(0, def.backoffMs === undefined ? 300 : def.backoffMs | 0)),
       requiresApproval: def.requiresApproval === true,
+      auditEvent: String(def.auditEvent || "tool." + def.name).slice(0, 60),
       handler: def.handler,
-      approval: def.approval && typeof def.approval.build === "function" ? def.approval : null,
+      approval: normalizeApproval(def.approval),
     };
+    if (tool.approval) {
+      tool.approval = { ...tool.approval, kind: tool.approval.kind || tool.name };
+      if (tool.approval.execute !== undefined && typeof tool.approval.execute !== "function") throw new Error(def.name + ": approval.execute funksiya olmalıdır");
+      if (tool.approval.execute && typeof tool.approval.describe !== "function") throw new Error(def.name + ": approval.execute üçün approval.describe məcburidir (xülasə = icra)");
+      if (this.kinds.has(tool.approval.kind)) throw new Error("təsdiq növü artıq var: " + tool.approval.kind);
+      this.kinds.set(tool.approval.kind, tool);
+    }
+    if (tool.requiresApproval && !tool.approval) {
+      // strukturlu qeyd olmadan icra mümkün deyil: yalnız "əl ilə" qeyd açılır
+    }
     this.tools.set(tool.name, tool);
     return this;
+  }
+
+  byKind(kind) {
+    return this.kinds.get(kind) || null;
   }
 
   has(name) {
@@ -62,6 +94,10 @@ export class ToolRegistry {
       timeoutMs: t.timeoutMs,
       retries: t.retries,
       requiresApproval: t.requiresApproval,
+      auditEvent: t.auditEvent,
+      executable: !!(t.approval && t.approval.execute),
+      inputSchema: t.inputSchema,
+      outputSchema: t.outputSchema,
     }));
   }
 
@@ -106,13 +142,14 @@ export class ToolRegistry {
           return { ok: false, status: "invalid_input", errors: [String((e && e.message) || "sorğu düzgün deyil").slice(0, 200)] };
         }
       }
-      const rec = await approvals.create({ action: tool.name, content, risk: tool.risk, source: (ctx.source ? "tool:" + String(ctx.source).slice(0, 40) : "tool"), kind, payload });
+      const rec = await approvals.create({ action: tool.name, content, risk: tool.risk, source: (ctx.source ? "tool:" + String(ctx.source).slice(0, 40) : "tool"), kind, payload, origin: ctx.origin || null });
       await this._log("tool.pending_approval", { tool: name, approval_id: rec.id });
       return { ok: false, status: "pending_approval", approval_id: rec.id };
     }
 
     const started = Date.now();
     let lastError = "";
+    let lastErr = null;
     for (let attempt = 0; attempt <= tool.retries; attempt++) {
       let timer;
       try {
@@ -131,14 +168,17 @@ export class ToolRegistry {
         lastError = String((e && e.message) || e).slice(0, 200);
         if (e && e.timeout) {
           await this._log("tool.timeout", { tool: name });
-          return { ok: false, status: "timeout", error: lastError };
+          return { ok: false, status: "timeout", error: lastError, error_code: "TIMEOUT" };
         }
-        if (e && e.name === "UnsafeUrlError") break; // təkrarın mənası yoxdur
+        if (e && e.name === "UnsafeUrlError") { lastErr = toAppError(e, name); break; } // təkrarın mənası yoxdur
+        lastErr = toAppError(e, name);
+        if (NO_RETRY.has(lastErr.code)) break; // qəti xətalar təkrarlanmır; yan təsirsiz oxuma alətləri qalan hallarda təkrarlana bilər
+        if (attempt < tool.retries && tool.backoffMs) await this.sleep(tool.backoffMs * 2 ** attempt + Math.floor(Math.random() * 50));
       } finally {
         clearTimeout(timer);
       }
     }
-    await this._log("tool.error", { tool: name, error: lastError });
-    return { ok: false, status: "error", error: lastError };
+    await this._log("tool.error", { tool: name, error: lastError, code: lastErr && lastErr.code });
+    return { ok: false, status: "error", error: lastError, error_code: lastErr ? lastErr.code : "INTERNAL_ERROR" };
   }
 }

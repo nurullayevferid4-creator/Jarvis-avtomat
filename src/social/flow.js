@@ -18,23 +18,7 @@ import { PLATFORM_INFO } from "./platforms.js";
 const JOB_TTL = 30 * 86400;
 const LOCK_MS = 300000; // ən uzun platforma sorğusundan (YouTube yükləmə 240 san) uzun
 
-// Eyni isolate daxilində eyni açar üçün çağırışları növbəyə düzür (KV-də atomik kilid yoxdur).
-// DİQQƏT: bu yalnız bir Worker nüsxəsi daxilində qoruyur; nüsxələr arası tam zəmanət üçün Durable Object lazımdır.
-const locks = new Map();
-async function withLock(key, fn) {
-  const prev = locks.get(key) || Promise.resolve();
-  let release;
-  const mine = new Promise((r) => { release = r; });
-  const chain = prev.then(() => mine);
-  locks.set(key, chain);
-  await prev;
-  try {
-    return await fn();
-  } finally {
-    release();
-    if (locks.get(key) === chain) locks.delete(key);
-  }
-}
+// Kilidlər koordinatorda saxlanır (Durable Object bağlıdırsa nüsxələr arası atomikdir, yoxsa proses daxilində).
 const TERMINAL = new Set(["done", "failed", "unknown"]);
 
 export function checkDelay(platform, checks) {
@@ -49,7 +33,8 @@ export function buildApproval(input, meta = {}) {
   return { content: summarizeRequest(req), payload: { request: req, notify_chat: meta.notifyChat || null }, request: req };
 }
 
-export function createSocialFlow({ env, store, approvals, audit = null, hub, now = () => Date.now(), sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+export function createSocialFlow({ env, store, approvals, audit = null, hub, coord = null, now = () => Date.now(), sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+  coord = coord || approvals.coord;
   async function log(event, data) {
     if (audit) await audit.log(event, data);
   }
@@ -83,6 +68,7 @@ export function createSocialFlow({ env, store, approvals, audit = null, hub, now
       source: meta.source || "api",
       kind: "social.publish",
       payload: b.payload,
+      origin: meta.origin || null,
     });
     return rec;
   }
@@ -97,22 +83,32 @@ export function createSocialFlow({ env, store, approvals, audit = null, hub, now
   }
 
   // Təsdiqdən sonra iş yaradır. Şəbəkə çağırışı yoxdur.
-  async function startJob(approvalId) {
+  async function startJob(approvalId, { actor } = {}) {
     if (!isValidId(approvalId)) return { ok: false, error: "not_found" };
-    const rec = await approvals.get(approvalId);
-    if (!rec) return { ok: false, error: "not_found" };
-    if (rec.kind !== "social.publish") return { ok: false, error: "not_social" };
-    if (rec.status !== "approved") {
-      await log("social.blocked", { approval_id: rec.id, reason: "not_approved", status: rec.status });
-      return { ok: false, error: "not_approved" };
+    const pre = await approvals.get(approvalId);
+    if (!pre) return { ok: false, error: "not_found" };
+    if (pre.kind !== "social.publish") return { ok: false, error: "not_social" };
+    // Təsdiq, mənşə, hash, xülasə və pəncərə yoxlanır. Pəncərə: job yaradılması təsdiqdən dərhal sonra (cron bərpası 24 saata qədər).
+    const v = await approvals.verifyApproved(approvalId, { actor, kind: "social.publish", windowMs: 24 * 3600 * 1000 });
+    if (!v.ok) {
+      await log("social.blocked", { approval_id: approvalId, reason: v.error });
+      if (v.error === "payload_modified" || v.error === "summary_modified") await approvals.setExecution(approvalId, "blocked");
+      return { ok: false, error: v.error === "not_approved" || v.error.startsWith("not_approved_") ? "not_approved" : v.error };
     }
-    if ((await payloadHash(rec.payload)) !== rec.payload_hash) {
-      await log("social.blocked", { approval_id: rec.id, reason: "payload_modified" });
+    const rec = v.record;
+    // Xülasə = icra: göstərilən mətn payload-dan yenidən çıxarılır
+    if (summarizeRequest(rec.payload.request) !== rec.content) {
+      await log("social.blocked", { approval_id: rec.id, reason: "summary_mismatch" });
       await approvals.setExecution(rec.id, "blocked");
-      return { ok: false, error: "payload_modified" };
+      return { ok: false, error: "summary_modified" };
     }
     const existing = await store.getDoc("socialjob", rec.id);
     if (existing) return { ok: true, job: existing, existing: true };
+    // İş yaradılması atomik: yalnız ilk çağıran yaradır (marker 2 dəqiqə sonra bərpa üçün açılır).
+    if (!(await coord.once("jobcreate:" + rec.id, { ttlMs: 120000 }))) {
+      const again = await store.getDoc("socialjob", rec.id);
+      return again ? { ok: true, job: again, existing: true } : { ok: false, error: "job_creating" };
+    }
 
     const t0 = now();
     const request = rec.payload.request;
@@ -215,24 +211,28 @@ export function createSocialFlow({ env, store, approvals, audit = null, hub, now
   // Təsdiq + iş yaradılması bir addımda (UI, API və Telegram eyni funksiyanı çağırır).
   // Qaytarır: { ok, record?, job?, error? }. Təsdiq alınıb iş yaranmadan proses dayansa belə, qeyd
   // aktiv indeksə yazılır və cron (tick) işi yenidən yaratmağa çalışır.
-  async function approveAndStart(id) {
+  async function approveAndStart(id, { actor } = {}) {
     if (!isValidId(id)) return { ok: false, error: "not_found" };
-    return await withLock("approve:" + id, async () => {
-      const rec = await approvals.get(id);
-      if (!rec) return { ok: false, error: "not_found" };
-      if (rec.kind !== "social.publish") return { ok: false, error: "not_social" };
-      const d = await approvals.decide(id, { decision: "approve" });
-      if (!d.ok) return { ok: false, error: d.error, record: d.record };
-      await idxAdd(id);
-      const s = await startJob(id);
-      return s.ok ? { ok: true, record: (await approvals.get(id)) || d.record, job: s.job } : { ok: false, error: s.error, record: d.record };
-    });
+    const rec = await approvals.get(id);
+    if (!rec) return { ok: false, error: "not_found" };
+    if (rec.kind !== "social.publish") return { ok: false, error: "not_social" };
+    // decide() koordinatorda atomikdir: yalnız bir çağırış approve edə bilir, digərləri already_decided alır.
+    const d = await approvals.decide(id, { decision: "approve", actor });
+    if (!d.ok) return { ok: false, error: d.error, record: d.record };
+    await idxAdd(id);
+    const s = await startJob(id, { actor });
+    return s.ok ? { ok: true, record: (await approvals.get(id)) || d.record, job: s.job } : { ok: false, error: s.error, record: d.record };
   }
 
   // Bir işi irəlilədir. deadlineMs: bu çağırış üçün maksimum müddət.
   async function advance(jobId, opts = {}) {
     if (!isValidId(jobId)) return null;
-    return await withLock("job:" + jobId, () => advanceLocked(jobId, opts));
+    try {
+      return await coord.withLock("job:" + jobId, () => advanceLocked(jobId, opts), { ttlMs: LOCK_MS, waitMs: 0 });
+    } catch (e) {
+      if (e && e.code === "CONFLICT") return await store.getDoc("socialjob", jobId); // başqa çağırış işləyir
+      throw e;
+    }
   }
 
   async function advanceLocked(jobId, { deadlineMs = 25000 } = {}) {

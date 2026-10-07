@@ -11,20 +11,17 @@ import { getLimits, getFeatures, DEFAULTS, VERSION } from "./config.js";
 import { createRegistry } from "./adapters/registry.js";
 import { stt, tts } from "./adapters/openaiAudio.js";
 import { ClaudeOrchestrator } from "./orchestrator/ClaudeOrchestrator.js";
-import { createStore } from "./state/store.js";
+import { buildContext } from "./app/context.js";
 import { safeEqual, readPasscode, isBlocked, recordFailure, clearFailures } from "./guards/login.js";
-import { createAudit } from "./audit/log.js";
-import { ApprovalCenter } from "./approval/center.js";
-import { KnowledgeBase } from "./knowledge/KnowledgeBase.js";
 import { createDefaultToolRegistry } from "./tools/builtin.js";
-import { createSocialHub } from "./social/hub.js";
-import { createSocialFlow } from "./social/flow.js";
 import { beginOAuth, finishOAuth, OAUTH_PLATFORMS } from "./social/oauth.js";
 import { MEDIA_TYPES, MAX_MEDIA_BYTES } from "./social/media.js";
 import { SocialError } from "./social/errors.js";
 import { createTelegramHandler, verifyWebhook } from "./telegram/handler.js";
 
 const MAX_BODY_BYTES = 20000;
+// Parolla daxil olan istifadəçi (sahib). Telegram çatları handler-də öz çat id-si ilə təqdim olunur.
+const UI_ACTOR = { channel: "ui" };
 
 // Kiçik JSON gövdəsini oxuyur. Pozulmuş və ya çox böyük olarsa null qaytarır.
 async function readJson(req) {
@@ -85,12 +82,7 @@ function oauthPage(ok, message) {
 
 // Bütün sosial komponentləri bir yerdə qurur
 function buildSocial(env) {
-  const store = createStore(env);
-  const audit = createAudit(store);
-  const approvals = new ApprovalCenter(store, audit);
-  const hub = createSocialHub(env, store);
-  const flow = createSocialFlow({ env, store, approvals, audit, hub });
-  return { store, audit, approvals, hub, flow };
+  return buildContext(env);
 }
 
 export default {
@@ -117,7 +109,7 @@ export default {
         const orchestrator = new ClaudeOrchestrator({ env, registry: createRegistry(env), limits, store: d.store, approvals: features.approvals ? d.approvals : null });
         return await orchestrator.handle(text);
       };
-      const handler = createTelegramHandler({ env, hub: d.hub, flow: d.flow, approvals: d.approvals, store: d.store, audit: d.audit, runChat });
+      const handler = createTelegramHandler({ env, hub: d.hub, flow: d.flow, approvals: d.approvals, store: d.store, audit: d.audit, runChat, runner: d.runner });
       const work = handler.handleUpdate(update).catch(() => null);
       if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(work);
       else await work;
@@ -163,10 +155,7 @@ export default {
     await clearFailures(env, ip);
 
     const features = getFeatures(env);
-    const store = createStore(env);
-    const audit = createAudit(store);
-    const approvals = new ApprovalCenter(store, audit);
-    const knowledge = new KnowledgeBase(store, audit);
+    const { store, audit, approvals, knowledge } = buildContext(env);
 
     // Model açarı tələb etməyən yollar: açar çatışmasa da vəziyyəti görmək olsun
     if (req.method === "GET" && url.pathname === "/api/status") {
@@ -189,12 +178,12 @@ export default {
       if (peek && peek.kind === "social.publish") {
         // Sosial paylaşım: təsdiq + iş yaradılması + icra (hash yoxlanır, hər addım bir dəfə)
         const d = buildSocial(env);
-        const a = await d.flow.approveAndStart(apMatch[1]);
+        const a = await d.flow.approveAndStart(apMatch[1], { actor: UI_ACTOR });
         if (!a.ok) return json({ error: a.error }, a.error === "not_found" ? 404 : a.error === "already_decided" || a.error === "expired" ? 409 : 400);
         const job = await d.flow.advance(apMatch[1], { deadlineMs: 20000 });
         return json({ record: (await approvals.get(apMatch[1])) || a.record, job: job || a.job });
       }
-      const r = await approvals.decide(apMatch[1], { decision: body.decision, content: body.content });
+      const r = await approvals.decide(apMatch[1], { decision: body.decision, content: body.content, actor: UI_ACTOR });
       if (r.ok) return json({ record: r.record });
       const code = r.error === "not_found" ? 404 : r.error === "already_decided" || r.error === "expired" ? 409 : 400;
       return json({ error: r.error }, code);
