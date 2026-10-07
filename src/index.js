@@ -5,7 +5,7 @@
 // LOGIN_MAX_FAILURES, LOGIN_WINDOW_SECONDS), bayraqlar (FEATURE_VOICE, FEATURE_APPROVALS,
 // FEATURE_KNOWLEDGE). Bax: .env.example
 
-import { PAGE } from "./ui/page.js";
+import { renderPage, pageCsp } from "./ui/page.js";
 import { json } from "./util.js";
 import { getLimits, getFeatures, DEFAULTS, VERSION } from "./config.js";
 import { createRegistry } from "./adapters/registry.js";
@@ -121,7 +121,8 @@ export default {
   async handle(req, env, ctx) {
     const url = new URL(req.url);
     if (req.method === "GET" && url.pathname === "/") {
-      return new Response(PAGE, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+      const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))));
+      return new Response(renderPage(nonce), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-security-policy": pageCsp(nonce) } });
     }
 
     // --- İctimai marşrutlar (parol yoxdur, hər biri öz üsulu ilə qorunur) ---
