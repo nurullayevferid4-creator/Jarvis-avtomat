@@ -23,6 +23,7 @@ import { publicJob } from "./media/jobs.js";
 import { UPLOAD_TYPES } from "./media/library.js";
 import { SocialError } from "./social/errors.js";
 import { createTelegramHandler, verifyWebhook } from "./telegram/handler.js";
+import { maybeSendDailyReport } from "./telegram/dailyReport.js";
 import { setupWebhook, webhookStatus, setupErrorBody } from "./telegram/setup.js";
 import { handleShopifyPublicRoute, handleShopifyApiRoute, shopifyStatus } from "./shopify/index.js";
 import { OWNER_PERMISSIONS } from "./policy.js";
@@ -501,7 +502,7 @@ export default {
   // Cron (wrangler.toml): gözləyən paylaşım işlərini irəlilədir və Instagram tokenini vaxtında yeniləyir.
   async scheduled(event, env, ctx) {
     const d = buildSocial(env);
-    const work = Promise.all([d.flow.tick({ deadlineMs: 25000 }).catch(() => null), d.mediaJobs.tick({ deadlineMs: 20000 }).catch(() => null)]);
+    const work = Promise.all([d.flow.tick({ deadlineMs: 25000 }).catch(() => null), d.mediaJobs.tick({ deadlineMs: 20000 }).catch(() => null), maybeSendDailyReport({ env, hub: d.hub, flow: d.flow, approvals: d.approvals, store: d.store }).catch(() => null)]);
     if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(work);
     else await work;
   },
