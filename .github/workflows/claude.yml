@@ -10,14 +10,32 @@ on:
 
 jobs:
   claude:
-    if: contains(github.event.comment.body, '@claude') || contains(github.event.issue.body, '@claude')
+    # Yalnız repo sahibi/üzvü/əməkdaşı işə sala bilər (repo açıqdır: kənar istifadəçi @claude yazıb API kvotasını yeyə bilməz).
+    if: >-
+      (
+        (github.event_name == 'issue_comment' || github.event_name == 'pull_request_review_comment') &&
+        contains(github.event.comment.body, '@claude') &&
+        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+      ) || (
+        github.event_name == 'issues' &&
+        contains(github.event.issue.body, '@claude') &&
+        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association)
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
       issues: write
       id-token: write
+    env:
+      HAS_ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
     steps:
+      # Secret yoxdursa aydın mesajla dayanır (action-ın anlaşılmaz xətası əvəzinə).
+      - name: ANTHROPIC_API_KEY repository secret yoxlaması
+        if: env.HAS_ANTHROPIC_KEY != 'true'
+        run: |
+          echo "::error title=ANTHROPIC_API_KEY yoxdur::GitHub repo > Settings > Secrets and variables > Actions > New repository secret: ad ANTHROPIC_API_KEY, dəyər Anthropic API açarı."
+          exit 1
       - uses: actions/checkout@v4
       - uses: anthropics/claude-code-action@v1
         with:
