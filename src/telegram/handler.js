@@ -505,6 +505,10 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
         try { jobs = (await flow.listJobs(10)).filter((j) => String(j.notify_chat || "") === String(chatId)).slice(0, 3).map((j) => ({ id: j.id, status: j.status, platforms: Object.keys(j.targets || {}) })); } catch (e) { jobs = []; }
         context = { history: memory.historyMessages(conv), block: memory.contextBlock(conv, { pending, jobs }), voice: via === "voice" };
       }
+      const trace = {};
+      const tChat = Date.now();
+      if (context) context.trace = trace; // yalnız ölçmə: davranışı dəyişmir
+      const logTiming = async (outcome) => { try { await log("telegram.chat_timing", { outcome, total_ms: Date.now() - tChat, ...trace }); } catch (e) { /* əhəmiyyətsiz */ } };
       let r;
       try {
         // Worker arxa plan işi ~30 s-dən sonra səssiz kəsilir; ondan əvvəl istifadəçiyə cavab verilsin (səssizlik olmasın)
@@ -513,10 +517,12 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
         try { r = await Promise.race([runChat(text, origin, context), limit]); } finally { clearTimeout(timer); }
       } catch (e) {
         const pe = publicError(e, "chat");
+        await logTiming("error:" + pe.code);
         await say(chatId, "Bunu indi edə bilmədim: " + pe.message.slice(0, 160) + (pe.retryable ? " Bir az sonra yenidən sına." : ""));
         if (memory) await memory.record(origin, { user: text, via, assistant: "(xəta: " + pe.code + ")" });
         return { handled: "ok" };
       }
+      await logTiming("ok");
       await reply(chatId, r.screen, r.spoken, { voiceIn: via === "voice", conv });
       if (memory) {
         const tools = (r.tools || []).map((t) => t.tool);

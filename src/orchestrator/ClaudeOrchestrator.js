@@ -121,11 +121,12 @@ export class ClaudeOrchestrator {
   }
 
   // Alət çağırışları ardıcıl icra olunur. Təsdiq tələb edən alət yalnız təsdiq qeydi açır.
-  async handleTools(text, plan, ctx, origin) {
+  async handleTools(text, plan, ctx, origin, trace = null) {
     const t0 = Date.now();
     const maxCalls = Math.min(4, this.limits.maxSubtasks);
     const calls = plan.tool_calls.slice(0, maxCalls);
     const runOne = async (call) => {
+      const tStart = Date.now();
       const name = String((call && call.tool) || "");
       const input = call && call.input && typeof call.input === "object" ? call.input : {};
       let r;
@@ -134,6 +135,7 @@ export class ClaudeOrchestrator {
       } catch (e) {
         r = { ok: false, status: "error", error: publicError(e, name).message };
       }
+      if (trace) { (trace.tools = trace.tools || {})[name] = { ms: Date.now() - tStart, status: r.status, fallback: r.ok && r.output && r.output.fallback_reason ? r.output.fallback_reason : undefined }; }
       return { tool: name, status: r.status, approval_id: r.approval_id || null, output: r.ok ? r.output : null, error: r.ok ? null : (r.error || (r.errors && r.errors.join("; ")) || r.status) };
     };
     // Hamısı təsdiqsiz oxu/qaralama alətidirsə PARALEL işlənir: Worker-in arxa plan vaxtı (~30 s) ardıcıl 3 model çağırışına çatmır
@@ -157,7 +159,9 @@ export class ClaudeOrchestrator {
     let screen = "";
     try {
       if (Date.now() - t0 > 14000) throw new Error("vaxt azdır: xam nəticələr");
+      const tFinal = Date.now();
       const fin = parseJson(await this.lead.complete(FINAL_SYSTEM, [{ role: "user", content: "User said: " + text + "\nOverall status: " + status + "\n\nTool results (nothing outside these happened):\n" + body }], 1800, ctx));
+      if (trace) trace.final_ms = Date.now() - tFinal;
       spoken = String(fin.spoken || "");
       screen = String(fin.screen || "");
     } catch (e) { /* xam nəticələrə qayıdılır */ }
@@ -203,7 +207,10 @@ export class ClaudeOrchestrator {
     const ctxBlock = context && context.block ? "\n\n" + String(context.block).slice(0, 9000) : "";
     // Əlavə olunan media: id-lər sistemdən gəlir (etibarlı), fayl adı təmizlənib
     const attach = attachments.length ? "\n\n[Attached media, usable as media_id in tools]\n" + attachments.slice(0, 5).map((a) => "- media_id=" + a.id + " kind=" + a.kind + (a.analysis && a.analysis.duration_s ? " " + a.analysis.width + "x" + a.analysis.height + " " + a.analysis.duration_s + "s" : a.analysis && a.analysis.width ? " " + a.analysis.width + "x" + a.analysis.height : "")).join("\n") : "";
+    const trace = context && context.trace ? context.trace : null;
+    const tLead = Date.now();
     const leadRaw = await this.lead.complete(buildLeadSystem(this.registry.helpers(), this.limits, this.tools ? this.toolList() : null), [...hist, { role: "user", content: said + attach + ctxBlock }], 1200, ctx);
+    if (trace) trace.lead_ms = Date.now() - tLead;
     let plan;
     try { plan = parseJson(leadRaw); } catch (e) { plan = { mode: "chat", reply: leadRaw.slice(0, 600) }; }
 
@@ -215,7 +222,7 @@ export class ClaudeOrchestrator {
     };
 
     if (this.tools && plan.mode === "tools" && Array.isArray(plan.tool_calls) && plan.tool_calls.length) {
-      const r = await this.handleTools(text, plan, ctx, origin);
+      const r = await this.handleTools(text, plan, ctx, origin, trace);
       r.mode = "tools";
       await remember(r.spoken);
       await this.store.saveJob({ ts: new Date().toISOString(), request: text, status: r.status, spoken: r.spoken, tools: r.tools.map((t) => ({ tool: t.tool, status: t.status })) });
