@@ -18,4 +18,4 @@ export { registerAgentTools, AGENT_PERMISSIONS } from "./tools.js";
 export { createEventBus, KNOWN_EVENT_TYPES } from "./events.js";
 export { buildManagerReport, MANAGER_RULES } from "./manager.js";
 export { AGENT_DEFINITIONS, HUMAN_APPROVAL_ONLY } from "./definitions.js";
-export { createApprovalProvider, createJobProvider } from "./providers.js";
+export { createApprovalProvider, createJobProvider, createShopifyProvider } from "./providers.js";

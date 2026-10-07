@@ -6,7 +6,7 @@
 //   leads     : { list() -> [{ id, status, score, created_at, updated_at, last_outreach_ts }] }
 //   approvals : { list({ limit }) -> təsdiq qeydləri } (ApprovalCenter birbaşa uyğundur)
 //   jobs      : { list({ limit }) -> [{ id, status, updated_at }] }
-//   shopify   : { list({ limit }) -> [{ id, status, created_at }] } (hazırda real provider yoxdur)
+//   shopify   : { list({ limit }) -> [{ id, status, created_at }] } (createShopifyProvider; token yoxdursa «qoşulmayıb»)
 //   marketing : { list({ limit }) -> [{ type, status, created_at }] } (hazırda real provider yoxdur)
 
 import { toAppError } from "../errors.js";
@@ -35,6 +35,8 @@ async function readSection(provider, call) {
     return { connected: true, status: "ok", ...(await call()) };
   } catch (e) {
     const err = toAppError(e, "manager");
+    // Provider «qoşulmayıb» deyirsə (məs. Shopify tokeni yoxdur) bu xəta deyil, qoşulmamış mənbədir
+    if (err.code === "AUTH_ERROR" && err.source === "shopify") return { connected: false, label: "qoşulmayıb" };
     return { connected: true, status: "error", error: { code: err.code, message: err.message } };
   }
 }

@@ -34,7 +34,7 @@ Yalnız inyeksiya olunan providerlərdən oxuyur:
 | `leads` | `list()` | `registerLeadTools(...).provider` |
 | `approvals` | `list({limit})` | `ApprovalCenter` birbaşa və ya `createApprovalProvider` |
 | `jobs` | `list({limit})` | `createJobProvider(store)` (`socialjob` sənədləri) |
-| `shopify` | `list({limit})` | **yoxdur** (qoşulmayıb) |
+| `shopify` | `list({limit})` | `createShopifyProvider` (sifariş id/status/tarix, alıcı məlumatı yox). Shopify tokeni yoxdursa bölmə «qoşulmayıb» göstərilir. Real mağazada sınanmayıb |
 | `marketing` | `list({limit})` | **yoxdur** (qoşulmayıb) |
 
 Provider yoxdursa bölmə `{ connected: false, label: "qoşulmayıb" }` olur: sıfır göstərilmir. Provider xəta verərsə bölmə `status: "error"` olur, rəqəm uydurulmur. Təsdiq və iş siyahıları KV limitinə görə ən çox 40 qeyddir; belə olanda `truncated: true` göstərilir.

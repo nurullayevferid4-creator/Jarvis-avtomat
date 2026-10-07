@@ -14,3 +14,14 @@ export function createJobProvider(store) {
     },
   };
 }
+
+// Shopify sifarişləri (yalnız oxuma): id, status, created_at. Alıcı məlumatı çıxmır.
+// Token yoxdursa client AUTH_ERROR atır; Manager bunu «qoşulmayıb» kimi göstərir.
+export function createShopifyProvider(client, Q_ORDERS) {
+  return {
+    async list({ limit = 20 } = {}) {
+      const d = await client.query(Q_ORDERS, { first: Math.min(20, Math.max(1, limit)), query: null });
+      return ((d.orders && d.orders.nodes) || []).map((o) => ({ id: o.id, status: String(o.displayFinancialStatus || "unknown").toLowerCase(), created_at: o.createdAt }));
+    },
+  };
+}

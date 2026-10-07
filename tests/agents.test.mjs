@@ -272,3 +272,18 @@ test("commerce: NotConfigured provayderlər hər çağırışda VALIDATION_ERROR
   assert.ok(PROVIDER_CONTRACTS.SupplierProvider.human_approval_only.includes("placeOrder"));
   assert.equal(netCalls, 0);
 });
+
+test("Manager: Shopify provider qoşulubsa say göstərir (alıcı məlumatı yoxdur), token yoxdursa «qoşulmayıb» sayılır", async () => {
+  const { createShopifyProvider } = await import("../src/agents/providers.js");
+  const { buildManagerReport } = await import("../src/agents/manager.js");
+  const { AppError } = await import("../src/errors.js");
+  const client = { query: async () => ({ orders: { nodes: [{ id: "gid://shopify/Order/1", createdAt: "2026-10-01T00:00:00Z", displayFinancialStatus: "PAID", shippingAddress: { firstName: "GİZLİ", city: "Bakı" } }, { id: "gid://shopify/Order/2", createdAt: "2026-10-02T00:00:00Z", displayFinancialStatus: "PENDING" }] } }) };
+  const ok = await buildManagerReport({ providers: { shopify: createShopifyProvider(client, "Q") } });
+  assert.equal(ok.sections.shopify.connected, true);
+  assert.deepEqual(ok.sections.shopify.by_status, { paid: 1, pending: 1 });
+  assert.ok(!JSON.stringify(ok).includes("GİZLİ"));
+  const down = { query: async () => { throw new AppError("AUTH_ERROR", "Shopify qoşulmayıb", { source: "shopify" }); } };
+  const no = await buildManagerReport({ providers: { shopify: createShopifyProvider(down, "Q") } });
+  assert.equal(no.sections.shopify.connected, false);
+  assert.ok(no.not_connected.includes("shopify"));
+});
