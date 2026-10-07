@@ -54,6 +54,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
 <div class="lbl" id="att"></div>
 <div id="out"></div>
 
+<details id="d-cc"><summary>Command Center</summary><div class="sub gap"><button id="r-cc" class="s" type="button">Yenilə</button><div id="cc"></div><div class="lbl">Bu panel yalnız saxlanmış real vəziyyəti göstərir. Canlı yoxlama: «Telegram webhook-u yoxla», «OpenAI səs tanımanı yoxla», platformalarda «Canlı yoxla».</div></div></details>
 <details id="d-appr"><summary>Təsdiqlər</summary><div class="sub gap"><div class="row"><span class="lbl">Gözləyən və son qərarlar</span><button id="r-appr" class="s" type="button">Yenilə</button></div><div id="appr"></div></div></details>
 <details id="d-media"><summary>Media və video işləri</summary><div class="sub gap">
 <div class="lbl">JPEG, PNG, MP4, MOV, PDF. Fayl real növünə görə yoxlanılır.</div>
@@ -334,6 +335,32 @@ box.appendChild(el("div","lbl","«təyin olunub» yalnız sirrin mövcudluğunu 
 });
 }
 $("r-status").addEventListener("click",loadStatus);
+var CCS={CONNECTED:"ok",NOT_CONNECTED:"warn",TOKEN_EXPIRED:"bad",API_ERROR:"bad"};
+function ccObj(o){return Object.keys(o||{}).map(function(k){return k+": "+o[k]}).join(", ")||"yoxdur"}
+function loadCC(){
+var box=$("cc");
+api("/api/overview",{},"command center").then(function(r){
+clear(box);
+if(!r.ok){note(box,errText(r));return}
+var d=r.data,t=d.telegram||{},ai=d.ai||{};
+kv(box,"Telegram",t.bot_token&&t.webhook_secret?"token+secret var, icazəli çat: "+t.allowed_chats:"çatışmayan sirr var",t.bot_token&&t.webhook_secret&&t.allowed_chats?"ok":"bad");
+kv(box,"Claude (lider)",ai.claude&&ai.claude.configured?"açar var · "+ai.claude.model:"AÇAR YOXDUR",ai.claude&&ai.claude.configured?"ok":"bad");
+kv(box,"OpenAI (STT/TTS/ehtiyat)",ai.openai&&ai.openai.configured?(ai.openai.key_usable?"açar forması düzgün":"açar forması şübhəli")+" · STT "+ai.openai.stt_model+" · TTS "+ai.openai.tts_model:"AÇAR YOXDUR",ai.openai&&ai.openai.configured&&ai.openai.key_usable?"ok":"bad");
+kv(box,"Kimi (ikinci rəy)",ai.kimi&&ai.kimi.configured?"açar var":"qoşulmayıb (istəyə bağlı)",ai.kimi&&ai.kimi.configured?"ok":"");
+Object.keys(d.social||{}).forEach(function(p){var s=d.social[p];kv(box,p,s.state+(s.verified?" (yoxlanıb)":" (yoxlanmayıb)"),CCS[s.state]||"")});
+var sh=d.shopify||{};kv(box,"Shopify",sh.connected?"qoşulub: "+(sh.shop||""):sh.error?sh.error:"qoşulmayıb",sh.connected?"ok":"warn");
+kv(box,"Təsdiq gözləyir",String((d.approvals||{}).pending||0),(d.approvals||{}).pending?"warn":"ok");
+kv(box,"Paylaşım işləri",ccObj((d.jobs||{}).social));
+kv(box,"Video işləri",ccObj((d.jobs||{}).media));
+kv(box,"Lead-lər",String((d.leads||{}).total||0)+" · "+ccObj((d.leads||{}).by_status));
+kv(box,"Media",(d.media||{}).store?"R2 qoşulub · son "+(d.media||{}).recent:"R2 YOXDUR",(d.media||{}).store?"ok":"bad");
+kv(box,"Son xətalar (audit)",String((d.errors||[]).length),(d.errors||[]).length?"warn":"ok");
+(d.errors||[]).slice(0,5).forEach(function(e){box.appendChild(el("div","lbl",e.ts+" · "+e.event))});
+var h=d.health||{};kv(box,"Sistem",h.storage+" · "+h.coordinator+" · v"+h.version,h.storage==="kv"&&h.coordinator==="durable_object"?"ok":"warn");
+});
+}
+$("r-cc").addEventListener("click",loadCC);
+$("d-cc").addEventListener("toggle",function(){if($("d-cc").open)loadCC()});
 var OAKEY={missing:"təyin edilməyib",project:"layihə açarı (sk-proj-)",legacy:"köhnə tip açar (sk-)",service_account:"servis hesabı açarı",admin:"ADMIN açarı: model API-ləri üçün yaramır",unexpected:"gözlənilməz format (sk- ilə başlamır)"};
 var OAV={ok:["OPENAI İŞLƏYİR","ok"],key_malformed:["AÇAR SƏHV YAPIŞDIRILIB","bad"],secret_missing:["SECRET YOXDUR","bad"],admin_key:["ADMIN AÇARI","bad"],key_invalid:["AÇAR ETİBARSIZDIR","bad"],missing_audio_scope:["AUDIO İCAZƏSİ YOXDUR","bad"],billing:["BILLING","bad"],rate_limited:["LİMİT","warn"],account_or_project:["HESAB/LAYİHƏ PROBLEMİ","bad"],unreachable:["ÇATMIR","warn"],stt_error:["STT XƏTASI","bad"]};
 function oaLine(box,label,x){if(!x)return;box.appendChild(el("div","lbl",label+": HTTP "+x.http+" · "+x.reason+(x.error_name?" ("+x.error_name+")":"")+(x.explanation?" · "+x.explanation:"")+(x.request_id?" · request_id "+x.request_id:"")+(x.project?" · layihə "+x.project:"")))}

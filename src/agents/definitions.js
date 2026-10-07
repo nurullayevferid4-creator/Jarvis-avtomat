@@ -1,9 +1,11 @@
-// Agent təriflərinin reyestri. Burada YALNIZ real mövcud olanlar "implemented" sayılır:
-//   Sales (lead alətləri), Marketing (marketinq alətləri), Manager (hesabat).
-// Qalanları "interface_only"-dir: kod yoxdur, işə düşmür, saxta agent yoxdur. capabilities boşdur;
-// planlaşdırılan imkanlar yalnız planned_capabilities sənədidir və heç bir alətə bağlı deyil.
+// Agent təriflərinin reyestri. Hamısı "implemented"-dir və yalnız qeydiyyatdan keçmiş real alətləri çağırır:
+//   Sales (lead), Marketing (marketinq + paylaşım qaralaması), Manager (hesabat),
+//   Order / Logistics / Seller / Fraud-Quality (Shopify oxuma + qaydalar, src/agents/ops.js),
+//   Customer Support (təsnif + cavab qaralaması).
+// Xarici hesab tələb edən hissə (Shopify) qoşulmayıbsa alət açıq "qoşulmayıb" xətası verir, saxta nəticə yoxdur.
 
 import { LEAD_TOOL_NAMES, MARKETING_TOOL_NAMES } from "./names.js";
+import { ORDER_TOOLS, LOGISTICS_TOOLS, SELLER_TOOLS, SUPPORT_TOOLS, FRAUD_TOOLS } from "./ops.js";
 
 // Yalnız insan təsdiqi ilə icra olunan kritik əməliyyat sinifləri. Heç bir agent bunları avtomatik icra edə bilməz.
 export const HUMAN_APPROVAL_ONLY = [
@@ -57,61 +59,56 @@ export const AGENT_DEFINITIONS = [
   {
     id: "order",
     role: "Order",
-    description: "Sifarişlərin qəbulu və izlənməsi.",
-    status: "interface_only",
-    capabilities: [],
-    planned_capabilities: ["order.list", "order.get", "order.status"],
-    requiresApprovalFor: ["order.place", "order.cancel"],
-    humanApprovalOnly: ["order.place", "finance.payment"],
-    inputs: "Shopify sifariş hadisələri (qoşulmayıb).",
-    outputs: "Sifariş statusu və növbəti addım (qoşulmayıb).",
+    description: "Shopify sifarişlərinin xülasəsi və tək sifarişin vəziyyəti (oxuma). Sifariş vermək/ləğv etmək yalnız insan təsdiqi ilə.",
+    status: "implemented",
+    capabilities: [...ORDER_TOOLS, "shopify.orders.list", "shopify.order.get"],
+    requiresApprovalFor: [],
+    humanApprovalOnly: ["order.place", "finance.payment", "finance.refund"],
+    inputs: "Shopify Admin API (qoşulmuş mağaza): sifariş siyahısı, sifariş nömrəsi (#1001).",
+    outputs: "Status üzrə say, valyuta üzrə cəm, göndərilməyən ödənilmiş sifarişlər; tək sifarişin ödəniş/göndəriş/məhsul məlumatı.",
   },
   {
     id: "logistics",
     role: "Logistics",
-    description: "Çatdırılma və izləmə.",
-    status: "interface_only",
-    capabilities: [],
-    planned_capabilities: ["shipment.track", "shipment.estimate"],
-    requiresApprovalFor: ["shipment.create", "shipment.cancel"],
+    description: "Göndəriş və izləmə (Shopify fulfillment + tracking), gecikən sifarişlər. Göndəriş yaratmaq/ləğv etmək yoxdur.",
+    status: "implemented",
+    capabilities: [...LOGISTICS_TOOLS],
+    requiresApprovalFor: [],
     humanApprovalOnly: ["finance.payment"],
-    inputs: "FulfillmentProvider (qoşulmayıb).",
-    outputs: "İzləmə məlumatı (qoşulmayıb).",
+    inputs: "Shopify sifarişləri və onların fulfillment/tracking qeydləri.",
+    outputs: "Daşıyıcı, izləmə nömrəsi/linki (yalnız Shopify-da olan), göndərilmə/çatdırılma tarixləri, N gündən çox gecikən sifarişlər.",
   },
   {
     id: "seller",
     role: "Seller",
-    description: "Məhsul, qiymət və stokun idarəsi (dropshipping/e-commerce).",
-    status: "interface_only",
-    capabilities: [],
-    planned_capabilities: ["catalog.list", "supplier.search"],
-    requiresApprovalFor: ["price.change", "stock.change", "order.place"],
+    description: "Kataloq: məhsul axtarışı, kataloq sağlamlığı (təsvir/şəkil/SKU/qiymət/stok), DRAFT məhsul hazırlığı. Yazma yalnız təsdiqlə, yeni məhsul həmişə DRAFT.",
+    status: "implemented",
+    capabilities: [...SELLER_TOOLS, "shopify.products.search", "shopify.product.get", "shopify.inventory.get", "shopify.product.prepare", "shopify.product.create"],
+    requiresApprovalFor: ["shopify.product.create"],
     humanApprovalOnly: ["price.change", "stock.change", "order.place", "finance.payment"],
-    inputs: "SupplierProvider (qoşulmayıb).",
-    outputs: "Təchizatçı məlumatı (qoşulmayıb).",
+    inputs: "Shopify kataloqu; sahibin verdiyi məhsul məlumatı.",
+    outputs: "Problemli məhsullar siyahısı və say; DRAFT məhsul qaralaması (təsdiq qeydi).",
   },
   {
     id: "customer_support",
     role: "CustomerSupport",
-    description: "Müştəri sorğularına cavab qaralamaları və eskalasiya.",
-    status: "interface_only",
-    capabilities: [],
-    planned_capabilities: ["support.draft_reply", "support.classify"],
-    requiresApprovalFor: ["message.send", "finance.refund"],
+    description: "Müştəri mesajının təsnifi (status, gecikmə, qaytarma, şikayət...) və cavab QARALAMASI (Shopify statusu ilə). Göndərmir, vəd vermir.",
+    status: "implemented",
+    capabilities: [...SUPPORT_TOOLS],
+    requiresApprovalFor: [],
     humanApprovalOnly: ["message.send", "finance.refund", "account.change"],
-    inputs: "Müştəri mesajları (qoşulmayıb).",
-    outputs: "Cavab qaralaması (qoşulmayıb).",
+    inputs: "Sahibin yapışdırdığı müştəri mesajı (etibarsız məlumat kimi), istəyə bağlı sifariş nömrəsi.",
+    outputs: "Kateqoriya, təcililik, dil, sifariş nömrəsi; cavab qaralaması (Claude və ya şablon) və insan qərarı tələb edən məqamlar.",
   },
   {
     id: "fraud_quality",
     role: "FraudQuality",
-    description: "Saxtakarlıq və keyfiyyət siqnalları.",
-    status: "interface_only",
-    capabilities: [],
-    planned_capabilities: ["fraud.flag", "quality.review"],
-    requiresApprovalFor: ["account.change", "finance.refund"],
+    description: "Sifariş risk balı (Shopify risk + öz qaydalar) və paylaşım mətninin keyfiyyət yoxlaması. Yalnız tövsiyə.",
+    status: "implemented",
+    capabilities: [...FRAUD_TOOLS],
+    requiresApprovalFor: [],
     humanApprovalOnly: ["account.change", "finance.refund", "finance.payment"],
-    inputs: "Sifariş və ödəniş siqnalları (qoşulmayıb).",
-    outputs: "Risk işarəsi (qoşulmayıb).",
+    inputs: "Shopify sifarişi və son sifarişlər; paylaşım mətni və sahibin faktları.",
+    outputs: "0-100 bal, izahlı faktorlar, tövsiyə (ok/review/hold_and_review); mətn problemləri (limit, heşteq, dəstəklənməyən iddia).",
   },
 ];

@@ -15,13 +15,14 @@ Fərid-in şəxsi idarəetmə köməkçisi. Səslə və ya yazı ilə tapşırı
 | Alət reyestri (45 alət) | işləyir | testlər |
 | Media: axınla R2 yükləmə, MP4 analizi, növ/ölçü yoxlaması, silmə (təsdiqlə) | işləyir | testlər + real workerd + real ffmpeg fayllarla |
 | Video iş axını (yüklə → yoxla → analiz → plan → emal → nəticəni yoxla → saxla) | emal addımı **sənin ffmpeg serverin** tələb edir | `docs/VIDEO.md`; xidmət yoxdursa redaktə lazım olan iş `FAILED` olur (plan göstərilir), "hazırdır" deyilmir |
-| Telegram səsli mesaj (voice note → STT `az` → yazılı əmrlə eyni yol) | kod hazır; Telegram-a səsli cavab (TTS) yoxdur, cavab mətnlə | saxta Telegram/OpenAI testləri; real səs sınanmayıb |
+| Telegram səsli danışıq: voice → STT (`gpt-4o-transcribe`/`whisper-1`, `az`, terminlər) → təmizləmə → çat yaddaşı (kontekst, xülasə) → Claude (agent/alət seçimi) → təsdiq → cavab (mətn + səs, `sendVoice`) | kod hazır | saxta Telegram/OpenAI/Claude testləri; **NOT TESTED — REAL CREDENTIAL REQUIRED** (real səs keyfiyyəti real açarla yoxlanmalıdır) |
 | Telegram (webhook, düymələr, kanal paylaşımı) | kod hazır; webhook qurulması idempotent, `getWebhookInfo` ilə təsdiqlənir, səhvlər dəqiq səbəblə göstərilir | saxta (vəziyyətli) Bot API + real Chromium; real bot ilə sınaq üçün `docs/SMOKE.md` §4 |
 | Instagram / TikTok / YouTube (OAuth, yükləmə, status, təsdiqlə paylaşım) | kod hazır | saxta API; hər biri üçün real tətbiq + platforma təsdiqi (audit/review) lazım, bax `docs/INTEGRATIONS.md` |
 | Shopify (OAuth, məhsul/qiymət/stok/kolleksiya/webhook, DRAFT-by-default, silmə yox) | kod hazır | saxta API + HMAC testləri; real mağaza lazım |
 | Lead sistemi (yalnız ictimai/qanuni mənbə, kütləvi göndəriş YOX) | kod hazır | testlər |
 | Marketinq planlayıcı (QR Menu ayrıca iş axını) | kod hazır | testlər |
-| Agent reyestri + Manager hesabatı | kod hazır | testlər; saxta agent yoxdur |
+| 8 agent: Sales, Marketing, Manager, Order, Logistics, Seller, Customer Support, Fraud/Quality (`docs/AGENTS.md`) + Kimi ikinci rəy | kod hazır | testlər (saxta Shopify GraphQL); real mağaza ilə sınanmayıb |
+| Command Center (UI): Telegram, Claude, OpenAI, Kimi, platformalar, Shopify, işlər, təsdiqlər, lead-lər, media, xətalar, sistem | işləyir | real Chromium |
 | Dropshipping / e-commerce | **yalnız interfeys** (`src/commerce/interfaces.js`); real təchizatçı/ödəniş yoxdur | — |
 | UI paneli | işləyir | real Chromium tüstü yoxlaması |
 | GitHub Actions (CI sirsiz, Claude workflow qorunur) | YAML hazır | real GitHub-da işə salınmayıb |

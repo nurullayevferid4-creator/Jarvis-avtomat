@@ -5,10 +5,12 @@
 //   2) bu faylda import et və aşağıdakı reg.set(...) siyahısına bir sətir əlavə et
 //   3) lazım olan açarı Cloudflare Secrets-ə yaz
 // ClaudeOrchestrator və başqa heç bir fayl dəyişmir.
-// Hazırda KİMİ əlavə EDİLMƏYİB.
+// Kimi KIMI_API_KEY olanda "kimi" köməkçisi kimi qoşulur (src/adapters/KimiAdapter.js).
 
 import { ClaudeAdapter } from "./ClaudeAdapter.js";
 import { OpenAIAdapter } from "./OpenAIAdapter.js";
+import { KimiAdapter } from "./KimiAdapter.js";
+import { cleanEnvValue } from "../security/envvalue.js";
 
 export class AdapterRegistry {
   constructor() {
@@ -35,7 +37,8 @@ export function createRegistry(env, extra = []) {
   const reg = new AdapterRegistry();
   reg.set(new ClaudeAdapter(env));
   reg.set(new OpenAIAdapter(env));
-  // reg.set(new KimiAdapter(env));   // <- gələcəkdə belə əlavə olunacaq
+  // Kimi: yalnız açar təyin olunubsa köməkçi kimi (ikinci rəy). Lider yenə Claude-dur.
+  if (cleanEnvValue(env && env.KIMI_API_KEY)) reg.set(new KimiAdapter(env));
   for (const a of extra) reg.set(a);
   return reg;
 }

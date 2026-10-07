@@ -20,6 +20,7 @@ import { createVideoProcessor } from "../media/processor.js";
 import { registerMediaTools } from "../media/tools.js";
 import { createAgentRegistry, registerAgentTools, createApprovalProvider, createJobProvider, createShopifyProvider, createEventBus } from "../agents/index.js";
 import { Q_ORDERS } from "../shopify/gql.js";
+import { registerOpsTools } from "../agents/ops.js";
 
 export function buildContext(env, { fetchImpl } = {}) {
   const store = createStore(env);
@@ -44,6 +45,7 @@ export function buildContext(env, { fetchImpl } = {}) {
   registerMediaTools(tools, { library, jobs: mediaJobs, media: hub.media });
   const leads = registerLeadTools(tools, { store, coord, events });
   registerMarketingTools(tools, { llm });
+  registerOpsTools(tools, { client: shopify.client, llm });
   const agents = createAgentRegistry({ tools, store, events, providers: { leads: leads.provider, approvals: createApprovalProvider(approvals), jobs: createJobProvider(store), shopify: createShopifyProvider(shopify.client, Q_ORDERS) } });
   registerAgentTools(tools, agents);
 

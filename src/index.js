@@ -24,7 +24,7 @@ import { UPLOAD_TYPES } from "./media/library.js";
 import { SocialError } from "./social/errors.js";
 import { createTelegramHandler, verifyWebhook } from "./telegram/handler.js";
 import { setupWebhook, webhookStatus, setupErrorBody } from "./telegram/setup.js";
-import { handleShopifyPublicRoute, handleShopifyApiRoute } from "./shopify/index.js";
+import { handleShopifyPublicRoute, handleShopifyApiRoute, shopifyStatus } from "./shopify/index.js";
 import { OWNER_PERMISSIONS } from "./policy.js";
 import { checkAudioFile, parseVoiceCommand, speakable } from "./voice/command.js";
 import { AppError, publicError, toAppError } from "./errors.js";
@@ -229,6 +229,42 @@ export default {
         providers: c.providers.status(),
         shopify: { configured: !!(env.SHOPIFY_API_KEY && env.SHOPIFY_API_SECRET) },
       }));
+    }
+
+    // Command Center: bütün hissələrin REAL vəziyyəti bir baxışda (xarici şəbəkə çağırışı yoxdur, sirr göstərilmir).
+    // "Canlı" yoxlamalar ayrıca düymələrlədir: Telegram webhook, OpenAI səs tanıma, platformaların «Canlı yoxla».
+    if (req.method === "GET" && url.pathname === "/api/overview") {
+      const c = buildContext(env);
+      const safe = async (fn, fallback) => { try { return await fn(); } catch (e) { return fallback === undefined ? { error: publicError(e, "overview").message } : fallback; } };
+      const providers = c.providers.status();
+      const social = await safe(async () => await c.hub.statusAll({ verify: false }), {});
+      const shopify = await safe(async () => await shopifyStatus({ env, vault: c.shopify.vault }));
+      const pending = await safe(async () => await c.approvals.list({ status: "pending", limit: 50 }), []);
+      const jobs = await safe(async () => await c.flow.listJobs(10), []);
+      const mjobs = await safe(async () => await c.mediaJobs.list(10), []);
+      const leadRows = await safe(async () => await c.leads.provider.list(), []);
+      const media = await safe(async () => await c.library.list(10), []);
+      const recentAudit = await safe(async () => await c.audit.list(60), []);
+      const errors = recentAudit.filter((e) => /fail|error|rejected/i.test(e.event)).slice(0, 10).map((e) => ({ ts: e.ts, event: e.event }));
+      const count = (arr, key) => arr.reduce((m, x) => { const k = String((x && x[key]) || "unknown"); m[k] = (m[k] || 0) + 1; return m; }, {});
+      const key = inspectOpenAIKey(env);
+      return json({
+        generated_at: new Date().toISOString(),
+        telegram: { bot_token: !!env.TELEGRAM_BOT_TOKEN, webhook_secret: !!env.TELEGRAM_WEBHOOK_SECRET, allowed_chats: String(env.TELEGRAM_ALLOWED_CHAT_IDS || "").split(",").filter((x) => /^\s*"?\d/.test(x)).length, voice: features.voice },
+        ai: {
+          claude: providers.find((p) => p.id === "claude") || null,
+          openai: { ...(providers.find((p) => p.id === "openai") || {}), key_shape: key.shape, key_usable: key.usable === true, stt_model: env.STT_MODEL || DEFAULTS.sttModel, tts_model: env.TTS_MODEL || DEFAULTS.ttsModel },
+          kimi: providers.find((p) => p.id === "kimi") || null,
+        },
+        social: Object.fromEntries(Object.entries(social || {}).map(([p, s]) => [p, { state: s.state, verified: !!s.verified, reason: s.reason || null }])),
+        shopify: shopify && !shopify.error ? { configured: shopify.configured, connected: shopify.connected, shop: shopify.shop || null } : shopify,
+        approvals: { pending: pending.length, by_kind: count(pending, "kind") },
+        jobs: { social: count(jobs, "status"), media: count(mjobs, "status") },
+        leads: { total: leadRows.length, by_status: count(leadRows, "status") },
+        media: { recent: media.length, store: !!env.JARVIS_MEDIA },
+        errors,
+        health: { storage: env.JARVIS_KV ? "kv" : "memory", coordinator: c.coord.kind === "durable_object" ? "durable_object" : "memory", version: VERSION },
+      });
     }
 
     if (url.pathname === "/api/audit" && req.method === "GET") {
