@@ -133,7 +133,7 @@ export class ToolRegistry {
       if (tool.approval) {
         // Strukturlu təsdiq: payload və hash qeydə yazılır, sonradan dəyişdirilə bilməz.
         try {
-          const b = tool.approval.build(input, ctx);
+          const b = await tool.approval.build(input, ctx); // build asinxron ola bilər (məs. lead limitləri bazadan yoxlanır)
           content = b.content;
           payload = b.payload;
           kind = tool.approval.kind || tool.name;
