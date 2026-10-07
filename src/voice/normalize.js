@@ -78,10 +78,16 @@ export function sttPrompt(recent = "") {
   return (STT_VOCAB + (r ? " Əvvəlki söhbət: " + r : "")).slice(0, 800);
 }
 
-// Model boş/səssiz audioda bəzən ipucunun özünü və ya tipik "subtitr" cümlələrini qaytarır: bu, əmr deyil.
-export function looksLikePromptEcho(text, prompt) {
-  const t = String(text || "").toLocaleLowerCase("az").replace(/[^\p{L}\p{N} ]/gu, "").replace(/\s+/g, " ").trim();
+// Model boş/səssiz audioda bəzən ipucunun özünü (sabit lüğət hissəsini) və ya tipik "subtitr" cümlələrini qaytarır: bu, əmr deyil.
+// Yalnız lüğət ipucunun SABİT hissəsi ilə üst-üstə düşmə yoxlanır; son JARVIS cavabına bənzəyən real cavab («QR Menu üçün yeni reklam»)
+// və ya qısa ad siyahısı («Instagram, TikTok, YouTube») rədd edilmir.
+const flat = (s) => String(s || "").toLocaleLowerCase("az").replace(/[^\p{L}\p{N} ]/gu, " ").replace(/\s+/g, " ").trim();
+const SCAFFOLD = ["azərbaycan dilində danışıq", "arada türk rus və ingilis sözləri", "adlar və terminlər", "əvvəlki söhbət"];
+export function looksLikePromptEcho(text) {
+  const t = flat(text);
   if (!t) return true;
-  const p = String(prompt || "").toLocaleLowerCase("az").replace(/[^\p{L}\p{N} ]/gu, "").replace(/\s+/g, " ");
-  return t.length >= 12 && p.includes(t);
+  if (SCAFFOLD.some((p) => t.includes(p))) return true;
+  const vocab = flat(STT_VOCAB);
+  // Lüğətin uzun bir parçasını (6+ söz) hərfi təkrarlayırsa: ipucu əksi
+  return t.split(" ").length >= 6 && vocab.includes(t);
 }

@@ -372,7 +372,9 @@ export function registerOpsTools(registry, { client, llm = null, now = () => Dat
     async handler(input) {
       const cls = classifySupport(input.message);
       let status = null;
-      const ref = input.order || cls.order_number;
+      // Sifariş yalnız sahibin verdiyi "order" sahəsindən götürülür: müştəri mətnindəki nömrə etibarsızdır
+      // (başqasının sifariş nömrəsini yazıb onun statusunu öyrənə bilməsin). Mətndəki nömrə yalnız təklif kimi qaytarılır.
+      const ref = input.order || null;
       if (ref && client) {
         try {
           const o = await loadOrder(client, ref);
@@ -392,12 +394,12 @@ export function registerOpsTools(registry, { client, llm = null, now = () => Dat
             schema: { type: "object", required: ["draft"], properties: { draft: { type: "string", minLength: 5, maxLength: 1500 } } },
             maxTokens: 600,
           });
-          return { draft: clip(res.draft, 1500), category: cls.category, urgency: cls.urgency, order_status: status, needs_human: cls.needs_human, source: l.provider || "claude", note: "Qaralamadır. Göndərmək yalnız sənin əlindədir." };
+          return { draft: clip(res.draft, 1500), suggested_order: !input.order && cls.order_number ? cls.order_number : undefined, category: cls.category, urgency: cls.urgency, order_status: status, needs_human: cls.needs_human, source: l.provider || "claude", note: "Qaralamadır. Göndərmək yalnız sənin əlindədir." };
         } catch (e) { /* şablona keçilir */ }
       }
       const tpl = TEMPLATES.az[cls.category] || TEMPLATES.az.other;
       const st = status && !status.error ? " (" + status.name + ": " + (status.fulfillment || "?") + ")" : "";
-      return { draft: tpl.replace("{status}", st), category: cls.category, urgency: cls.urgency, order_status: status, needs_human: cls.needs_human, source: "template", note: "AI əlçatan olmadığı üçün şablon qaralama. Göndərmək yalnız sənin əlindədir." };
+      return { draft: tpl.replace("{status}", st), suggested_order: !input.order && cls.order_number ? cls.order_number : undefined, category: cls.category, urgency: cls.urgency, order_status: status, needs_human: cls.needs_human, source: "template", note: "AI əlçatan olmadığı üçün şablon qaralama. Göndərmək yalnız sənin əlindədir." };
     },
   });
 

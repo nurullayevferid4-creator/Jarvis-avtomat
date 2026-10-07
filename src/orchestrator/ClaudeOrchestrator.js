@@ -267,14 +267,16 @@ export class ClaudeOrchestrator {
 
     let approvalId = null;
     if (status === "pending_approval") {
-      spoken += " «" + plan.external_action + "» üçün təsdiq lazımdır. İcra edim? Hə və ya yox de.";
+      spoken += context
+        ? " «" + plan.external_action + "» üçün təsdiq lazımdır: JARVIS səhifəsində «Təsdiqlər» bölməsindən özün təsdiq et. Mətnlə və ya səslə təsdiq qəbul edilmir."
+        : " «" + plan.external_action + "» üçün təsdiq lazımdır. İcra edim? Hə və ya yox de.";
       if (this.approvals) {
         try {
           const ap = await this.approvals.create({ action: plan.external_action, content: screen.slice(0, 4000), risk: "medium", source: "orchestrator", origin });
           approvalId = ap.id;
         } catch (e) { /* qeyd açılmasa da söhbətdəki təsdiq qapısı işləyir */ }
       }
-      state.pending = { goal: text, external: plan.external_action, draft: screen.slice(0, 4000), approval_id: approvalId };
+      if (!context) state.pending = { goal: text, external: plan.external_action, draft: screen.slice(0, 4000), approval_id: approvalId };
     }
     await remember(spoken);
     await this.store.saveJob({ ts: new Date().toISOString(), request: text, status, spoken, tasks: ClaudeOrchestrator.publicTasks(tasks) });

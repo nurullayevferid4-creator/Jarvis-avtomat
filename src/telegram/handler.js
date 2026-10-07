@@ -195,7 +195,7 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
 
   // Paylaşım qaralaması. Mövzu/məzmun və media mesajda yoxdursa söhbət yaddaşından götürülür
   // («QR Menu üçün reklam hazırla» → «Instagram-da paylaş»). Təsdiq yenə yalnız düymə ilə.
-  async function makeDraft(msg, text, chatId, conv = null) {
+  async function makeDraft(msg, text, chatId, conv = null, { continuation = false } = {}) {
     const origin = actorOf(chatId);
     const w = (conv && conv.work) || {};
     const intent = parseIntent(text);
@@ -210,7 +210,8 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
     const explicitTopic = /mövzu\s*:/i.test(text) || Boolean(mediaFromMessage(msg));
     if (artifact && (!topic || (refersBack(text) && !explicitTopic))) {
       topic = "";
-      brief = "Bu əvvəlcədən hazırlanmış məzmunu seçilmiş platformalar üçün paylaşım mətninə uyğunlaşdır:\n" + artifact.text;
+      // Claude bu məzmunu platformaya uyğunlaşdırır; Claude cavab verməsə qaralamada məzmunun ÖZÜ qalır (daxili təlimat yox)
+      brief = artifact.text;
       fromMemory = true;
     } else if (!topic && w.entities && w.entities.topic) {
       brief = w.entities.topic;
@@ -218,6 +219,7 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
     }
 
     let media = null;
+    let rememberedMedia = false;
     const mediaMsg = mediaFromMessage(msg) || mediaFromMessage(msg.reply_to_message);
     if (mediaMsg) {
       try {
@@ -227,8 +229,10 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
       } catch (e) {
         return say(chatId, "Mediaya baxa bilmədim: " + publicError(e, "media").message);
       }
-    } else if (w.media && w.media.id && Date.parse(w.media.ts) > Date.now() - WAIT_MEDIA_MS) {
+    } else if (w.media && w.media.id && Date.parse(w.media.ts) > Date.now() - WAIT_MEDIA_MS && (continuation || fromMemory || refersBack(text))) {
+      // Yaddaşdakı media yalnız istinad olanda («onu paylaş») və ya media gözləyən niyyətin davamında götürülür
       media = { id: w.media.id, type: w.media.type };
+      rememberedMedia = true;
     }
 
     if (!brief) {
@@ -253,7 +257,7 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
       return say(chatId, "Qaralama hazırlanmadı: " + toSocialError(e).message);
     }
     const warn = platforms.includes("tiktok") ? "\nQeyd: TikTok tətbiqi audit olunmayıbsa yalnız «şəxsi» paylaşım mümkündür." : "";
-    await say(chatId, "Hazırladım" + (fromMemory ? " (əvvəlki məzmun əsasında)" : "") + (copy.source === "fallback" ? " (Claude cavab vermədi, mətn sənin yazdığın kimidir)" : "") + ":\n\n" + rec.content + warn + "\n\nPaylaşmağa icazə verirsən?", {
+    await say(chatId, "Hazırladım" + (fromMemory ? " (əvvəlki məzmun əsasında)" : "") + (rememberedMedia ? " (son göndərdiyin " + (media.type === "video" ? "video" : "şəkil") + " ilə)" : "") + (copy.source === "fallback" ? " (Claude cavab vermədi, mətn sənin yazdığın kimidir)" : "") + ":\n\n" + rec.content + warn + "\n\nPaylaşmağa icazə verirsən?", {
       reply_markup: { inline_keyboard: [[{ text: "✅ Bəli, paylaş", callback_data: "ap:" + rec.id + ":y" }, { text: "❌ Xeyr", callback_data: "ap:" + rec.id + ":n" }]] },
     });
     if (memory) {
@@ -339,7 +343,7 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
       const hint = pe.code === "AUTH_ERROR" ? "Yoxlamaq üçün: JARVIS səhifəsi → Sistem vəziyyəti → «OpenAI səs tanımanı yoxla»." : pe.code === "RATE_LIMIT" ? "Səs tanıma xidməti hazırda məşğuldur, bir az sonra yenidən sına." : pe.code === "TIMEOUT" || pe.code === "NETWORK_ERROR" ? "Xidmət vaxtında cavab vermədi, bir az sonra yenidən sına." : "";
       return await fail(pe.message.slice(0, 160), hint);
     }
-    if (looksLikePromptEcho(raw, prompt)) return await fail("səs aydın eşidilmədi (fon səsi çoxdur və ya səs çox zəifdir)", "Telefonu ağzına yaxın tut və bir də de.");
+    if (looksLikePromptEcho(raw)) return await fail("səs aydın eşidilmədi (fon səsi çoxdur və ya səs çox zəifdir)", "Telefonu ağzına yaxın tut və bir də de.");
     let cmd;
     try {
       cmd = parseVoiceCommand(raw);
@@ -446,8 +450,9 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
       if (memory) await memory.rememberMedia(origin, media);
       const pend = conv && conv.work && conv.work.pending_post;
       if (pend && Date.parse(pend.ts) > Date.now() - WAIT_MEDIA_MS) {
+        await memory_setPending(origin, null); // bir dəfə davam edilir (alınmasa yenidən soruşulur)
         const fresh = memory ? await memory.load(origin) : conv;
-        await makeDraft({ ...msg, video: undefined, photo: undefined, animation: undefined, document: undefined, reply_to_message: undefined }, "paylaş " + pend.platforms.join(" ") + (pend.topic ? " mövzu: " + pend.topic : "") + (pend.privacy && pend.privacy !== "private" ? " " + pend.privacy : ""), chatId, fresh);
+        await makeDraft({ ...msg, video: undefined, photo: undefined, animation: undefined, document: undefined, reply_to_message: undefined }, "paylaş " + pend.platforms.join(" ") + (pend.topic ? " mövzu: " + pend.topic : "") + (pend.privacy && pend.privacy !== "private" ? " " + pend.privacy : ""), chatId, fresh, { continuation: true });
         return { handled: "ok" };
       }
       await say(chatId, (media.type === "video" ? "Videonu" : "Şəkli") + " aldım. Nə edək? Məsələn: «Instagram-da paylaş» və ya «bu video üçün caption yaz».");
@@ -492,9 +497,10 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
       try { await tg().sendChatAction(chatId, "typing"); } catch (e) { /* əhəmiyyətsiz */ }
       let context = null;
       if (memory) {
-        const pending = (await pendingFor(chatId)).slice(0, 5).map((a) => ({ id: a.id, summary: a.content }));
+        let pending = [];
+        try { pending = (await pendingFor(chatId)).slice(0, 5).map((a) => ({ id: a.id, summary: a.content })); } catch (e) { pending = []; }
         let jobs = [];
-        try { jobs = (await flow.listJobs(3)).map((j) => ({ id: j.id, status: j.status, platforms: Object.keys(j.targets || {}) })); } catch (e) { jobs = []; }
+        try { jobs = (await flow.listJobs(10)).filter((j) => String(j.notify_chat || "") === String(chatId)).slice(0, 3).map((j) => ({ id: j.id, status: j.status, platforms: Object.keys(j.targets || {}) })); } catch (e) { jobs = []; }
         context = { history: memory.historyMessages(conv), block: memory.contextBlock(conv, { pending, jobs }), voice: via === "voice" };
       }
       let r;
