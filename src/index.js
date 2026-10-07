@@ -15,7 +15,8 @@ import { buildContext } from "./app/context.js";
 import { safeEqual, readPasscode, isBlocked, recordFailure, clearFailures } from "./guards/login.js";
 import { createDefaultToolRegistry } from "./tools/builtin.js";
 import { beginOAuth, finishOAuth, OAUTH_PLATFORMS } from "./social/oauth.js";
-import { MEDIA_TYPES, MAX_MEDIA_BYTES } from "./social/media.js";
+import { publicJob } from "./media/jobs.js";
+import { UPLOAD_TYPES } from "./media/library.js";
 import { SocialError } from "./social/errors.js";
 import { createTelegramHandler, verifyWebhook } from "./telegram/handler.js";
 import { handleShopifyPublicRoute, handleShopifyApiRoute } from "./shopify/index.js";
@@ -70,8 +71,12 @@ function statusInfo(env, limits, features, tools, extra = {}) {
 }
 
 function socialErrorResponse(e) {
+  if (e instanceof AppError || (e && e.name !== "SocialError")) {
+    const a = toAppError(e, "api");
+    return json({ error: a.code, message: a.toPublic().message, retryable: a.retryable }, a.httpStatus >= 400 ? a.httpStatus : 502);
+  }
   const err = e instanceof SocialError ? e : null;
-  if (!err) return json({ error: "api_error", message: String((e && e.message) || e).slice(0, 200) }, 502);
+  if (!err) return json({ error: "api_error", message: "Xəta baş verdi" }, 502);
   const code = err.code === "invalid_request" || err.code === "media_error" ? 400 : err.code === "not_connected" || err.code === "token_expired" ? 409 : err.code === "permission_denied" ? 403 : 502;
   return json({ error: err.code, message: err.message, platform: err.platform }, code);
 }
@@ -135,7 +140,7 @@ export default {
         const orchestrator = new ClaudeOrchestrator({ env, registry: createRegistry(env), limits, store: d.store, approvals: features.approvals ? d.approvals : null, tools: features.approvals ? d.tools : null });
         return await orchestrator.handle(text, { origin });
       };
-      const handler = createTelegramHandler({ env, hub: d.hub, flow: d.flow, approvals: d.approvals, store: d.store, audit: d.audit, runChat, runner: d.runner });
+      const handler = createTelegramHandler({ env, hub: d.hub, flow: d.flow, approvals: d.approvals, store: d.store, audit: d.audit, runChat, runner: d.runner, library: d.library });
       const work = handler.handleUpdate(update).catch(() => null);
       if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(work);
       else await work;
@@ -269,7 +274,7 @@ export default {
     }
 
     // --- Sosial platformalar (parol tələb olunur) ---
-    if (url.pathname.startsWith("/api/social/") || url.pathname === "/api/media" || url.pathname === "/api/telegram/setup") {
+    if (url.pathname.startsWith("/api/social/") || url.pathname === "/api/media" || url.pathname.startsWith("/api/media/") || url.pathname === "/api/telegram/setup") {
       const d = buildSocial(env);
       try {
         if (req.method === "GET" && url.pathname === "/api/social/status") {
@@ -292,15 +297,46 @@ export default {
           const rec = await d.flow.createDraft(body, { source: "ui" });
           return json({ approval: rec });
         }
+        // Yükləmə: fayl R2-yə AXINLA yazılır, sonra real növ və video analizi yoxlanır
         if (req.method === "POST" && url.pathname === "/api/media") {
           const ct = String(req.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
-          if (!MEDIA_TYPES[ct]) return json({ error: "invalid_request", message: "content-type image/jpeg, image/png, video/mp4 və ya video/quicktime olmalıdır" }, 400);
           const len = parseInt(req.headers.get("content-length") || "0", 10);
-          if (len > MAX_MEDIA_BYTES) return json({ error: "invalid_request", message: "fayl 64 MB-dan böyükdür" }, 413);
-          const bytes = await req.arrayBuffer();
-          const m = await d.hub.media.put(bytes, ct);
-          await d.audit.log("social.media_uploaded", { id: m.id, type: m.type, size: m.size });
-          return json({ media: m });
+          if (!UPLOAD_TYPES[ct]) return json({ error: "VALIDATION_ERROR", message: "Fayl növü dəstəklənmir. İcazəli: JPEG, PNG, MP4, MOV, PDF" }, 400);
+          if (!req.body) return json({ error: "VALIDATION_ERROR", message: "fayl göndərilməyib" }, 400);
+          if (!len) return json({ error: "VALIDATION_ERROR", message: "Content-Length lazımdır" }, 411);
+          const doc = await d.library.ingest({ body: req.body, contentType: ct, length: len, filename: req.headers.get("x-filename") || "" });
+          await d.audit.log("social.media_uploaded", { id: doc.id, type: doc.kind, size: doc.size });
+          return json({ media: { id: doc.id, type: doc.kind, content_type: doc.content_type, ext: doc.ext, size: doc.size, analysis: doc.analysis } });
+        }
+        if (req.method === "GET" && url.pathname === "/api/media") return json({ items: await d.library.list(30) });
+        const mf = url.pathname.match(/^\/api\/media\/([0-9a-f]{24})(\/file)?$/);
+        if (req.method === "GET" && mf) {
+          const doc = await d.library.get(mf[1]);
+          if (!doc) return json({ error: "NOT_FOUND" }, 404);
+          if (!mf[2]) return json({ media: doc });
+          const obj = await d.hub.media.stream(mf[1]);
+          if (!obj) return json({ error: "NOT_FOUND" }, 404);
+          return new Response(obj.body, { headers: { "content-type": doc.content_type, "content-length": String(doc.size), "content-disposition": "attachment", "cache-control": "private, no-store", "x-content-type-options": "nosniff" } });
+        }
+        if (url.pathname === "/api/media/jobs" || url.pathname.startsWith("/api/media/jobs/")) {
+          if (req.method === "GET" && url.pathname === "/api/media/jobs") return json({ jobs: (await d.mediaJobs.list(15)).map(publicJob) });
+          if (req.method === "POST" && url.pathname === "/api/media/jobs") {
+            const body = await readJson(req);
+            if (!body) return json({ error: "VALIDATION_ERROR", message: "gövdə düzgün deyil" }, 400);
+            const job = await d.mediaJobs.submitVideoJob({ media_id: String(body.media_id || ""), platform: String(body.platform || "instagram"), goal: body.goal });
+            return json({ job: publicJob((await d.mediaJobs.advance(job.id, { deadlineMs: 8000 })) || job) }, 202);
+          }
+          const mj = url.pathname.match(/^\/api\/media\/jobs\/(\d{13}-[0-9a-f]{6})\/(advance|retry)$/);
+          if (req.method === "POST" && mj) {
+            if (mj[2] === "retry") await d.mediaJobs.retry(mj[1]);
+            const job = await d.mediaJobs.advance(mj[1], { deadlineMs: 15000 });
+            return job ? json({ job: publicJob(job) }) : json({ error: "NOT_FOUND" }, 404);
+          }
+          const mg = url.pathname.match(/^\/api\/media\/jobs\/(\d{13}-[0-9a-f]{6})$/);
+          if (req.method === "GET" && mg) {
+            const job = await d.mediaJobs.get(mg[1]);
+            return job ? json({ job: publicJob(job) }) : json({ error: "NOT_FOUND" }, 404);
+          }
         }
         if (req.method === "POST" && url.pathname === "/api/telegram/setup") {
           const base = String(env.PUBLIC_BASE_URL || "").replace(/\/+$/, "");
@@ -363,7 +399,7 @@ export default {
   // Cron (wrangler.toml): gözləyən paylaşım işlərini irəlilədir və Instagram tokenini vaxtında yeniləyir.
   async scheduled(event, env, ctx) {
     const d = buildSocial(env);
-    const work = d.flow.tick({ deadlineMs: 25000 }).catch(() => null);
+    const work = Promise.all([d.flow.tick({ deadlineMs: 25000 }).catch(() => null), d.mediaJobs.tick({ deadlineMs: 20000 }).catch(() => null)]);
     if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(work);
     else await work;
   },

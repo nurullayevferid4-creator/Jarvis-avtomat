@@ -49,6 +49,35 @@ export function createMediaStore(env, now = () => Date.now()) {
       return { id, type: meta.kind, content_type: contentType, ext: meta.ext, size };
     },
 
+    // Axın ilə yazma: fayl Worker yaddaşına yığılmır. length məcburidir (R2 axın üçün bilinən ölçü tələb edir).
+    async putStream(stream, { contentType, kind, ext, length, meta = {} }) {
+      if (!bucket) throw new SocialError("media_error", "media anbarı (JARVIS_MEDIA) qoşulmayıb");
+      if (!Number.isInteger(length) || length <= 0) throw new SocialError("media_error", "fayl ölçüsü məlum deyil");
+      const id = hex(crypto.getRandomValues(new Uint8Array(12)));
+      await bucket.put("m/" + id, stream, { httpMetadata: { contentType }, customMetadata: { kind, ext, size: String(length), created: String(now()), ...meta } });
+      return { id, content_type: contentType, kind, ext, size: length };
+    },
+
+    // Bayt aralığı oxuyur (başlıq/metadata analizi üçün); bütün fayl yüklənmir.
+    async range(id, offset, length) {
+      if (!bucket || !MEDIA_ID_RE.test(id)) throw new SocialError("media_error", "media tapılmadı");
+      const o = await bucket.get("m/" + id, { range: { offset, length } });
+      if (!o) throw new SocialError("media_error", "media tapılmadı");
+      return new Uint8Array(await o.arrayBuffer());
+    },
+
+    async size(id) {
+      if (!bucket || !MEDIA_ID_RE.test(id)) return null;
+      const o = await bucket.head("m/" + id);
+      return o ? o.size : null;
+    },
+
+    async remove(id) {
+      if (!bucket || !MEDIA_ID_RE.test(id)) return false;
+      await bucket.delete("m/" + id);
+      return true;
+    },
+
     // { id, content_type, kind, ext, size } və ya null
     async head(id) {
       if (!bucket || !MEDIA_ID_RE.test(id)) return null;

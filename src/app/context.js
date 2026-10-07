@@ -14,6 +14,10 @@ import { createProviderRouter } from "../providers/router.js";
 import { createShopify, registerShopifyTools } from "../shopify/index.js";
 import { registerLeadTools } from "../leads/index.js";
 import { registerMarketingTools } from "../marketing/index.js";
+import { createMediaLibrary } from "../media/library.js";
+import { createMediaJobs } from "../media/jobs.js";
+import { createVideoProcessor } from "../media/processor.js";
+import { registerMediaTools } from "../media/tools.js";
 import { createAgentRegistry, registerAgentTools, createApprovalProvider, createJobProvider, createEventBus } from "../agents/index.js";
 
 export function buildContext(env, { fetchImpl } = {}) {
@@ -32,11 +36,15 @@ export function buildContext(env, { fetchImpl } = {}) {
   const tools = createDefaultToolRegistry({ audit, approvals });
   const shopify = createShopify({ env, store, audit, coord, fetchImpl });
   registerShopifyTools(tools, { client: shopify.client, vault: shopify.vault, audit, env });
+  const library = createMediaLibrary({ media: hub.media, store, audit });
+  const processor = createVideoProcessor(env, { fetchImpl });
+  const mediaJobs = createMediaJobs({ store, coord, library, media: hub.media, processor, audit });
+  registerMediaTools(tools, { library, jobs: mediaJobs, media: hub.media });
   const leads = registerLeadTools(tools, { store, coord, events });
   registerMarketingTools(tools, { llm });
   const agents = createAgentRegistry({ tools, store, events, providers: { leads: leads.provider, approvals: createApprovalProvider(approvals), jobs: createJobProvider(store) } });
   registerAgentTools(tools, agents);
 
   const runner = createActionRunner({ approvals, registry: tools, audit });
-  return { env, store, audit, coord, approvals, events, knowledge, hub, flow, providers, llm, tools, shopify, leads, agents, runner };
+  return { env, store, audit, coord, approvals, events, knowledge, hub, flow, providers, llm, tools, shopify, leads, agents, runner, library, mediaJobs, processor };
 }

@@ -221,7 +221,7 @@ test("API: draft → approve → paylaşım (təsdiq düyməsi axını), job nə
 test("API: media yükləmə, imzalı ünvan yalnız düzgün imza ilə açılır (imza yox/səhv/vaxtı keçmiş → 404)", async () => {
   const w = await igWorld();
   installSocialFetch([]);
-  const up = await worker.fetch(req("/api/media", { method: "POST", headers: { "x-passcode": "pw", "content-type": "video/mp4" }, body: MP4 }), w.env);
+  const up = await worker.fetch(req("/api/media", { method: "POST", headers: { "x-passcode": "pw", "content-type": "video/mp4", "content-length": String(MP4.byteLength) }, body: MP4 }), w.env);
   assert.equal(up.status, 200);
   const { media } = await up.json();
   assert.match(media.id, /^[0-9a-f]{24}$/);

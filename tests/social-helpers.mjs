@@ -5,6 +5,7 @@ import { createAudit } from "../src/audit/log.js";
 import { ApprovalCenter } from "../src/approval/center.js";
 import { createSocialHub } from "../src/social/hub.js";
 import { createSocialFlow } from "../src/social/flow.js";
+import { buildMp4, buildJpeg, toAB } from "./fixtures.mjs";
 
 export const json = (o, status = 200, headers = {}) => new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json", ...headers } });
 
@@ -34,20 +35,29 @@ export const bodyJson = (c) => JSON.parse(bodyText(c));
 // Cloudflare R2 saxta binding
 export function fakeR2() {
   const m = new Map();
+  async function toBytes(value) {
+    if (value instanceof ArrayBuffer) return value.slice(0);
+    if (value && typeof value.getReader === "function") return await new Response(value).arrayBuffer();
+    return new Uint8Array(value).buffer.slice(0);
+  }
   return {
     _m: m,
     async put(key, value, opts = {}) {
-      const bytes = value instanceof ArrayBuffer ? value.slice(0) : new Uint8Array(value).buffer.slice(0);
-      m.set(key, { bytes, httpMetadata: opts.httpMetadata || {}, customMetadata: opts.customMetadata || {} });
+      m.set(key, { bytes: await toBytes(value), httpMetadata: opts.httpMetadata || {}, customMetadata: opts.customMetadata || {} });
     },
     async head(key) {
       const o = m.get(key);
       return o ? { size: o.bytes.byteLength, httpMetadata: o.httpMetadata, customMetadata: o.customMetadata } : null;
     },
-    async get(key) {
+    async get(key, opts = {}) {
       const o = m.get(key);
       if (!o) return null;
-      return { size: o.bytes.byteLength, httpMetadata: o.httpMetadata, body: new Blob([o.bytes]).stream(), arrayBuffer: async () => o.bytes.slice(0) };
+      let bytes = o.bytes;
+      if (opts.range) bytes = bytes.slice(opts.range.offset || 0, (opts.range.offset || 0) + (opts.range.length === undefined ? bytes.byteLength : opts.range.length));
+      return { size: o.bytes.byteLength, httpMetadata: o.httpMetadata, customMetadata: o.customMetadata, body: new Blob([bytes]).stream(), arrayBuffer: async () => bytes.slice(0) };
+    },
+    async delete(key) {
+      m.delete(key);
     },
   };
 }
@@ -91,5 +101,5 @@ export async function seedToken(w, platform, rec) {
   await w.hub.vault.put(platform, rec);
 }
 
-export const MP4 = new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112, 109, 112, 52, 50, 1, 2, 3, 4, 5, 6, 7, 8]).buffer;
-export const JPG = new Uint8Array([255, 216, 255, 224, 1, 2, 3, 4, 5, 6]).buffer;
+export const MP4 = toAB(buildMp4());
+export const JPG = toAB(buildJpeg());

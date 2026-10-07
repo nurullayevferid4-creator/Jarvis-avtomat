@@ -6,12 +6,12 @@
 const mem = { state: null, jobs: [], docs: {}, raw: new Map() };
 
 // Yalnız bu növlərə icazə var. Açar adı kənardan gələn mətnlə düzəldilmir.
-export const DOC_KINDS = new Set(["approval", "audit", "knowledge", "socialjob", "lead", "event", "mediajob", "mediafile"]);
+export const DOC_KINDS = new Set(["approval", "audit", "knowledge", "socialjob", "lead", "event", "mediajob"]);
 
 // "Xam" açarlar: siyahıya düşməyən, adı əvvəlcədən məlum olan qeydlər (sosial token, OAuth state,
 // Telegram update təkrarı, aktiv iş indeksi). Açar adı yalnız bu naxışlara uyğun ola bilər:
 // kənardan gələn mətnlə açar düzəldilmir.
-const RAW_KEY_RE = /^(secret:(instagram|tiktok|youtube|telegram|shopify)|oauthstate:[0-9a-f]{32}|tgupdate:\d{1,15}|socialidx|shwebhook:[A-Za-z0-9-]{8,64}|mediaidx|leadidx|eventidx)$/;
+const RAW_KEY_RE = /^(secret:(instagram|tiktok|youtube|telegram|shopify)|oauthstate:[0-9a-f]{32}|tgupdate:\d{1,15}|socialidx|shwebhook:[A-Za-z0-9-]{8,64}|mediaidx|mediameta:[0-9a-f]{24}|mediajobidx|leadidx|eventidx)$/;
 const ID_RE = /^\d{13}-[0-9a-f]{6}$/;
 const MEM_DOC_LIMIT = 500;
 const LIST_MAX = 40; // KV oxumaları Cloudflare-də alt sorğu sayılır (pulsuz planda 50 limit)

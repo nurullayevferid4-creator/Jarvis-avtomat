@@ -88,7 +88,7 @@ const HELP = [
 ].join("\n");
 
 // runner (istəyə bağlı): strukturlu (sosial olmayan) təsdiq qeydlərini icra edir (Shopify yazma və s.).
-export function createTelegramHandler({ env, hub, flow, approvals, store, audit = null, runChat = null, runner = null }) {
+export function createTelegramHandler({ env, hub, flow, approvals, store, audit = null, runChat = null, runner = null, library = null }) {
   const tg = () => hub.adapter("telegram");
 
   async function say(chatId, text, extra) {
@@ -164,6 +164,11 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
     const ext = (path.split(".").pop() || "").toLowerCase();
     const ct = EXT_TYPE[ext] || m.mime;
     if (!MEDIA_TYPES[ct]) throw new SocialError("media_error", "Fayl növü dəstəklənmir (" + String(ct).slice(0, 30) + ")");
+    if (library) {
+      // Doğrulama: başlıq baytları, ölçü, video analizi (uyğunsuz fayl saxlanmır)
+      const d = await library.ingest({ body: new Blob([bytes]).stream(), contentType: ct, length: bytes.byteLength, source: "telegram" });
+      return { id: d.id, type: d.kind, content_type: d.content_type, size: d.size };
+    }
     return await hub.media.put(bytes, ct);
   }
 
@@ -180,7 +185,7 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
         const saved = await storeTelegramMedia(mediaMsg);
         media = { id: saved.id, type: saved.type };
       } catch (e) {
-        return say(chatId, "Mediaya baxa bilmədim: " + toSocialError(e).message);
+        return say(chatId, "Mediaya baxa bilmədim: " + publicError(e, "media").message);
       }
     }
     const needsMedia = intent.platforms.filter((p) => p !== "telegram");
