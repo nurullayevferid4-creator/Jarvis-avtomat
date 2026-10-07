@@ -103,7 +103,7 @@ export function createDefaultToolRegistry({ audit = null, approvals = null } = {
     permissions: ["publish.social"],
     risk: "high",
     requiresApproval: true,
-    approval: { kind: "social.publish", build: (input, ctx) => buildApproval(input, { notifyChat: ctx && ctx.notifyChat }) },
+    approval: { kind: "social.publish", via: "social.flow", build: (input, ctx) => buildApproval(input, { notifyChat: ctx && ctx.notifyChat }) },
     async handler() {
       // Bura heç vaxt çatmır: requiresApproval alətləri registry-də icra olunmur.
       throw new Error("social.publish yalnız təsdiq axını ilə icra olunur");

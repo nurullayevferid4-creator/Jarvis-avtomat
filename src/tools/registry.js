@@ -95,7 +95,7 @@ export class ToolRegistry {
       retries: t.retries,
       requiresApproval: t.requiresApproval,
       auditEvent: t.auditEvent,
-      executable: !!(t.approval && t.approval.execute),
+      executable: !!(t.approval && (t.approval.execute || t.approval.via)), // via: icra ayrıca axında (social.flow) həyata keçir
       inputSchema: t.inputSchema,
       outputSchema: t.outputSchema,
     }));

@@ -101,3 +101,15 @@ test("cavab başlıqları: nosniff, no-referrer, frame deny", async () => {
   assert.equal(r2.status, 404);
   assert.equal(r2.headers.get("referrer-policy"), "no-referrer");
 });
+
+test("ölü alət yoxdur: təsdiq tələb edən hər alətin real icra yolu var; hər alətin sxemi və vaxt limiti var", async () => {
+  const { buildContext } = await import("../src/app/context.js");
+  const { APPROVAL_ONLY_PERMISSIONS } = await import("../src/policy.js");
+  const list = buildContext(baseEnv()).tools.list();
+  assert.ok(list.length >= 40);
+  for (const t of list) {
+    assert.ok(t.inputSchema && t.outputSchema && t.timeoutMs > 0 && t.auditEvent, t.name);
+    if (t.requiresApproval) assert.equal(t.executable, true, t.name + ": təsdiq aləti icra yolsuzdur");
+    if (t.permissions.some((p) => APPROVAL_ONLY_PERMISSIONS.includes(p))) assert.equal(t.requiresApproval, true, t.name + ": yazma icazəli alət təsdiqsiz");
+  }
+});

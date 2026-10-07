@@ -68,6 +68,7 @@ export const socialEnv = (extra = {}) => ({
   PASSCODE: "pw",
   PUBLIC_BASE_URL: "https://jarvis.example.dev",
   MEDIA_SIGNING_KEY: "test-signing-key",
+  TOKEN_ENC_KEY: "test-token-enc-key",
   INSTAGRAM_APP_ID: "ig-app",
   INSTAGRAM_APP_SECRET: "ig-secret",
   TIKTOK_CLIENT_KEY: "tt-key",

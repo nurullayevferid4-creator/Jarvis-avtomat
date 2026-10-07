@@ -214,7 +214,7 @@ export function createFakeShopify(opts = {}) {
 // ---- Dünya (store + audit + approvals + registry + runner + client) --------------------------------------
 export async function shopifyWorld({ connected = true, envExtra = {}, fake, sleep = async () => {} } = {}) {
   _resetMemoryForTests();
-  const env = { SHOPIFY_API_KEY: "test-key", SHOPIFY_API_SECRET: FAKE_SECRET, PUBLIC_BASE_URL: "https://jarvis.example.dev", ...envExtra };
+  const env = { SHOPIFY_API_KEY: "test-key", SHOPIFY_API_SECRET: FAKE_SECRET, PUBLIC_BASE_URL: "https://jarvis.example.dev", TOKEN_ENC_KEY: "test-token-enc-key", ...envExtra };
   const store = createStore(env);
   let t = NOW0;
   const now = () => t;

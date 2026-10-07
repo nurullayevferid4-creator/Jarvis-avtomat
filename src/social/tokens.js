@@ -1,3 +1,4 @@
+import { SocialError } from "./errors.js";
 // Sosial token anbarı. Token KOD-da yoxdur: yalnız KV-də (və ya yaddaşda) saxlanır.
 // TOKEN_ENC_KEY varsa qeyd AES-GCM ilə şifrələnir. Token heç vaxt log-a, cavaba və ya UI-a getmir.
 
@@ -52,6 +53,8 @@ export function createTokenVault(env, store) {
       return rec;
     },
     async put(platform, record) {
+      // Açıq mətnlə token yazılmır: TOKEN_ENC_KEY olmadan qoşulma/yeniləmə rədd edilir.
+      if (!secret) throw new SocialError("not_connected", "TOKEN_ENC_KEY təyin edilməyib: token şifrəsiz saxlanmır", { platform });
       const clean = { ...record, saved_at: Date.now() };
       await store.putRaw("secret:" + platform, await seal(clean, secret));
     },

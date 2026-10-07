@@ -174,7 +174,8 @@ test("YouTube: 2xx cavabda video id yoxdursa nəticə 'unknown' olur (failed yox
 // ---------- P2-8: açıq token şifrələnir ----------
 test("TOKEN_ENC_KEY sonradan təyin olunsa köhnə açıq token oxunan kimi şifrələnir", async () => {
   const w = world();
-  await seedToken(w, "instagram", { access_token: "PLAINTOKEN123", user_id: "1", expires_at: w.now() + DAY });
+  // Köhnə (açarsız dövrdən qalan) açıq qeyd: yeni kod belə qeyd YAZMIR, yalnız oxuyub şifrələyir
+  await w.store.putRaw("secret:instagram", { v: 1, plain: { access_token: "PLAINTOKEN123", user_id: "1", expires_at: w.now() + DAY } });
   assert.ok(JSON.stringify(await w.store.getRaw("secret:instagram")).includes("PLAINTOKEN123"));
   const env2 = { ...w.env, TOKEN_ENC_KEY: "new-key" };
   const hub2 = createSocialHub(env2, createStore(env2), { now: w.now });
@@ -222,4 +223,12 @@ test("eyni isolate-də paralel advance çağırışları növbəyə düzülür (
   assert.equal(ja.targets.youtube.step, "done");
   assert.equal(jb.targets.youtube.step, "done");
   assert.equal(calls.filter((c) => c.method === "PUT").length, 1);
+});
+
+test("TOKEN_ENC_KEY olmadan token yazılmır (açıq mətnlə saxlanmır) və OAuth qoşulması başladılmır", async () => {
+  const w = world({ TOKEN_ENC_KEY: "" });
+  await assert.rejects(() => w.hub.vault.put("instagram", { access_token: "T" }), /TOKEN_ENC_KEY/);
+  assert.equal(await w.store.getRaw("secret:instagram"), null);
+  const { beginOAuth } = await import("../src/social/oauth.js");
+  await assert.rejects(() => beginOAuth({ hub: w.hub, store: w.store, env: w.env, platform: "instagram" }), /TOKEN_ENC_KEY/);
 });

@@ -20,6 +20,7 @@ export async function beginOAuth({ hub, store, env, platform }) {
   if (!OAUTH_PLATFORMS.includes(platform)) throw new SocialError("not_supported", "bu platforma OAuth ilə qoşulmur", { platform });
   const adapter = hub.adapter(platform);
   adapter.requireConfigured();
+  if (!env.TOKEN_ENC_KEY) throw new SocialError("not_connected", "TOKEN_ENC_KEY təyin edilməyib: token şifrəsiz saxlanmadığı üçün qoşulma başladılmır", { platform });
   const uri = redirectUri(env, platform);
   const state = randomState();
   await store.putRaw("oauthstate:" + state, { platform, created: Date.now() }, 600);
