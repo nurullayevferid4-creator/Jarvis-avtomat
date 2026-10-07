@@ -97,6 +97,7 @@ export function createDefaultToolRegistry({ audit = null, approvals = null } = {
         thumbnail_media_id: { type: "string", maxLength: 24 },
         privacy: { type: "string", enum: ["private", "unlisted", "public"] },
         made_for_kids: { type: "boolean" },
+        publish_at: { type: "string", maxLength: 40 },
       },
     },
     outputSchema: { type: "object", required: ["published"], properties: { published: { type: "boolean" } } },

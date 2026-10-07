@@ -30,7 +30,7 @@ export function checkDelay(platform, checks) {
 const MAX_CHECKS = { instagram: 8, tiktok: 40, youtube: 3, telegram: 3 };
 
 export function buildApproval(input, meta = {}) {
-  const req = normalizePublishRequest(input, { strict: false });
+  const req = normalizePublishRequest(input, { strict: false, now: meta.now });
   return { content: summarizeRequest(req), payload: { request: req, notify_chat: meta.notifyChat || null }, request: req };
 }
 
@@ -60,7 +60,7 @@ export function createSocialFlow({ env, store, approvals, audit = null, hub, coo
 
   // Yeni təsdiq qeydi (qaralama). Heç nə paylaşılmır.
   async function createDraft(input, meta = {}) {
-    const b = buildApproval(input, meta);
+    const b = buildApproval(input, { ...meta, now: now() });
     if (b.request.issues.length) throw new SocialError("invalid_request", b.request.issues.join("; ").slice(0, 280));
     const rec = await approvals.create({
       action: "social.publish",
@@ -117,7 +117,7 @@ export function createSocialFlow({ env, store, approvals, audit = null, hub, coo
     const issues = readinessIssues(request);
     const strictErr = issues.length ? new SocialError("invalid_request", issues.join("; ").slice(0, 280)) : null;
     for (const p of request.platforms) {
-      job.targets[p] = { step: strictErr ? "failed" : "new", data: {}, attempts: 0, checks: 0, next_at: 0, error: strictErr ? strictErr.toJSON() : null };
+      job.targets[p] = { step: strictErr ? "failed" : "new", data: {}, attempts: 0, checks: 0, next_at: Number(request.publish_at) > t0 ? Number(request.publish_at) : 0, error: strictErr ? strictErr.toJSON() : null };
     }
     job.status = jobStatus(job);
     await save(job);
