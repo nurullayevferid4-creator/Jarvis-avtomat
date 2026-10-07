@@ -206,3 +206,21 @@ test("runChat gecikəndə: istifadəçiyə «Daxili xəta» yox, vaxt limiti mes
   assert.match(out, /Bunu indi edə bilmədim: Vaxt limiti|Bunu indi edə bilmədim: Cavab hazırlanması çox çəkdi/);
   assert.doesNotMatch(out, /Daxili xəta/);
 });
+
+test("zaman ölçməsi: runChat-ın trace-i audit jurnalına telegram.chat_timing kimi yazılır (timeout halında da)", async () => {
+  const { ConversationMemory } = await import("../src/conversation/memory.js");
+  for (const slow of [false, true]) {
+    const w = await ready();
+    installSocialFetch(server());
+    const h = createTelegramHandler({
+      env: w.env, hub: w.hub, flow: w.flow, approvals: w.approvals, store: w.store, audit: w.audit, chatDeadlineMs: 40, memory: new ConversationMemory(w.store, {}),
+      runChat: async (t, o, ctx) => { ctx.trace.lead_ms = 5; ctx.trace.tools = { "marketing.hooks": { ms: 7, status: "done" } }; if (slow) await new Promise(() => {}); return { screen: "ok", spoken: "ok" }; },
+      transcribe: async () => "QR Menu üçün reklam hazırla.",
+    });
+    await h.handleUpdate(voiceMsg());
+    const a = JSON.stringify(await w.audit.list(20));
+    assert.match(a, /telegram\.chat_timing/);
+    assert.match(a, /marketing\.hooks/);
+    assert.match(a, slow ? /error:TIMEOUT/ : /"ok"|\\"ok\\"|outcome/);
+  }
+});
