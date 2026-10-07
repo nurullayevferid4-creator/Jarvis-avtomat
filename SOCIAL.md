@@ -85,7 +85,7 @@ Platforma tokenləri (access/refresh) secret deyil, **OAuth ilə alınır** və 
 ## Qurulum ardıcıllığı
 
 1. KV və R2 yarat, `wrangler.toml`-da binding-ləri aç, `PUBLIC_BASE_URL`, `MEDIA_SIGNING_KEY`, `TOKEN_ENC_KEY` yaz, deploy et.
-2. **Telegram:** BotFather → `/newbot` → token → `TELEGRAM_BOT_TOKEN`; `TELEGRAM_WEBHOOK_SECRET` və `TELEGRAM_ALLOWED_CHAT_IDS` yaz; sonra `POST /api/telegram/setup` (parolla) → webhook qurulur.
+2. **Telegram:** BotFather → `/newbot` → token → `TELEGRAM_BOT_TOKEN`; `TELEGRAM_WEBHOOK_SECRET` və `TELEGRAM_ALLOWED_CHAT_IDS` yaz; sonra UI-da «Telegram webhook-u yoxla» və «Telegram webhook-u qur» (və ya `GET /api/telegram/webhook`, `POST /api/telegram/setup`, parolla) → webhook qurulur, `getWebhookInfo` ilə təsdiqlənir.
 3. **Instagram:** Meta Developer → app → "Instagram API with Instagram Login" → redirect URI: `<PUBLIC_BASE_URL>/oauth/instagram/callback` → App ID/Secret → Worker; sonra Telegram-da `/connect instagram` (və ya UI-da "Qoş").
 4. **TikTok:** developers.tiktok.com → app → Login Kit + Content Posting API → redirect URI `<PUBLIC_BASE_URL>/oauth/tiktok/callback` → Client key/secret → Worker; audit üçün müraciət.
 5. **YouTube:** Google Cloud → YouTube Data API v3 → OAuth client (Web) → redirect URI `<PUBLIC_BASE_URL>/oauth/youtube/callback` → ID/Secret → Worker.
@@ -102,7 +102,8 @@ Hamısı parol tələb edir (`x-passcode-b64`), ictimai olanlar ayrıca qeyd olu
 | `POST /api/social/draft` | təsdiq qeydi açır (paylaşmır) |
 | `GET /api/social/jobs`, `POST /api/social/jobs/<id>/advance` | iş siyahısı / əl ilə irəlilətmə |
 | `POST /api/media` | media yükləmə (`content-type`: image/jpeg, image/png, video/mp4, video/quicktime; ≤64 MB) |
-| `POST /api/telegram/setup` | webhook qurur |
+| `POST /api/telegram/setup` | webhook qurur (idempotent, təsdiqli) |
+| `GET /api/telegram/webhook` | webhook vəziyyətini oxuyur (dəyişmir) |
 | `POST /telegram/webhook` | **ictimai**, yalnız secret başlığı ilə |
 | `GET /oauth/<platform>/callback` | **ictimai**, yalnız bir dəfəlik state ilə |
 | `GET /media/<id>.<ext>?exp&sig` | **ictimai**, yalnız imza ilə |

@@ -65,7 +65,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
 <details id="d-jobs"><summary>Son əmr işləri</summary><div class="sub gap"><button id="r-jobs" class="s" type="button">Yenilə</button><div id="jl"></div></div></details>
 <details id="d-acc"><summary>Qoşulu hesablar</summary><div class="sub gap">
 <div class="row"><span class="lbl">Platforma vəziyyəti</span><span><button id="spv" class="s" type="button">Canlı yoxla</button> <button id="spr" class="s" type="button">Yenilə</button></span></div>
-<div id="sp"></div><button id="tgsetup" class="s" type="button">Telegram webhook-u qur</button></div></details>
+<div id="sp"></div><div class="row"><button id="tgsetup" class="s" type="button">Telegram webhook-u qur</button> <button id="tgcheck" class="s" type="button">Telegram webhook-u yoxla</button></div><div id="tgres" aria-live="polite"></div></div></details>
 <details id="d-audit"><summary>Audit jurnalı</summary><div class="sub gap"><button id="r-audit" class="s" type="button">Yenilə</button><div id="audit"></div></div></details>
 <details id="d-status"><summary>Sistem vəziyyəti</summary><div class="sub gap"><button id="r-status" class="s" type="button">Yenilə</button><div id="status"></div></div></details>
 <details id="d-err"><summary>Xətalar (bu sessiya)</summary><div class="sub gap"><div id="errs" class="lbl">Xəta yoxdur.</div></div></details>
@@ -371,8 +371,36 @@ box.appendChild(c);
 $("spr").addEventListener("click",function(){loadSocial(false)});
 $("spv").addEventListener("click",function(){loadSocial(true)});
 $("d-acc").addEventListener("toggle",function(){if($("d-acc").open)loadSocial(false)});
+var TGV={ok:["Webhook düzgündür","ok"],not_set:["Webhook qurulmayıb","warn"],other_url:["Webhook başqa ünvandadır","warn"],delivery_error:["Telegram çatdırma xətası göstərir","bad"],config_problem:["Konfiqurasiya problemi","bad"]};
+function tgLine(box,text,cls){box.appendChild(el("div",cls||"lbl",text))}
+function tgReport(r){
+var d=r.data||{},box=$("tgres");box.textContent="";
+if(!r.ok||d.ok===false){
+box.appendChild(pill("XƏTA"+(r.status?" "+r.status:""),"bad"));
+tgLine(box,d.message||d.error||("HTTP "+r.status));
+if(d.hint)tgLine(box,"Nə etməli: "+d.hint);
+if(d.reason)tgLine(box,"səbəb: "+d.reason+(d.step?" · addım: "+d.step:""));
+(d.problems||[]).slice(1).forEach(function(x){tgLine(box,"həm də: "+x.message)});
+setState("Telegram: "+(d.message||"xəta"));return}
+if(d.verdict){
+var v=TGV[d.verdict]||[d.verdict,"warn"];box.appendChild(pill(v[0],v[1]));
+if(d.bot)tgLine(box,"bot: "+d.bot);
+if(d.webhook)tgLine(box,"qurulu: "+(d.webhook.set?d.webhook.host:"yoxdur")+" · gözləyən: "+d.webhook.pending_updates+(d.webhook.matches_expected?" · ünvan JARVIS-dir":""));
+if(d.webhook&&d.webhook.last_error)tgLine(box,"son xəta: "+d.webhook.last_error.message);
+(d.problems||[]).forEach(function(x){tgLine(box,x.message+" "+(x.hint||""))});
+}else{
+box.appendChild(pill(d.status==="already_set"?"ARTIQ QURULUB":"QURULDU","ok"));
+tgLine(box,d.message);
+tgLine(box,"ünvan: "+d.webhook+(d.previous_host?" · əvvəlki host: "+d.previous_host:"")+" · gözləyən: "+d.pending_updates);
+}
+(d.warnings||[]).forEach(function(x){tgLine(box,"diqqət: "+x,"lbl")});
+setState("Telegram: "+(d.message||(TGV[d.verdict]||[d.verdict])[0]));
+}
 $("tgsetup").addEventListener("click",function(){
-api("/api/telegram/setup",{method:"POST"},"telegram webhook").then(function(r){setState(r.ok?"Telegram webhook quruldu":"xəta: "+errText(r))});
+api("/api/telegram/setup",{method:"POST"},"telegram webhook").then(tgReport);
+});
+$("tgcheck").addEventListener("click",function(){
+api("/api/telegram/webhook",{},"telegram webhook yoxlaması").then(tgReport);
 });
 </script></body></html>`;
 

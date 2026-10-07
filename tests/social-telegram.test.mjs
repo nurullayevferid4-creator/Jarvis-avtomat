@@ -254,16 +254,24 @@ test("planner: Claude açarı yoxdursa və ya cavab pozuqdursa fallback; çıxı
   assert.equal((await draftCopy({ env: { ANTHROPIC_API_KEY: "k" }, instruction: "yeni ətir", platforms: ["instagram"] })).source, "fallback");
 });
 
-test("/api/telegram/setup webhook-u secret_token ilə qurur; secret/baza ünvan yoxdursa 409", async () => {
+test("/api/telegram/setup webhook-u secret_token ilə qurur və təsdiqləyir; parolsuz 401; ətraflı hallar tests/telegram-setup.test.mjs-dədir", async () => {
   const w = await ready();
-  const calls = installSocialFetch([[/\/setWebhook/, () => json({ ok: true, result: true })]]);
+  let current = { url: "", pending_update_count: 0 };
+  const calls = installSocialFetch([
+    [/\/getWebhookInfo/, () => json({ ok: true, result: current })],
+    [/\/getMe/, () => json({ ok: true, result: { username: "jarvis_bot" } })],
+    [/\/setWebhook/, (c) => { const b = bodyJson(c); current = { url: b.url, allowed_updates: b.allowed_updates, pending_update_count: 0 }; return json({ ok: true, result: true }); }],
+  ]);
   const r = await worker.fetch(new Request("https://jarvis.example.dev/api/telegram/setup", { method: "POST", headers: { "x-passcode": "pw" } }), w.env);
   assert.equal(r.status, 200);
-  const b = bodyJson(calls[0]);
+  const b = bodyJson(calls.find((c) => /\/setWebhook/.test(c.url)));
   assert.equal(b.url, "https://jarvis.example.dev/telegram/webhook");
   assert.equal(b.secret_token, "whsec_test-1");
   assert.deepEqual(b.allowed_updates, ["message", "callback_query"]);
   assert.equal((await worker.fetch(new Request("https://jarvis.example.dev/api/telegram/setup", { method: "POST" }), w.env)).status, 401);
+  // PUBLIC_BASE_URL yoxdursa və sorğu https deyilsə: 409 deyil, dəqiq konfiqurasiya xətası (412)
   const w2 = await ready();
-  assert.equal((await worker.fetch(new Request("https://jarvis.example.dev/api/telegram/setup", { method: "POST", headers: { "x-passcode": "pw" } }), { ...w2.env, PUBLIC_BASE_URL: "" })).status, 409);
+  const r2 = await worker.fetch(new Request("http://localhost:8787/api/telegram/setup", { method: "POST", headers: { "x-passcode": "pw" } }), { ...w2.env, PUBLIC_BASE_URL: "" });
+  assert.equal(r2.status, 412);
+  assert.equal((await r2.json()).reason, "public_base_url_missing");
 });

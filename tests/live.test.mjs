@@ -30,3 +30,30 @@ test("LIVE: OpenAI canlı axtarış alətini qəbul edir", { skip }, async () =>
   assert.ok(out.text.length > 0);
   assert.equal(out.web, true, "canlı axtarış işləmədi: OPENAI_MODEL və OPENAI_WEB_SEARCH_TOOL yoxlanmalıdır");
 });
+
+// ---- Telegram (REAL Bot API) ----
+// Yalnız oxuma: getMe + getWebhookInfo. Tələb: RUN_LIVE_TESTS=1 və TELEGRAM_BOT_TOKEN (öz botunun tokeni; heç vaxt repo-ya yazma).
+// Webhook-u real dəyişən qurulum testi AYRICA işarələnib: əlavə olaraq TELEGRAM_LIVE_SETUP=1, TELEGRAM_WEBHOOK_SECRET və
+// PUBLIC_BASE_URL (botun real webhook-unu dəyişir!) lazımdır.
+const tgSkip = process.env.RUN_LIVE_TESTS === "1" && process.env.TELEGRAM_BOT_TOKEN ? false : "real Telegram tokeni yoxdur (RUN_LIVE_TESTS=1 və TELEGRAM_BOT_TOKEN lazımdır)";
+const tgSetupSkip = tgSkip || (process.env.TELEGRAM_LIVE_SETUP === "1" && process.env.TELEGRAM_WEBHOOK_SECRET && process.env.PUBLIC_BASE_URL ? false : "webhook-u dəyişən test üçün TELEGRAM_LIVE_SETUP=1, TELEGRAM_WEBHOOK_SECRET və PUBLIC_BASE_URL lazımdır");
+
+test("LIVE: Telegram tokeni etibarlıdır (getMe) və webhook vəziyyəti oxunur (getWebhookInfo)", { skip: tgSkip }, async () => {
+  const { TelegramAdapter } = await import("../src/social/adapters/Telegram.js");
+  const a = new TelegramAdapter({ env: process.env, store: null, now: Date.now });
+  const me = await a.getMe();
+  assert.ok(me.username, "bot adı gəlməlidir");
+  const info = await a.getWebhookInfo();
+  assert.equal(typeof info.url, "string");
+  assert.equal(typeof info.pending_update_count, "number");
+});
+
+test("LIVE: setupWebhook real botda idempotent işləyir (BOTUN WEBHOOK-UNU DƏYİŞİR)", { skip: tgSetupSkip }, async () => {
+  const { TelegramAdapter } = await import("../src/social/adapters/Telegram.js");
+  const { setupWebhook } = await import("../src/telegram/setup.js");
+  const a = new TelegramAdapter({ env: process.env, store: null, now: Date.now });
+  const first = await setupWebhook({ adapter: a, env: process.env, origin: process.env.PUBLIC_BASE_URL });
+  assert.ok(["created", "switched", "refreshed", "already_set"].includes(first.status));
+  const second = await setupWebhook({ adapter: a, env: process.env, origin: process.env.PUBLIC_BASE_URL });
+  assert.ok(["already_set", "refreshed"].includes(second.status));
+});

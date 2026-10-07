@@ -10,6 +10,7 @@ export const ERROR_CODES = [
   "not_supported", // bu platforma bu növü dəstəkləmir
   "unaudited_client", // tətbiq auditdən keçməyib (TikTok/YouTube)
   "media_error", // media tapılmadı/uyğun deyil
+  "conflict", // platforma 409 qaytardı (məs. eyni bot üçün başqa istifadəçi)
   "timeout", // vaxt limiti
   "approval_required", // təsdiq yoxdur
 ];

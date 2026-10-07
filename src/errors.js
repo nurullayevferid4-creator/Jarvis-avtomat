@@ -43,6 +43,7 @@ const SOCIAL_MAP = {
   not_supported: "VALIDATION_ERROR",
   unaudited_client: "PERMISSION_ERROR",
   media_error: "VALIDATION_ERROR",
+  conflict: "CONFLICT",
   timeout: "TIMEOUT",
   approval_required: "APPROVAL_REQUIRED",
 };

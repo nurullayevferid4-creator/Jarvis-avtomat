@@ -7,8 +7,10 @@ import { BaseAdapter } from "./Base.js";
 import { SocialError } from "../errors.js";
 import { socialFetch, redactText } from "../http.js";
 import { composeCaption, normalizeHashtags } from "../request.js";
+import { cleanEnvValue } from "../../security/envvalue.js";
 
 const MAX_TEXT = 4096;
+export const WEBHOOK_UPDATES = ["message", "callback_query"];
 
 export function classifyTelegramError(status, json) {
   const code = Number((json && json.error_code) || status);
@@ -16,7 +18,13 @@ export function classifyTelegramError(status, json) {
   const extra = { platform: "telegram", httpStatus: status, platformCode: code || null, retriable: false };
   if (code === 401) return new SocialError("token_expired", "Telegram bot tokeni etibarsızdır", extra);
   if (code === 403) return new SocialError("permission_denied", "Telegram icazəsi yoxdur (bot bloklanıb və ya kanalda admin deyil): " + desc, extra);
-  if (code === 429) return new SocialError("rate_limited", "Telegram limitinə dəyildi: " + desc, { ...extra, retriable: true });
+  if (code === 409) return new SocialError("conflict", "Telegram 409 Conflict qaytardı: " + desc, extra);
+  if (code === 429) {
+    const e = new SocialError("rate_limited", "Telegram limitinə dəyildi: " + desc, { ...extra, retriable: true });
+    const ra = Number(json && json.parameters && json.parameters.retry_after);
+    if (ra > 0) e.retryAfter = Math.min(ra, 3600);
+    return e;
+  }
   if (code === 400) return new SocialError("invalid_request", "Telegram sorğunu qəbul etmədi: " + desc, extra);
   if (code >= 500) return new SocialError("api_error", "Telegram müvəqqəti xətası: " + desc, { ...extra, retriable: true });
   return new SocialError("api_error", "Telegram xətası: " + desc, extra);
@@ -40,16 +48,18 @@ export class TelegramAdapter extends BaseAdapter {
   }
 
   token() {
-    const t = this.env.TELEGRAM_BOT_TOKEN;
+    const t = cleanEnvValue(this.env.TELEGRAM_BOT_TOKEN);
     if (!t) throw new SocialError("not_connected", "TELEGRAM_BOT_TOKEN təyin edilməyib", { platform: "telegram" });
-    return String(t);
+    return t;
   }
 
   async api(method, body) {
     const url = "https://api.telegram.org/bot" + this.token() + "/" + method;
     const isForm = typeof FormData !== "undefined" && body instanceof FormData;
     const r = await socialFetch(url, isForm ? { method: "POST", body } : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}) }, this.fopts(isForm ? 120000 : 20000));
-    if (!r.ok || !r.json || r.json.ok !== true) throw classifyTelegramError(r.status, r.json);
+    // Telegram həmişə JSON qaytarır. JSON yoxdursa cavab Telegram-dan deyil (proxy, firewall, şəbəkə bloku): bot xətası kimi göstərilmir.
+    if (!r.json || typeof r.json !== "object") throw new SocialError("api_error", "Telegram API-dən Telegram cavabı gəlmədi (HTTP " + r.status + "): şəbəkə və ya proxy bloku ola bilər", { platform: "telegram", httpStatus: r.status, retriable: r.status >= 500 });
+    if (!r.ok || r.json.ok !== true) throw classifyTelegramError(r.status, r.json);
     return r.json.result;
   }
 
@@ -95,25 +105,40 @@ export class TelegramAdapter extends BaseAdapter {
     return await this.api("getMe", {});
   }
 
-  async setWebhook(url) {
-    if (!this.env.TELEGRAM_WEBHOOK_SECRET) throw new SocialError("not_connected", "TELEGRAM_WEBHOOK_SECRET təyin edilməyib", { platform: "telegram" });
+  // Yalnız oxuma: Telegram-da hazırda qurulu webhook (url, pending_update_count, last_error_*, allowed_updates).
+  async getWebhookInfo() {
+    return (await this.api("getWebhookInfo", {})) || {};
+  }
+
+  // setWebhook mövcud webhook-u atomik əvəz edir (əvvəlcə deleteWebhook lazım deyil).
+  // dropPending=true: köhnə gözləyən yeniləmələr atılır (başqa istehlakçıya aid köhnə əmrlər icra olunmasın).
+  async setWebhook(url, { dropPending = true } = {}) {
+    const secret = cleanEnvValue(this.env.TELEGRAM_WEBHOOK_SECRET);
+    if (!secret) throw new SocialError("not_connected", "TELEGRAM_WEBHOOK_SECRET təyin edilməyib", { platform: "telegram" });
+    if (!/^[A-Za-z0-9_-]{1,256}$/.test(secret)) throw new SocialError("invalid_request", "TELEGRAM_WEBHOOK_SECRET yalnız A-Z a-z 0-9 _ - simvollarından ibarət (1-256) ola bilər", { platform: "telegram" });
     if (!/^https:\/\/[^\s]+$/.test(url)) throw new SocialError("invalid_request", "webhook ünvanı https olmalıdır", { platform: "telegram" });
-    return await this.api("setWebhook", { url, secret_token: this.env.TELEGRAM_WEBHOOK_SECRET, allowed_updates: ["message", "callback_query"], drop_pending_updates: true });
+    return await this.api("setWebhook", { url, secret_token: secret, allowed_updates: WEBHOOK_UPDATES, drop_pending_updates: dropPending === true });
+  }
+
+  // Yalnız adapter səviyyəsində: JARVIS webhook-u silmir (əsas giriş nöqtəsidir), lakin Bot API məntiqi tam və testlidir.
+  async deleteWebhook({ dropPending = false } = {}) {
+    return await this.api("deleteWebhook", { drop_pending_updates: dropPending === true });
   }
 
   // Sənədə uyğun: fayl yükləmə 20 MB-a qədər (getFile). Yalnız bot şəxsi çatdırma üçündür, JARVIS fayl yükləmir.
 
   configured() {
-    return Boolean(this.env.TELEGRAM_BOT_TOKEN);
+    return Boolean(cleanEnvValue(this.env.TELEGRAM_BOT_TOKEN));
   }
 
   async cachedStatus() {
     if (!this.configured()) return this.baseStatus({ state: "NOT_CONNECTED", reason: "TELEGRAM_BOT_TOKEN təyin edilməyib" });
-    const ids = String(this.env.TELEGRAM_ALLOWED_CHAT_IDS || "").split(",").map((x) => x.trim()).filter(Boolean);
+    const ids = cleanEnvValue(this.env.TELEGRAM_ALLOWED_CHAT_IDS).split(",").map((x) => x.trim()).filter(Boolean);
     return this.baseStatus({
       state: "CONNECTED",
       verified: false,
-      webhook_secret_set: Boolean(this.env.TELEGRAM_WEBHOOK_SECRET),
+      reason: "token Telegram-da hələ yoxlanmayıb (yalnız təyin olunub): «Telegram webhook-u yoxla» düyməsi və ya «Canlı yoxla»",
+      webhook_secret_set: Boolean(cleanEnvValue(this.env.TELEGRAM_WEBHOOK_SECRET)),
       allowed_chats: ids.length,
       channel_configured: Boolean(this.env.TELEGRAM_CHANNEL_ID),
       warning: ids.length ? undefined : "TELEGRAM_ALLOWED_CHAT_IDS boşdur: bot heç kimin əmrini qəbul etməyəcək",
@@ -126,9 +151,9 @@ export class TelegramAdapter extends BaseAdapter {
   }
 
   channel() {
-    const c = this.env.TELEGRAM_CHANNEL_ID;
+    const c = cleanEnvValue(this.env.TELEGRAM_CHANNEL_ID);
     if (!c) throw new SocialError("not_connected", "TELEGRAM_CHANNEL_ID təyin edilməyib", { platform: "telegram" });
-    return String(c);
+    return c;
   }
 
   // Kanala paylaşım (yalnız təsdiqdən sonra flow.js çağırır)

@@ -18,7 +18,7 @@ Bindinqlər (`JARVIS_KV`, `JARVIS_MEDIA`, `COORD`) `wrangler.toml`-dadır, əl i
 
 | Ad | Növ | Nə üçün |
 |---|---|---|
-| `PUBLIC_BASE_URL` | Variable | Worker-in `https://...` ünvanı, sonda `/` olmadan. OAuth callback, Telegram webhook və media ünvanı üçün |
+| `PUBLIC_BASE_URL` | Variable | Worker-in `https://host` ünvanı (yolsuz). OAuth callback, Telegram webhook və media ünvanı üçün. Ətrafdakı boşluq/dırnaq və sondakı `/` avtomatik təmizlənir. **Diqqət:** dashboard-da «Text» kimi yazılan dəyişəni `wrangler deploy` silə bilər; repo-da `keep_vars = true` var. Telegram webhook-u üçün dəyər yoxdursa Worker sorğunun öz https ünvanını işlədir və bunu bildirir |
 | `TOKEN_ENC_KEY` | Secret | Saxlanmış platforma tokenlərini AES-GCM ilə şifrələyir. **Məcburidir**: onsuz OAuth başlamır, token yazılmır. Dəyişsən tokenlər oxunmur, yenidən qoşmaq lazım olur |
 | `MEDIA_SIGNING_KEY` | Secret | Müvəqqəti media ünvanlarının imzası (Instagram media-nı ünvandan çəkir) |
 | `TELEGRAM_BOT_TOKEN` | Secret | BotFather tokeni |
