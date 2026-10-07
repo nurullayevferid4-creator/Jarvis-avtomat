@@ -15,7 +15,7 @@ Fərid-in şəxsi idarəetmə köməkçisi. Səslə və ya yazı ilə tapşırı
 | Alət reyestri (45 alət) | işləyir | testlər |
 | Media: axınla R2 yükləmə, MP4 analizi, növ/ölçü yoxlaması, silmə (təsdiqlə) | işləyir | testlər + real workerd + real ffmpeg fayllarla |
 | Video iş axını (yüklə → yoxla → analiz → plan → emal → nəticəni yoxla → saxla) | emal addımı **sənin ffmpeg serverin** tələb edir | `docs/VIDEO.md`; xidmət yoxdursa redaktə lazım olan iş `FAILED` olur (plan göstərilir), "hazırdır" deyilmir |
-| Telegram (webhook, düymələr, kanal paylaşımı) | kod hazır | saxta API; BotFather tokeni lazım |
+| Telegram (webhook, düymələr, kanal paylaşımı) | kod hazır; webhook qurulması idempotent, `getWebhookInfo` ilə təsdiqlənir, səhvlər dəqiq səbəblə göstərilir | saxta (vəziyyətli) Bot API + real Chromium; real bot ilə sınaq üçün `docs/SMOKE.md` §4 |
 | Instagram / TikTok / YouTube (OAuth, yükləmə, status, təsdiqlə paylaşım) | kod hazır | saxta API; hər biri üçün real tətbiq + platforma təsdiqi (audit/review) lazım, bax `docs/INTEGRATIONS.md` |
 | Shopify (OAuth, məhsul/qiymət/stok/kolleksiya/webhook, DRAFT-by-default, silmə yox) | kod hazır | saxta API + HMAC testləri; real mağaza lazım |
 | Lead sistemi (yalnız ictimai/qanuni mənbə, kütləvi göndəriş YOX) | kod hazır | testlər |

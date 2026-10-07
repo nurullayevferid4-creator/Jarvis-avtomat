@@ -4,6 +4,7 @@
 
 import { MEDIA_ID_RE } from "./request.js";
 import { SocialError } from "./errors.js";
+import { publicBaseUrl } from "../security/envvalue.js";
 
 export const MEDIA_TYPES = {
   "image/jpeg": { ext: "jpg", kind: "image" },
@@ -35,7 +36,7 @@ export function createMediaStore(env, now = () => Date.now()) {
   const bucket = env.JARVIS_MEDIA || null;
   return {
     available: Boolean(bucket),
-    signingConfigured: Boolean(env.MEDIA_SIGNING_KEY && env.PUBLIC_BASE_URL),
+    signingConfigured: Boolean(env.MEDIA_SIGNING_KEY && publicBaseUrl(env)),
 
     async put(bytes, contentType) {
       if (!bucket) throw new SocialError("media_error", "media anbarı (JARVIS_MEDIA) qoşulmayıb");
@@ -106,7 +107,7 @@ export function createMediaStore(env, now = () => Date.now()) {
       if (!MEDIA_ID_RE.test(id) || !EXT_TYPE[ext]) throw new SocialError("media_error", "media ünvanı düzgün deyil");
       const exp = Math.floor(now() / 1000) + Math.min(86400, Math.max(60, ttlSeconds));
       const sig = await hmac(env.MEDIA_SIGNING_KEY, id + "." + ext + ":" + exp);
-      return env.PUBLIC_BASE_URL.replace(/\/+$/, "") + "/media/" + id + "." + ext + "?exp=" + exp + "&sig=" + sig;
+      return publicBaseUrl(env) + "/media/" + id + "." + ext + "?exp=" + exp + "&sig=" + sig;
     },
 
     // /media/<id>.<ext>?exp&sig üçün: { ok, id, ext } 

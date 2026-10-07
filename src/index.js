@@ -19,6 +19,7 @@ import { publicJob } from "./media/jobs.js";
 import { UPLOAD_TYPES } from "./media/library.js";
 import { SocialError } from "./social/errors.js";
 import { createTelegramHandler, verifyWebhook } from "./telegram/handler.js";
+import { setupWebhook, webhookStatus, setupErrorBody } from "./telegram/setup.js";
 import { handleShopifyPublicRoute, handleShopifyApiRoute } from "./shopify/index.js";
 import { OWNER_PERMISSIONS } from "./policy.js";
 import { checkAudioFile, parseVoiceCommand, speakable } from "./voice/command.js";
@@ -78,7 +79,7 @@ function socialErrorResponse(e) {
   }
   const err = e instanceof SocialError ? e : null;
   if (!err) return json({ error: "api_error", message: "Xəta baş verdi" }, 502);
-  const code = err.code === "invalid_request" || err.code === "media_error" ? 400 : err.code === "not_connected" || err.code === "token_expired" ? 409 : err.code === "permission_denied" ? 403 : 502;
+  const code = err.code === "invalid_request" || err.code === "media_error" ? 400 : err.code === "not_connected" || err.code === "token_expired" || err.code === "conflict" ? 409 : err.code === "permission_denied" ? 403 : 502;
   return json({ error: err.code, message: err.message, platform: err.platform }, code);
 }
 
@@ -280,7 +281,7 @@ export default {
     }
 
     // --- Sosial platformalar (parol tələb olunur) ---
-    if (url.pathname.startsWith("/api/social/") || url.pathname === "/api/media" || url.pathname.startsWith("/api/media/") || url.pathname === "/api/telegram/setup") {
+    if (url.pathname.startsWith("/api/social/") || url.pathname === "/api/media" || url.pathname.startsWith("/api/media/") || url.pathname === "/api/telegram/setup" || url.pathname === "/api/telegram/webhook") {
       const d = buildSocial(env);
       try {
         if (req.method === "GET" && url.pathname === "/api/social/status") {
@@ -344,12 +345,33 @@ export default {
             return job ? json({ job: publicJob(job) }) : json({ error: "NOT_FOUND" }, 404);
           }
         }
-        if (req.method === "POST" && url.pathname === "/api/telegram/setup") {
-          const base = String(env.PUBLIC_BASE_URL || "").replace(/\/+$/, "");
-          if (!/^https:\/\/[^\s/]+$/.test(base)) return json({ error: "not_connected", message: "PUBLIC_BASE_URL (https://...) təyin edilməyib" }, 409);
-          await d.hub.adapter("telegram").setWebhook(base + "/telegram/webhook");
-          await d.audit.log("telegram.webhook_set", {});
-          return json({ ok: true, webhook: base + "/telegram/webhook" });
+        if (url.pathname === "/api/telegram/setup" || url.pathname === "/api/telegram/webhook") {
+          const tg = d.hub.adapter("telegram");
+          // GET /api/telegram/webhook: yalnız oxuma (heç nə dəyişmir). POST /api/telegram/setup: qurur (idempotent).
+          if (req.method === "GET" && url.pathname === "/api/telegram/webhook") {
+            try {
+              return json(await webhookStatus({ adapter: tg, env, origin: url.origin }));
+            } catch (e) {
+              const r = setupErrorBody(e);
+              return json(r.body, r.status);
+            }
+          }
+          if (req.method === "POST" && url.pathname === "/api/telegram/setup") {
+            let force = false;
+            try {
+              const b = await req.clone().json();
+              force = !!(b && b.force === true);
+            } catch (e) { /* gövdə yoxdur: normal */ }
+            try {
+              const r = await setupWebhook({ adapter: tg, env, origin: url.origin, force });
+              await d.audit.log("telegram.webhook_set", { status: r.status, host: r.host, previous_host: r.previous_host || null, base_source: r.base_source, pending_updates: r.pending_updates, dropped_pending: r.dropped_pending });
+              return json(r);
+            } catch (e) {
+              const r = setupErrorBody(e);
+              await d.audit.log("telegram.webhook_failed", { step: r.body.step, reason: r.body.reason, http: r.status });
+              return json(r.body, r.status);
+            }
+          }
         }
       } catch (e) {
         return socialErrorResponse(e);

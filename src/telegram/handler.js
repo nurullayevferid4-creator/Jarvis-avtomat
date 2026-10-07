@@ -18,6 +18,7 @@ import { beginOAuth, OAUTH_PLATFORMS } from "../social/oauth.js";
 import { MEDIA_TYPES } from "../social/media.js";
 import { formatResult } from "../social/flow.js";
 import { publicError } from "../errors.js";
+import { cleanEnvValue } from "../security/envvalue.js";
 
 const ID_RE = /^\d{13}-[0-9a-f]{6}$/;
 const PLATFORM_WORDS = {
@@ -36,13 +37,13 @@ const TEXT_APPROVAL_WINDOW_MS = 15 * 60 * 1000;
 const TERMINAL_JOB = new Set(["done", "failed", "unknown", "partial"]);
 
 export function verifyWebhook(req, env) {
-  const want = env.TELEGRAM_WEBHOOK_SECRET;
+  const want = cleanEnvValue(env.TELEGRAM_WEBHOOK_SECRET);
   if (!want) return false; // secret yoxdursa webhook qəbul edilmir
   return safeEqual(req.headers.get("x-telegram-bot-api-secret-token") || "", want);
 }
 
 export function allowedIds(env) {
-  return new Set(String(env.TELEGRAM_ALLOWED_CHAT_IDS || "").split(",").map((x) => x.trim()).filter((x) => /^\d{1,15}$/.test(x)));
+  return new Set(cleanEnvValue(env.TELEGRAM_ALLOWED_CHAT_IDS).split(",").map((x) => x.trim()).filter((x) => /^\d{1,15}$/.test(x)));
 }
 
 export function parseIntent(text) {

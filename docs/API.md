@@ -31,7 +31,8 @@ Bütün `/api/*` yolları parol tələb edir: başlıq `x-passcode-b64: <parolun
 | `GET /api/social/status?verify=1`, `GET /api/social/jobs`, `POST /api/social/jobs/{id}/advance` | Platforma vəziyyəti və paylaşım işləri |
 | `POST /api/social/{platform}/connect` | OAuth başlat (`TOKEN_ENC_KEY` məcburi) |
 | `POST /api/social/draft` | Paylaşım qaralaması → təsdiq qeydi |
-| `POST /api/telegram/setup` | Webhook qur |
+| `POST /api/telegram/setup` | Webhook qur (idempotent): `getWebhookInfo` → lazımdırsa `setWebhook` → `getWebhookInfo` ilə təsdiq. Gövdə ixtiyari `{"force":true}` düzgün qurulu webhook-u da yenidən tətbiq edir. Uğur: `status` = `created`/`already_set`/`switched`/`refreshed`. Xəta: `reason`, `step`, `hint` (412 konfiqurasiya, 424 Telegram rədd etdi, 409 yalnız Telegram-ın özü 409 verərsə, 429, 502/504) |
+| `GET /api/telegram/webhook` | Yalnız oxuma: konfiqurasiya yoxlaması + Telegram-dakı webhook vəziyyəti (`verdict`: `ok`, `not_set`, `other_url`, `delivery_error`, `config_problem`). Token/secret və köhnə ünvanın yolu göstərilmir |
 | `GET /api/shopify/status`, `POST /api/shopify/connect`, `POST /api/shopify/disconnect` | Shopify bağlantısı |
 | `GET/POST /api/knowledge` | Bilik bazası (`FEATURE_KNOWLEDGE`) |
 

@@ -7,6 +7,7 @@
 //   SHOPIFY_API_VERSION (standart 2026-07)
 
 import { AppError } from "../errors.js";
+import { publicBaseUrl } from "../security/envvalue.js";
 
 export const DEFAULT_SCOPES = ["read_products", "write_products", "read_orders", "read_inventory", "write_inventory"];
 export const DEFAULT_API_VERSION = "2026-07";
@@ -93,13 +94,13 @@ export function requireOAuthConfig(env) {
 
 // OAuth callback ünvanı: <PUBLIC_BASE_URL>/oauth/shopify/callback
 export function shopifyRedirectUri(env) {
-  const base = String((env && env.PUBLIC_BASE_URL) || "").replace(/\/+$/, "");
-  if (!/^https:\/\/[^\s/]+$/.test(base)) throw new AppError("VALIDATION_ERROR", "PUBLIC_BASE_URL (https://...) təyin edilməyib", { source: "shopify" });
+  const base = publicBaseUrl(env);
+  if (!base) throw new AppError("VALIDATION_ERROR", "PUBLIC_BASE_URL (https://...) təyin edilməyib", { source: "shopify" });
   return base + "/oauth/shopify/callback";
 }
 
 export function shopifyWebhookUri(env) {
-  const base = String((env && env.PUBLIC_BASE_URL) || "").replace(/\/+$/, "");
-  if (!/^https:\/\/[^\s/]+$/.test(base)) throw new AppError("VALIDATION_ERROR", "PUBLIC_BASE_URL (https://...) təyin edilməyib", { source: "shopify" });
+  const base = publicBaseUrl(env);
+  if (!base) throw new AppError("VALIDATION_ERROR", "PUBLIC_BASE_URL (https://...) təyin edilməyib", { source: "shopify" });
   return base + "/shopify/webhook";
 }

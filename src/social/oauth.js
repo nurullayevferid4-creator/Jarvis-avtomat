@@ -2,6 +2,7 @@
 // Callback ictimai ünvandır, amma doğru state olmadan heç nə etmir.
 
 import { SocialError } from "./errors.js";
+import { publicBaseUrl } from "../security/envvalue.js";
 import { PLATFORMS } from "./platforms.js";
 
 const OAUTH_PLATFORMS = ["instagram", "tiktok", "youtube"];
@@ -11,8 +12,8 @@ function randomState() {
 }
 
 export function redirectUri(env, platform) {
-  const base = String(env.PUBLIC_BASE_URL || "").replace(/\/+$/, "");
-  if (!/^https:\/\/[^\s/]+$/.test(base)) throw new SocialError("not_connected", "PUBLIC_BASE_URL (https://...) təyin edilməyib", { platform });
+  const base = publicBaseUrl(env);
+  if (!base) throw new SocialError("not_connected", "PUBLIC_BASE_URL (https://...) təyin edilməyib", { platform });
   return base + "/oauth/" + platform + "/callback";
 }
 

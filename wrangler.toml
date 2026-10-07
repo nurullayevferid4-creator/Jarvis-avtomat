@@ -3,6 +3,11 @@ name = "jarvis-avtomat"
 main = "worker.js"
 compatibility_date = "2026-09-01"
 
+# Dashboard-da "Text" kimi yazılan dəyişənləri (PUBLIC_BASE_URL, TELEGRAM_ALLOWED_CHAT_IDS, TELEGRAM_CHANNEL_ID, model adları)
+# wrangler deploy aşağıdakı [vars] olmadan SİLİR (Cloudflare sənədi: "Wrangler will override them the next time you deploy").
+# keep_vars = true bunun qarşısını alır. Secret-lər bundan asılı olmayaraq həmişə qalır.
+keep_vars = true
+
 # Cloudflare Worker Previews (budaq/PR build-ləri) bu bloku tələb edir (sənədə görə boş ola bilər).
 # Boş blok: preview production ilə eyni ayarları alır, ayrıca ayar yoxdur.
 [previews]
