@@ -164,7 +164,7 @@ export class ClaudeOrchestrator {
   }
 
   // origin: sorğunun mənşəyi ({channel:"ui"} və ya {channel:"telegram", chat_id}). Təsdiq qeydləri buna bağlanır.
-  async handle(text, { origin = null } = {}) {
+  async handle(text, { origin = null, attachments = [] } = {}) {
     const budget = new CallBudget(this.limits.maxModelCalls);
     const ctx = { budget, timeoutMs: this.limits.callTimeoutMs };
     const state = await this.store.load();
@@ -182,7 +182,9 @@ export class ClaudeOrchestrator {
     }
 
     const hist = state.history.slice(-8);
-    const leadRaw = await this.lead.complete(buildLeadSystem(this.registry.helpers(), this.limits, this.tools ? this.toolList() : null), [...hist, { role: "user", content: text }], 1200, ctx);
+    // Əlavə olunan media: id-lər sistemdən gəlir (etibarlı), fayl adı təmizlənib
+    const attach = attachments.length ? "\n\n[Attached media, usable as media_id in tools]\n" + attachments.slice(0, 5).map((a) => "- media_id=" + a.id + " kind=" + a.kind + (a.analysis && a.analysis.duration_s ? " " + a.analysis.width + "x" + a.analysis.height + " " + a.analysis.duration_s + "s" : a.analysis && a.analysis.width ? " " + a.analysis.width + "x" + a.analysis.height : "")).join("\n") : "";
+    const leadRaw = await this.lead.complete(buildLeadSystem(this.registry.helpers(), this.limits, this.tools ? this.toolList() : null), [...hist, { role: "user", content: text + attach }], 1200, ctx);
     let plan;
     try { plan = parseJson(leadRaw); } catch (e) { plan = { mode: "chat", reply: leadRaw.slice(0, 600) }; }
 

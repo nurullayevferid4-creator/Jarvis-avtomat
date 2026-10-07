@@ -112,6 +112,7 @@ export function createMediaJobs({ store, coord, library, media, processor, audit
         await save(job);
         return;
       }
+      job.stages.process = { status: "running", at: now() };
       if (!processor || !processor.configured) {
         // Plan hazırdır, amma emal etmək mümkün deyil: dürüst nəticə
         job.result = { processed: false, verified: false, partial: { plan: plan.summary, ops: plan.ops, warnings: job.state.fit.warnings, analysis: job.state.analysis } };

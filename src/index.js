@@ -21,6 +21,7 @@ import { SocialError } from "./social/errors.js";
 import { createTelegramHandler, verifyWebhook } from "./telegram/handler.js";
 import { handleShopifyPublicRoute, handleShopifyApiRoute } from "./shopify/index.js";
 import { OWNER_PERMISSIONS } from "./policy.js";
+import { checkAudioFile, parseVoiceCommand, speakable } from "./voice/command.js";
 import { AppError, publicError, toAppError } from "./errors.js";
 
 const MAX_BODY_BYTES = 20000;
@@ -357,18 +358,25 @@ export default {
 
     if (req.method === "POST" && url.pathname === "/api/talk") {
       let text = "";
+      let attachIds = [];
+      let heardWake = false;
       try {
         const ct = req.headers.get("content-type") || "";
         if (ct.includes("multipart/form-data")) {
           const fd = await req.formData();
           const f = fd.get("audio");
+          attachIds = String(fd.get("attachments") || "").split(",").map((x) => x.trim()).filter(Boolean);
           if (f && typeof f !== "string" && f.size > 0) {
             if (!features.voice) return json({ error: "Səs söndürülüb (FEATURE_VOICE=0). Yazı ilə yaz." }, 400);
-            text = await stt(env, f, limits.callTimeoutMs);
+            checkAudioFile(f);
+            const pc = parseVoiceCommand(await stt(env, f, limits.callTimeoutMs));
+            text = pc.text;
+            heardWake = pc.wake;
           } else text = String(fd.get("text") || "");
         } else {
           const b = await req.json();
           text = String(b.text || "");
+          if (Array.isArray(b.attachments)) attachIds = b.attachments.map(String);
         }
       } catch (e) {
         const pe = publicError(e, "voice");
@@ -381,7 +389,12 @@ export default {
       try {
         const c = buildContext(env);
         const orchestrator = new ClaudeOrchestrator({ env, registry: createRegistry(env), limits, store, approvals: features.approvals ? approvals : null, tools: features.approvals ? c.tools : null });
-        result = await orchestrator.handle(text, { origin: UI_ACTOR });
+        const attachments = [];
+        for (const id of attachIds.slice(0, 5)) {
+          const m = /^[0-9a-f]{24}$/.test(id) ? await c.library.get(id) : null;
+          if (m) attachments.push(m);
+        }
+        result = await orchestrator.handle(text, { origin: UI_ACTOR, attachments });
       } catch (e) {
         const pe = publicError(e, "chat");
         result = { status: "blocked", spoken: "Xəta baş verdi. Təfərrüat ekranda yazılıb.", screen: pe.message + " (" + pe.code + ")", tasks: [] };
@@ -389,9 +402,9 @@ export default {
       await audit.log("talk", { status: result.status, chars: text.length, tasks: (result.tasks || []).length });
       let audio = null;
       if (features.voice) {
-        try { audio = await tts(env, result.spoken, limits.callTimeoutMs); } catch (e) { result.tts_error = String((e && e.message) || e).slice(0, 200); }
+        try { audio = await tts(env, speakable(result.spoken), limits.callTimeoutMs); } catch (e) { result.tts_error = publicError(e, "tts").message; }
       }
-      return json({ transcript: text, ...result, audio });
+      return json({ transcript: text, wake: heardWake, ...result, audio });
     }
     return new Response("Not found", { status: 404 });
   },
