@@ -70,6 +70,9 @@ export const BRANDS = {
 
 export const BRAND_IDS = Object.keys(BRANDS);
 
+// STT yanlış eşitmələri / transliterasiya (boşluq, defis və alt xətt atılmış formada)
+const BRAND_ALIASES = { qaramenyu: "qr_menu", qaramenu: "qr_menu", qaramenyuu: "qr_menu", qrmenyu: "qr_menu", kyuarmenyu: "qr_menu", kyuarmenu: "qr_menu", fnparfüm: "fn_parfum", fnparfyum: "fn_parfum" };
+
 // "QR Menu", "qr-menu", "QRMenu", "FN Parfum" → kanonik id (qr_menu, fn_parfum). Tanınmayan dəyər olduğu kimi qalır.
 export function normalizeBrandId(v) {
   if (typeof v !== "string") return v;
@@ -77,7 +80,7 @@ export function normalizeBrandId(v) {
   const key = v.toLocaleLowerCase("en").replace(/[\s_-]+/g, "_").replace(/^_+|_+$/g, "");
   if (BRANDS[key]) return key;
   const squash = key.replace(/_/g, "");
-  return BRAND_IDS.find((id) => id.replace(/_/g, "") === squash) || v;
+  return BRAND_IDS.find((id) => id.replace(/_/g, "") === squash) || BRAND_ALIASES[squash] || v;
 }
 
 export function getBrand(id) {

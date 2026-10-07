@@ -161,3 +161,13 @@ test("orkestrator: 'QR Menu' + 3 marketing aləti paralel işləyir, hamısı do
   assert.deepEqual(d.tools.map((t) => t.status), ["done", "done", "done"]);
   assert.deepEqual(d.tools.map((t) => t.tool), ["marketing.campaign.plan", "marketing.hooks", "marketing.captions"]);
 });
+
+test("«Qara menyu üçün reklam hazırla» (STT səhvi) → qr_menu → marketing alətləri çağırılır, brend kanonik qalır; naməlum brend rədd edilir", async () => {
+  const plan = { mode: "tools", tool_calls: [{ tool: "marketing.campaign.plan", input: { brand: "Qara menyu" } }, { tool: "marketing.hooks", input: { brand: "Qara menyu" } }, { tool: "marketing.captions", input: { brand: "Qara menyu", platform: "instagram" } }, { tool: "marketing.hooks", input: { brand: "Bilinməyən" } }] };
+  const calls = installFetch(standardHandler({ plan }));
+  const d = await (await talk(baseEnv(), "Qara menyu üçün reklam hazırla")).json();
+  assert.deepEqual(d.tools.slice(0, 3).map((t) => t.status), ["done", "done", "done"], JSON.stringify(d.tools));
+  assert.equal(d.tools[3].status, "invalid_input");
+  const lead = calls.find((c) => /anthropic/.test(c.url));
+  assert.match(JSON.stringify(lead.body || lead), /brand\(qr_menu\|fn_parfum\)/);
+});
