@@ -132,6 +132,12 @@ export function createProviderRouter(env, { timeoutMs = 25000, maxCalls = 8, imp
     return await one("kimi", { system, messages: [{ role: "user", content: String(user || "") }], maxTokens });
   }
 
+  // Kimi: market_research / lead_research. Kimi əsasdır, alınmasa Claude (OpenAI heç vaxt). Qərarı Claude verir.
+  async function research({ kind = "market_research", system, user, maxTokens = 1200 }) {
+    if (kind !== "market_research" && kind !== "lead_research") throw new AppError("VALIDATION_ERROR", "research növü yanlışdır", { source: "router", retryable: false });
+    return await complete({ system, user, maxTokens, order: ["kimi", "claude"] });
+  }
+
   function status() {
     return Object.entries(table).map(([id, p]) => ({ id, role: p.role, configured: p.configured(), model: id === "claude" ? env.CLAUDE_MODEL || DEFAULTS.claudeModel : id === "openai" ? env.OPENAI_MODEL || DEFAULTS.openaiModel : env.KIMI_MODEL || "kimi-k2-0905-preview" }));
   }
@@ -144,5 +150,5 @@ export function createProviderRouter(env, { timeoutMs = 25000, maxCalls = 8, imp
     };
   }
 
-  return Object.assign(router, { complete, completeJson, secondOpinion, status, asLlm, callCount: () => calls });
+  return Object.assign(router, { complete, completeJson, secondOpinion, research, status, asLlm, callCount: () => calls });
 }
