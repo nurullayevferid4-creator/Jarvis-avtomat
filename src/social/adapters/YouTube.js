@@ -169,7 +169,8 @@ export class YouTubeAdapter extends BaseAdapter {
         t.note = ((t.note ? t.note + "; " : "") + "thumbnail qoyulmadı: " + String(e.message || "xəta").slice(0, 80)).slice(0, 240);
       }
     }
-    return "done";
+    // Yükləmə bitdi, amma "paylaşıldı" demirik: YouTube emalı (processed) yoxlanır
+    return "waiting";
   }
 
   async setThumbnail(rec, videoId, mediaId) {
@@ -185,6 +186,22 @@ export class YouTubeAdapter extends BaseAdapter {
     if (!r.ok) throw classifyYouTubeError(r.status, r.json);
   }
 
-  async check() { return "done"; }
+  // Yükləmə statusu: videos.list?part=status,processingDetails (youtube.readonly icazəsi kifayətdir)
+  async check(req, t) {
+    const rec = await this.validRecord();
+    const r = await socialFetch("https://www.googleapis.com/youtube/v3/videos?part=status,processingDetails&id=" + encodeURIComponent(t.post_id), { method: "GET", headers: { authorization: "Bearer " + rec.access_token } }, this.fopts(20000));
+    if (!r.ok) throw classifyYouTubeError(r.status, r.json);
+    const it = r.json && Array.isArray(r.json.items) ? r.json.items[0] : null;
+    if (!it) throw new SocialError("api_error", "YouTube videonu tapmadı (hələ görünmür və ya silinib)", { platform: "youtube", retriable: true });
+    const up = String((it.status && it.status.uploadStatus) || "");
+    t.data.upload_status = up;
+    if (it.status && it.status.privacyStatus) t.data.privacy_status = it.status.privacyStatus;
+    if (up === "processed") return "done";
+    if (up === "failed" || up === "rejected" || up === "deleted") {
+      const why = (it.status && (it.status.failureReason || it.status.rejectionReason)) || up;
+      throw new SocialError("api_error", "YouTube videonu qəbul etmədi: " + String(why).slice(0, 80), { platform: "youtube", platformCode: up, retriable: false });
+    }
+    return "waiting";
+  }
   async commit() { return "done"; }
 }

@@ -25,9 +25,10 @@ const TERMINAL = new Set(["done", "failed", "unknown"]);
 export function checkDelay(platform, checks) {
   if (platform === "instagram") return checks < 3 ? 5000 : 60000;
   if (platform === "tiktok") return checks < 3 ? 5000 : 15000;
+  if (platform === "youtube") return 15000;
   return 5000;
 }
-const MAX_CHECKS = { instagram: 8, tiktok: 40, youtube: 3, telegram: 3 };
+const MAX_CHECKS = { instagram: 8, tiktok: 40, youtube: 20, telegram: 3 };
 
 export function buildApproval(input, meta = {}) {
   const req = normalizePublishRequest(input, { strict: false, now: meta.now });

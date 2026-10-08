@@ -220,8 +220,9 @@ test("eyni isolate-də paralel advance çağırışları növbəyə düzülür (
   await new Promise((r) => setTimeout(r, 30));
   resolvePut();
   const [ja, jb] = await Promise.all([a, b]);
-  assert.equal(ja.targets.youtube.step, "done");
-  assert.equal(jb.targets.youtube.step, "done");
+  // yükləmədən sonra "done" yox, emal yoxlaması gözlənir
+  assert.equal(ja.targets.youtube.step, "started");
+  assert.equal(jb.targets.youtube.step, "started");
   assert.equal(calls.filter((c) => c.method === "PUT").length, 1);
 });
 

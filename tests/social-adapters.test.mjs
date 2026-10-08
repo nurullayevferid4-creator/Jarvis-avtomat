@@ -308,7 +308,7 @@ test("YouTube: resumable yükləmə (title/description/tags/privacyStatus) + thu
   const yt = w.hub.adapter("youtube");
   const req = normalizePublishRequest({ platform: "youtube", caption: "Video mətni", title: "Başlıq", description: "Təsvir", hashtags: ["ətir", "yeni"], media_id: m.id, media_type: "video", thumbnail_media_id: thumb.id });
   const t = { step: "new", data: {} };
-  assert.equal(await yt.start(req, t), "done");
+  assert.equal(await yt.start(req, t), "waiting"); // yükləndi, emal hələ yoxlanmayıb
   const init = calls[0];
   assert.match(init.url, /uploadType=resumable&part=snippet,status/);
   assert.equal(init.headers["x-upload-content-length"], String(MP4.byteLength));
@@ -325,6 +325,20 @@ test("YouTube: resumable yükləmə (title/description/tags/privacyStatus) + thu
   assert.equal(t.post_id, "VID123");
   assert.equal(t.post_url, "https://www.youtube.com/watch?v=VID123");
   assert.ok(calls.some((c) => /thumbnails\/set\?uploadType=media&videoId=VID123/.test(c.url)));
+});
+
+test("YouTube: upload status — uploaded gözləyir, processed bitirir, failed/rejected xətadır", async () => {
+  const { w, m } = await youtubeWorld();
+  const yt = w.hub.adapter("youtube");
+  const req = normalizePublishRequest({ platform: "youtube", caption: "c", title: "t", media_id: m.id, media_type: "video" });
+  const t = { step: "started", data: {}, post_id: "VID1" };
+  installSocialFetch([[/youtube\/v3\/videos\?part=status/, () => json({ items: [{ status: { uploadStatus: "uploaded", privacyStatus: "private" } }] })]]);
+  assert.equal(await yt.check(req, t), "waiting");
+  installSocialFetch([[/youtube\/v3\/videos\?part=status/, () => json({ items: [{ status: { uploadStatus: "processed", privacyStatus: "private" } }] })]]);
+  assert.equal(await yt.check(req, t), "done");
+  assert.equal(t.data.privacy_status, "private");
+  installSocialFetch([[/youtube\/v3\/videos\?part=status/, () => json({ items: [{ status: { uploadStatus: "rejected", rejectionReason: "duplicate" } }] })]]);
+  await assert.rejects(() => yt.check(req, t), /qəbul etmədi: duplicate/);
 });
 
 test("YouTube: public istənib, YouTube private verdi → qeyd; kvota (403) və 401 xətaları təsnif olunur", async () => {
