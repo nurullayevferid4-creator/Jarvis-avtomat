@@ -9,6 +9,10 @@ export function createHandlers({ env, research = null, leadSource = null } = {})
     "qr_menu.market_research": async () => {
       if (!research) return { status: "pending", summary: "CODE READY — REAL TEST PENDING: OPENAI_API_KEY (veb axtarış) lazımdır." };
       const r = await research(RESEARCH_PROMPT);
+      if (r && r.model_only) {
+        const t = String(r.text || "").trim();
+        return t ? { status: "ok", summary: "[Kimi, canlı axtarış deyil — model biliyi, yoxlayın]\n" + t } : { status: "pending", summary: "Kimi boş cavab verdi." };
+      }
       if (!r || !r.web) return { status: "pending", summary: "Canlı veb axtarış alınmadı, nəticə yazılmadı (uydurma yoxdur). OPENAI_WEB_SEARCH_TOOL/açarı yoxlayın." };
       const text = String(r.text || "").trim();
       if (!/https?:\/\//i.test(text)) return { status: "pending", summary: "Mənbə (URL) olmayan cavab qəbul edilmədi." };

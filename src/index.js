@@ -5,6 +5,7 @@
 // LOGIN_MAX_FAILURES, LOGIN_WINDOW_SECONDS), bayraqlar (FEATURE_VOICE, FEATURE_APPROVALS,
 // FEATURE_KNOWLEDGE). Bax: .env.example
 
+import { createProviderRouter } from "./providers/router.js";
 import { renderPage, pageCsp } from "./ui/page.js";
 import { json } from "./util.js";
 import { getLimits, getFeatures, DEFAULTS, VERSION } from "./config.js";
@@ -118,7 +119,13 @@ function secure(res) {
 
 // 24/7 avtonom rejim (AUTONOMY_JOBS təyin olunmayıbsa heç nə etmir)
 async function runAutonomy(env, d) {
-  const research = env.OPENAI_API_KEY ? async (prompt) => await createRegistry(env).get("gpt").run({ prompt, webSearch: true }, { budget: new CallBudget(1), timeoutMs: 18000 }) : null;
+  const kimiResearch = env.KIMI_API_KEY || env.ANTHROPIC_API_KEY
+    ? async (prompt) => {
+        const r = await createProviderRouter(env).research({ kind: "market_research", system: "Azərbaycan dilində qısa, dürüst bazar müşahidəsi yaz. Bilmədiyini 'bilinmir' yaz, uydurma.", user: prompt });
+        return { text: r.text, web: null, model_only: true };
+      }
+    : null;
+  const research = kimiResearch ? kimiResearch : env.OPENAI_API_KEY ? async (prompt) => await createRegistry(env).get("gpt").run({ prompt, webSearch: true }, { budget: new CallBudget(1), timeoutMs: 18000 }) : null;
   return await autonomyTick({ store: d.store, env, handlers: createAutonomyHandlers({ env, research }), notify: (text) => notifyOwners({ env, hub: d.hub, text }) });
 }
 
