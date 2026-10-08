@@ -73,7 +73,7 @@ export function readinessIssues(req) {
 
 // Qaytarır: { platforms, caption, title, description, hashtags, media, privacy, made_for_kids }
 // media: null | { id? , url?, type: "image"|"video" }
-export function normalizePublishRequest(input, { strict = true } = {}) {
+export function normalizePublishRequest(input, { strict = true, now = null } = {}) {
   if (!input || typeof input !== "object") throw new SocialError("invalid_request", "sorğu boşdur");
   const platforms = platformList(input);
   const caption = String(input.caption || "").trim();
@@ -86,6 +86,17 @@ export function normalizePublishRequest(input, { strict = true } = {}) {
 
   const privacy = input.privacy === undefined ? "private" : String(input.privacy);
   if (!PRIVACY_LEVELS.includes(privacy)) throw new SocialError("invalid_request", "privacy: private, unlisted və ya public");
+
+  // Planlaşdırılmış paylaşım (ixtiyari). Təsdiq xülasəsində və hash-də görünür; təsdiq planlaşdırılmış vaxta aiddir.
+  let publishAt = null;
+  if (input.publish_at !== undefined && input.publish_at !== null && input.publish_at !== "") {
+    const ms = typeof input.publish_at === "number" ? input.publish_at : Date.parse(String(input.publish_at));
+    const nowMs = Number.isFinite(now) ? now : Date.now();
+    if (!Number.isFinite(ms)) throw new SocialError("invalid_request", "publish_at: ISO vaxt olmalıdır (məs. 2026-10-09T20:00:00+04:00)");
+    if (ms < nowMs + 60000) throw new SocialError("invalid_request", "publish_at gələcək vaxt olmalıdır");
+    if (ms > nowMs + 60 * 86400000) throw new SocialError("invalid_request", "publish_at 60 gündən uzaq ola bilməz");
+    publishAt = Math.floor(ms);
+  }
 
   let media = null;
   const hasId = input.media_id !== undefined && input.media_id !== "";
@@ -132,6 +143,7 @@ export function normalizePublishRequest(input, { strict = true } = {}) {
     thumbnail_media_id: thumbnailId,
     privacy,
     made_for_kids: input.made_for_kids === true,
+    publish_at: publishAt,
   };
 }
 
@@ -140,6 +152,7 @@ export function normalizePublishRequest(input, { strict = true } = {}) {
 export function summarizeRequest(req) {
   const names = req.platforms.map((p) => PLATFORM_INFO[p].label).join(", ");
   const lines = ["Paylaşım: " + names, "Mətn: " + req.caption];
+  if (req.publish_at) lines.push("PLANLAŞDIRILIB: " + new Date(req.publish_at + 4 * 3600000).toISOString().slice(0, 16).replace("T", " ") + " (Bakı vaxtı). Təsdiqdən dərhal paylaşılmayacaq.");
   if (req.title) lines.push("Başlıq: " + req.title);
   if (req.description) lines.push("Təsvir: " + req.description);
   if (req.hashtags.length) lines.push("Hashtag: " + req.hashtags.map((t) => "#" + t).join(" "));

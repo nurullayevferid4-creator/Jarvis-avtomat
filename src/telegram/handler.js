@@ -18,6 +18,7 @@ import { beginOAuth, OAUTH_PLATFORMS } from "../social/oauth.js";
 import { MEDIA_TYPES } from "../social/media.js";
 import { formatResult } from "../social/flow.js";
 import { publicError, AppError } from "../errors.js";
+import { autoCommand, statusIntent, statusAnswer } from "../autonomy/commands.js";
 import { cleanEnvValue } from "../security/envvalue.js";
 import { checkAudioFile, parseVoiceCommand, MAX_AUDIO_BYTES, speakable } from "../voice/command.js";
 import { normalizeTranscript, sttPrompt, looksLikePromptEcho } from "../voice/normalize.js";
@@ -434,6 +435,10 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
         await say(chatId, "Söhbət yaddaşını təmizlədim. Təsdiq qeydləri və işlər yerindədir.");
         return { handled: "ok" };
       }
+      if (cmd === "/auto") {
+        await say(chatId, await autoCommand(store, text));
+        return { handled: "ok" };
+      }
       await onCommand(cmd, parts[1], chatId);
       return { handled: "ok" };
     }
@@ -458,6 +463,12 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
         return { handled: "ok" };
       }
       await say(chatId, (media.type === "video" ? "Videonu" : "Şəkli") + " aldım. Nə edək? Məsələn: «Instagram-da paylaş» və ya «bu video üçün caption yaz».");
+      return { handled: "ok" };
+    }
+
+    const sIntent = statusIntent(text);
+    if (sIntent) {
+      await say(chatId, await statusAnswer(sIntent, { store, approvals, flow }));
       return { handled: "ok" };
     }
 

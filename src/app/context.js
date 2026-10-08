@@ -14,6 +14,7 @@ import { createProviderRouter } from "../providers/router.js";
 import { createShopify, registerShopifyTools } from "../shopify/index.js";
 import { registerLeadTools } from "../leads/index.js";
 import { registerMarketingTools } from "../marketing/index.js";
+import { registerInstagramReadTools } from "../social/insights.js";
 import { createMediaLibrary } from "../media/library.js";
 import { createMediaJobs } from "../media/jobs.js";
 import { createVideoProcessor } from "../media/processor.js";
@@ -45,6 +46,7 @@ export function buildContext(env, { fetchImpl } = {}) {
   registerMediaTools(tools, { library, jobs: mediaJobs, media: hub.media });
   const leads = registerLeadTools(tools, { store, coord, events });
   registerMarketingTools(tools, { llm });
+  registerInstagramReadTools(tools, { hub });
   registerOpsTools(tools, { client: shopify.client, llm });
   const agents = createAgentRegistry({ tools, store, events, providers: { leads: leads.provider, approvals: createApprovalProvider(approvals), jobs: createJobProvider(store), shopify: createShopifyProvider(shopify.client, Q_ORDERS) } });
   registerAgentTools(tools, agents);

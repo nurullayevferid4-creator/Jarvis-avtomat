@@ -171,3 +171,57 @@ test("«Qara menyu üçün reklam hazırla» (STT səhvi) → qr_menu → market
   const lead = calls.find((c) => /anthropic/.test(c.url));
   assert.match(JSON.stringify(lead.body || lead), /brand\(qr_menu\|fn_parfum\)/);
 });
+
+// ---- Issue #27: marketinq-only sorğuda FINAL model çağırışı atlanır ----
+const isFinal = (c) => c.url.includes("api.anthropic.com") && c.body && String(c.body.system).startsWith("You are JARVIS speaking");
+const AI_PLAN = {
+  target_audience: { primary: "Kafe sahibləri", segments: ["Kafe", "Restoran"] },
+  hook: "Menyunuz telefonda necə görünür?",
+  script: [{ timing: "0-3 san", visual: "QR kod", voiceover: "Oxudun?" }, { timing: "3-20 san", visual: "Menyu açılır", voiceover: "Telefonda açılır." }],
+  shot_list: [{ shot: 1, description: "QR yaxın plan", duration_sec: 3 }, { shot: 2, description: "Menyu səhifəsi", duration_sec: 12 }],
+  caption: "QR kodu oxudun, menyu telefonunda açıldı.",
+  cta: "Nümunəyə baxın",
+  hashtags: ["#QRmenyu", "#kafe"],
+  ab_ideas: [{ variable: "Hook", variant_a: "A", variant_b: "B", measure: "izləmə" }],
+  youtube_title: "QR menyu nümunəsi",
+};
+function marketingAiHandler(plan) {
+  const base = standardHandler({ plan });
+  return (u, body, init) => {
+    const sys = u.includes("api.anthropic.com") && body ? String(body.system) : "";
+    if (sys.startsWith("You are a careful Azerbaijani-language marketing copywriter")) {
+      if (sys.includes("Task: plan.")) return claudeText(JSON.stringify(AI_PLAN));
+      if (sys.includes("Task: hooks.")) return claudeText(JSON.stringify({ hooks: ["QR-ı oxut, menyu açılsın", "Menyunuz telefonda necə görünür?"] }));
+      if (sys.includes("Task: captions.")) return claudeText(JSON.stringify({ captions: [{ text: "Menyu artıq telefonda.", cta: "Nümunəyə baxın" }] }));
+    }
+    return base(u, body, init);
+  };
+}
+
+test("#27: marketinq-only (QR Menu/Qara menyu) → FINAL model çağırılmır, strukturlu AI nəticəsindən spoken/screen qurulur", async () => {
+  const plan = { mode: "tools", tool_calls: [{ tool: "marketing.campaign.plan", input: { brand: "Qara menyu" } }, { tool: "marketing.hooks", input: { brand: "QR Menu" } }, { tool: "marketing.captions", input: { brand: "qr-menu", platform: "instagram" } }] };
+  const calls = installFetch(marketingAiHandler(plan));
+  const d = await (await talk(baseEnv(), "Qara menyu üçün reklam hazırla")).json();
+  assert.deepEqual(d.tools.map((t) => t.status), ["done", "done", "done"], JSON.stringify(d).slice(0, 400));
+  assert.equal(d.status, "achieved");
+  assert.equal(calls.filter(isFinal).length, 0, "marketinq-only sorğuda FINAL model çağırışı olmamalıdır");
+  // marketinq alətləri modeli həqiqətən çağırıb (bypass yoxdur)
+  const mk = calls.filter((c) => c.url.includes("api.anthropic.com") && c.body && String(c.body.system).startsWith("You are a careful"));
+  assert.equal(mk.length, 3);
+  assert.ok(d.spoken && d.spoken.length < 400, d.spoken);
+  assert.match(d.spoken, /Marketinq qaralamaları hazırdır/);
+  assert.match(d.screen, /Kampaniya planı \(AI qaralaması\)/);
+  assert.match(d.screen, /Hook: Menyunuz telefonda necə görünür\?/);
+  assert.match(d.screen, /QR-ı oxut, menyu açılsın/);
+  assert.match(d.screen, /Menyu artıq telefonda\./);
+  assert.match(d.screen, /Heç nə dərc olunmayıb/);
+});
+
+test("#27: marketinq + qeyri-marketinq alət → FINAL model əvvəlki kimi çağırılır", async () => {
+  const plan = { mode: "tools", tool_calls: [{ tool: "marketing.hashtags", input: { brand: "qr_menu", platform: "instagram" } }, { tool: "social.publish", input: { platform: "telegram", caption: "Salam" } }] };
+  const calls = installFetch(standardHandler({ plan }));
+  const d = await (await talk(baseEnv(), "hashtag hazırla və paylaş")).json();
+  assert.equal(calls.filter(isFinal).length, 1);
+  assert.match(d.spoken, /^Hazırdır\./);
+  assert.equal(d.status, "pending_approval");
+});

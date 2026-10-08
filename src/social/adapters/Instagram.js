@@ -116,6 +116,20 @@ export class InstagramAdapter extends BaseAdapter {
     return { quota_usage: d && d.quota_usage, quota_total: d && d.config && d.config.quota_total };
   }
 
+  // Oxuma (yalnız GET, heç nə dərc/göndərmir). Sahələr Instagram API-nin sənədləşdirilmiş media/comments sahələridir.
+  async recentMedia(limit = 10) {
+    const rec = await this.validRecord();
+    const j = await this.call(this.graph("/" + rec.user_id + "/media") + "?" + formBody({ fields: "id,caption,media_type,permalink,timestamp,like_count,comments_count", limit: String(Math.min(25, Math.max(1, limit | 0))), access_token: rec.access_token }), { method: "GET" });
+    return Array.isArray(j.data) ? j.data : [];
+  }
+
+  async mediaComments(mediaId, limit = 20) {
+    if (!/^\d{5,30}$/.test(String(mediaId))) throw new SocialError("media_error", "media id düzgün deyil", { platform: "instagram" });
+    const rec = await this.validRecord();
+    const j = await this.call(this.graph("/" + mediaId + "/comments") + "?" + formBody({ fields: "id,text,username,timestamp,like_count", limit: String(Math.min(50, Math.max(1, limit | 0))), access_token: rec.access_token }), { method: "GET" });
+    return Array.isArray(j.data) ? j.data : [];
+  }
+
   async mediaUrl(req) {
     const m = req.media;
     if (!m) throw new SocialError("media_error", "Instagram üçün media lazımdır", { platform: "instagram" });

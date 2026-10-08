@@ -291,3 +291,30 @@ test("cron: scheduled() gözləyən işi irəlilədir", async () => {
   assert.equal(job.status, "done");
   assert.equal(publishCalls(calls).length, 1);
 });
+
+test("planlaşdırılmış paylaşım: təsdiq xülasəsində vaxt görünür; vaxtdan əvvəl paylaşılmır, vaxtda BİR DƏFƏ paylaşılır", async () => {
+  const w = await igWorld();
+  const calls = installSocialFetch(igServer());
+  const at = w.now() + 3 * 3600000;
+  const rec = await w.flow.createDraft({ ...IG_INPUT, publish_at: at }, { source: "test" });
+  assert.match((await w.approvals.get(rec.id)).content, /PLANLAŞDIRILIB: .*\(Bakı vaxtı\)/);
+  await w.approvals.decide(rec.id, { decision: "approve" });
+  assert.ok((await w.flow.startJob(rec.id)).ok);
+  await w.flow.advance(rec.id, { deadlineMs: 1000 }); // vaxt gəlməyib: gözləyir
+  assert.equal(publishCalls(calls).length, 0, "vaxtdan əvvəl paylaşım yoxdur");
+  assert.equal((await w.store.getDoc("socialjob", rec.id)).targets.instagram.next_at, at);
+  w.advanceTime(3 * 3600000 + 1000);
+  const job = await w.flow.advance(rec.id);
+  assert.equal(job.status, "done");
+  assert.equal(publishCalls(calls).length, 1);
+  await w.flow.tick();
+  assert.equal(publishCalls(calls).length, 1, "ikinci paylaşım yoxdur");
+});
+
+test("publish_at keçmiş, 60 gündən uzaq və səhv format rədd edilir; təsdiqsiz heç nə olmur", async () => {
+  const w = await igWorld();
+  installSocialFetch([]);
+  for (const bad of [w.now() - 1000, w.now() + 61 * 86400000, "sabah axşam"]) {
+    await assert.rejects(() => w.flow.createDraft({ ...IG_INPUT, publish_at: bad }, { source: "test" }), /publish_at/);
+  }
+});

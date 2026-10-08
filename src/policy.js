@@ -15,7 +15,7 @@ export const DEFAULT_PERMISSIONS = ["read.web", "read.knowledge", "write.knowled
 
 // Parollu sahibin (UI/Telegram söhbəti) alətlərə verdiyi icazələr. Təsdiq tələb edənlər bura düşmür:
 // onlar APPROVAL_ONLY_PERMISSIONS ilə həmişə təsdiq qeydi açır.
-export const OWNER_PERMISSIONS = [...DEFAULT_PERMISSIONS, "read.leads", "write.leads", "use.marketing", "read.agents", "read.reports", "read.media", "write.media", "read.orders", "read.catalog", "use.support", "read.risk"];
+export const OWNER_PERMISSIONS = [...DEFAULT_PERMISSIONS, "read.leads", "write.leads", "use.marketing", "read.agents", "read.reports", "read.media", "write.media", "read.social", "read.orders", "read.catalog", "use.support", "read.risk"];
 
 // Bu icazələrdən birinə sahib alət həmişə "high" riskdədir və təsdiqsiz işləmir.
 export const APPROVAL_ONLY_PERMISSIONS = [

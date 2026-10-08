@@ -23,6 +23,9 @@ import { publicJob } from "./media/jobs.js";
 import { UPLOAD_TYPES } from "./media/library.js";
 import { SocialError } from "./social/errors.js";
 import { createTelegramHandler, verifyWebhook } from "./telegram/handler.js";
+import { maybeSendDailyReport, notifyOwners } from "./telegram/dailyReport.js";
+import { tick as autonomyTick, loadState as loadAutoState, loadHistory as loadAutoHistory } from "./autonomy/scheduler.js";
+import { createHandlers as createAutonomyHandlers } from "./autonomy/jobs.js";
 import { setupWebhook, webhookStatus, setupErrorBody } from "./telegram/setup.js";
 import { handleShopifyPublicRoute, handleShopifyApiRoute, shopifyStatus } from "./shopify/index.js";
 import { OWNER_PERMISSIONS } from "./policy.js";
@@ -111,6 +114,12 @@ function secure(res) {
   set("x-frame-options", "DENY");
   set("cross-origin-resource-policy", "same-origin");
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
+}
+
+// 24/7 avtonom rejim (AUTONOMY_JOBS təyin olunmayıbsa heç nə etmir)
+async function runAutonomy(env, d) {
+  const research = env.OPENAI_API_KEY ? async (prompt) => await createRegistry(env).get("gpt").run({ prompt, webSearch: true }, { budget: new CallBudget(1), timeoutMs: 18000 }) : null;
+  return await autonomyTick({ store: d.store, env, handlers: createAutonomyHandlers({ env, research }), notify: (text) => notifyOwners({ env, hub: d.hub, text }) });
 }
 
 export default {
@@ -259,6 +268,7 @@ export default {
         social: Object.fromEntries(Object.entries(social || {}).map(([p, s]) => [p, { state: s.state, verified: !!s.verified, reason: s.reason || null }])),
         shopify: shopify && !shopify.error ? { configured: shopify.configured, connected: shopify.connected, shop: shopify.shop || null } : shopify,
         approvals: { pending: pending.length, by_kind: count(pending, "kind") },
+        autonomy: await safe(async () => ({ jobs: Object.values((await loadAutoState(c.store)).jobs).map((j) => ({ id: j.id, enabled: j.enabled, next_run_at: j.next_run_at, last_status: j.last_status || null })), history: (await loadAutoHistory(c.store)).slice(0, 10) }), { jobs: [], history: [] }),
         jobs: { social: count(jobs, "status"), media: count(mjobs, "status") },
         leads: { total: leadRows.length, by_status: count(leadRows, "status") },
         media: { recent: media.length, store: !!env.JARVIS_MEDIA },
@@ -501,7 +511,7 @@ export default {
   // Cron (wrangler.toml): gözləyən paylaşım işlərini irəlilədir və Instagram tokenini vaxtında yeniləyir.
   async scheduled(event, env, ctx) {
     const d = buildSocial(env);
-    const work = Promise.all([d.flow.tick({ deadlineMs: 25000 }).catch(() => null), d.mediaJobs.tick({ deadlineMs: 20000 }).catch(() => null)]);
+    const work = Promise.all([d.flow.tick({ deadlineMs: 25000 }).catch(() => null), d.mediaJobs.tick({ deadlineMs: 20000 }).catch(() => null), maybeSendDailyReport({ env, hub: d.hub, flow: d.flow, approvals: d.approvals, store: d.store }).catch(() => null), runAutonomy(env, d).catch(() => null)]);
     if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(work);
     else await work;
   },
