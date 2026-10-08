@@ -78,6 +78,18 @@ export class TelegramAdapter extends BaseAdapter {
     return await this.api("sendVoice", fd);
   }
 
+  // Qaralama önizləməsi: şəkil/video (Bot API: sendPhoto/sendVideo, ≤50 MB)
+  async sendMedia(chatId, kind, bytes, contentType, caption = "") {
+    if (!bytes || !bytes.byteLength) throw new SocialError("media_error", "media boşdur", { platform: "telegram" });
+    if (bytes.byteLength > 45 * 1024 * 1024) throw new SocialError("media_error", "önizləmə üçün media çox böyükdür", { platform: "telegram" });
+    const isVideo = kind === "video";
+    const fd = new FormData();
+    fd.set("chat_id", String(chatId));
+    if (caption) fd.set("caption", String(caption).slice(0, 1024));
+    fd.set(isVideo ? "video" : "photo", new Blob([bytes], { type: contentType }), isVideo ? "preview.mp4" : "preview.jpg");
+    return await this.api(isVideo ? "sendVideo" : "sendPhoto", fd);
+  }
+
   // "yazır…" / "səs yazır…" göstəricisi (uzun emal zamanı)
   async sendChatAction(chatId, action = "typing") {
     return await this.api("sendChatAction", { chat_id: chatId, action: action === "record_voice" ? "record_voice" : "typing" });

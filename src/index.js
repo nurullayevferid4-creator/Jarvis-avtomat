@@ -20,6 +20,7 @@ import { buildContext } from "./app/context.js";
 import { safeEqual, readPasscode, failureCount, recordFailure, clearFailures } from "./guards/login.js";
 import { createDefaultToolRegistry } from "./tools/builtin.js";
 import { beginOAuth, finishOAuth, OAUTH_PLATFORMS } from "./social/oauth.js";
+import { verifyChallenge as verifyIgChallenge, verifySignature as verifyIgSignature } from "./instagram/inbox.js";
 import { publicJob } from "./media/jobs.js";
 import { UPLOAD_TYPES } from "./media/library.js";
 import { SocialError } from "./social/errors.js";
@@ -129,6 +130,19 @@ async function runAutonomy(env, d) {
   return await autonomyTick({ store: d.store, env, handlers: createAutonomyHandlers({ env, research }), notify: (text) => notifyOwners({ env, hub: d.hub, text }) });
 }
 
+// Instagram DM/şərh polling (webhook ehtiyatı). Yalnız INSTAGRAM_POLL=1 olanda; hesab qoşulmayıbsa heç nə etmir.
+async function pollInstagram(env, d) {
+  if (String(env.INSTAGRAM_POLL || "") !== "1") return null;
+  try {
+    if ((await d.hub.adapter("instagram").cachedStatus()).state !== "CONNECTED") return null;
+    await d.igInbox.pollDms();
+    await d.igInbox.pollComments(3);
+  } catch (e) {
+    try { await d.audit.log("instagram.poll_failed", { code: e && e.code, message: String((e && e.message) || "").slice(0, 120) }); } catch (e2) { /* əhəmiyyətsiz */ }
+  }
+  return null;
+}
+
 export default {
   // Gözlənilməyən xəta stack və ya daxili mətn göstərmir: yalnız vahid kod.
   async fetch(req, env, ctx) {
@@ -180,11 +194,33 @@ export default {
           }
         : null;
       const memory = new ConversationMemory(d.store, { summarize });
-      const handler = createTelegramHandler({ env, hub: d.hub, flow: d.flow, approvals: d.approvals, store: d.store, audit: d.audit, runChat, runner: d.runner, library: d.library, transcribe, voiceEnabled: features.voice, memory, speak });
+      const handler = createTelegramHandler({ env, hub: d.hub, flow: d.flow, approvals: d.approvals, store: d.store, audit: d.audit, runChat, runner: d.runner, library: d.library, transcribe, voiceEnabled: features.voice, memory, speak, igCommands: d.igCommands });
       const work = handler.handleUpdate(update).catch(() => null);
       if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(work);
       else await work;
       return new Response("ok", { status: 200 });
+    }
+
+    // Instagram webhook (DM + şərh): GET = Meta doğrulaması (verify token), POST = imzalı hadisələr (HMAC-SHA256, INSTAGRAM_APP_SECRET).
+    if (url.pathname === "/instagram/webhook") {
+      if (req.method === "GET") {
+        const ch = verifyIgChallenge(url, env);
+        return ch === null ? new Response("forbidden", { status: 403 }) : new Response(ch, { status: 200, headers: { "content-type": "text/plain" } });
+      }
+      if (req.method === "POST") {
+        const len = parseInt(req.headers.get("content-length") || "0", 10);
+        if (len > 500000) return new Response("too large", { status: 413 });
+        const raw = await req.text();
+        if (raw.length > 500000) return new Response("too large", { status: 413 });
+        if (!(await verifyIgSignature(raw, req.headers.get("x-hub-signature-256"), env))) return new Response("forbidden", { status: 403 });
+        let body = null;
+        try { body = JSON.parse(raw); } catch (e) { return new Response("bad request", { status: 400 }); }
+        const d = buildSocial(env);
+        const work = d.igInbox.handleWebhook(body).catch(() => null);
+        if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(work);
+        else await work;
+        return new Response("ok", { status: 200 });
+      }
     }
 
     // Shopify: OAuth callback (HMAC + state) və webhook (HMAC). İkisi də imza olmadan heç nə etmir.
@@ -518,7 +554,7 @@ export default {
   // Cron (wrangler.toml): gözləyən paylaşım işlərini irəlilədir və Instagram tokenini vaxtında yeniləyir.
   async scheduled(event, env, ctx) {
     const d = buildSocial(env);
-    const work = Promise.all([d.flow.tick({ deadlineMs: 25000 }).catch(() => null), d.mediaJobs.tick({ deadlineMs: 20000 }).catch(() => null), maybeSendDailyReport({ env, hub: d.hub, flow: d.flow, approvals: d.approvals, store: d.store }).catch(() => null), runAutonomy(env, d).catch(() => null)]);
+    const work = Promise.all([d.flow.tick({ deadlineMs: 25000 }).catch(() => null), d.mediaJobs.tick({ deadlineMs: 20000 }).catch(() => null), maybeSendDailyReport({ env, hub: d.hub, flow: d.flow, approvals: d.approvals, store: d.store }).catch(() => null), runAutonomy(env, d).catch(() => null), pollInstagram(env, d)]);
     if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(work);
     else await work;
   },

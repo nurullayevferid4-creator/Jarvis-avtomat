@@ -54,6 +54,33 @@ export function createSocialFlow({ env, store, approvals, audit = null, hub, coo
     if (ids.includes(id)) await store.putRaw("socialidx", { ids: ids.filter((x) => x !== id) });
   }
 
+  // Eyni kontentin (media + mətn) Instagram-a iki dəfə paylaşılmasının qarşısı: nəticəsi "done" və ya "unknown" olan paylaşımın
+  // barmaq izi 30 gün saxlanır. Eyni izlə yeni qaralama/iş bloklanır (mətn və ya media dəyişsə yeni kontentdir).
+  async function fingerprint(request) {
+    const m = request.media;
+    if (!m) return null;
+    const text = ["instagram", m.id || m.url || "", request.caption || "", (request.hashtags || []).join(",")].join("|");
+    const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+    return [...new Uint8Array(d)].slice(0, 12).map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+  async function findPublished(request) {
+    if (!request.platforms.includes("instagram")) return null;
+    const fp = await fingerprint(request);
+    if (!fp) return null;
+    const d = (await store.getRaw("igpubs")) || { items: [] };
+    return d.items.find((x) => x.fp === fp && now() - x.ts < 30 * 86400000) || null;
+  }
+  async function recordPublished(job) {
+    const t = job.targets.instagram;
+    if (!t || (t.step !== "done" && t.step !== "unknown")) return;
+    const fp = await fingerprint(job.request);
+    if (!fp) return;
+    const d = (await store.getRaw("igpubs")) || { items: [] };
+    if (d.items.some((x) => x.fp === fp && x.job === job.id)) return;
+    await store.putRaw("igpubs", { items: [...d.items, { fp, ts: now(), job: job.id, post_id: t.post_id || null, state: t.step }].slice(-100) });
+  }
+  const dupError = (x) => new SocialError("invalid_request", "Bu kontent (eyni media + mətn) artıq Instagram-da paylaşılıb" + (x.post_id ? " (id: " + x.post_id + ")" : " (nəticəsi bilinmir, Instagram-da yoxlayın)") + ". Təkrar paylaşım bloklandı: mətni və ya mediani dəyişin.");
+
   async function save(job) {
     job.updated_at = now();
     await store.putDoc("socialjob", job.id, job, JOB_TTL);
@@ -63,6 +90,8 @@ export function createSocialFlow({ env, store, approvals, audit = null, hub, coo
   async function createDraft(input, meta = {}) {
     const b = buildApproval(input, { ...meta, now: now() });
     if (b.request.issues.length) throw new SocialError("invalid_request", b.request.issues.join("; ").slice(0, 280));
+    const dup = await findPublished(b.request);
+    if (dup) throw dupError(dup);
     const rec = await approvals.create({
       action: "social.publish",
       content: b.content,
@@ -117,7 +146,13 @@ export function createSocialFlow({ env, store, approvals, audit = null, hub, coo
     const job = { id: rec.id, approval_id: rec.id, created_at: t0, updated_at: t0, status: "queued", request, notify_chat: rec.payload.notify_chat || null, targets: {}, lock_until: 0 };
     const issues = readinessIssues(request);
     const strictErr = issues.length ? new SocialError("invalid_request", issues.join("; ").slice(0, 280)) : null;
+    const dupHit = strictErr ? null : await findPublished(request);
     for (const p of request.platforms) {
+      if (p === "instagram" && dupHit) {
+        await log("social.duplicate_blocked", { approval_id: rec.id, post_id: dupHit.post_id });
+        job.targets[p] = { step: "failed", data: {}, attempts: 0, checks: 0, next_at: 0, error: dupError(dupHit).toJSON() };
+        continue;
+      }
       job.targets[p] = { step: strictErr ? "failed" : "new", data: {}, attempts: 0, checks: 0, next_at: Number(request.publish_at) > t0 ? Number(request.publish_at) : 0, error: strictErr ? strictErr.toJSON() : null };
     }
     job.status = jobStatus(job);
@@ -200,12 +235,13 @@ export function createSocialFlow({ env, store, approvals, audit = null, hub, coo
 
   async function finalize(job) {
     job.status = jobStatus(job);
+    try { await recordPublished(job); } catch (e) { /* barmaq izi yazılmasa belə iş nəticəsi dəyişmir */ }
     job.lock_until = 0;
     await save(job);
     if (TERMINAL.has(job.status) || job.status === "partial") {
       await idxDel(job.id);
       await approvals.setExecution(job.approval_id, job.status);
-      await log("social.job_finished", { job_id: job.id, status: job.status });
+      await log("social.job_finished", { job_id: job.id, status: job.status, instagram: job.targets.instagram ? { step: job.targets.instagram.step, post_id: job.targets.instagram.post_id || null } : undefined });
       if (approvals.events) { try { await approvals.events.emit("job.finished", { id: job.id, status: job.status }); } catch (e) { /* əhəmiyyətsiz */ } }
       await notify(job);
     }

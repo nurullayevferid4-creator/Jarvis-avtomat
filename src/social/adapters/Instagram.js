@@ -13,7 +13,8 @@ import { composeCaption } from "../request.js";
 
 const OAUTH_AUTHORIZE = "https://www.instagram.com/oauth/authorize";
 const SHORT_TOKEN = "https://api.instagram.com/oauth/access_token";
-const SCOPES = ["instagram_business_basic", "instagram_business_content_publish"];
+// Satış sistemi: DM (manage_messages) və şərh (manage_comments) icazələri də lazımdır. Köhnə bağlantı bu icazələrsiz yaradılıbsa yenidən qoşmaq lazımdır.
+export const SCOPES = ["instagram_business_basic", "instagram_business_content_publish", "instagram_business_manage_messages", "instagram_business_manage_comments"];
 const DAY = 86400000;
 
 export function classifyInstagramError(status, json, platform = "instagram") {
@@ -74,7 +75,9 @@ export class InstagramAdapter extends BaseAdapter {
     const acc = await this.fetchAccount(rec).catch(() => null);
     if (acc) { rec.account = acc; if (acc.user_id) rec.user_id = String(acc.user_id); }
     await this.ctx.vault.put("instagram", rec);
-    return { account: rec.account || null, expires_at: rec.expires_at };
+    let webhook = "not_attempted";
+    try { await this.subscribeWebhooks(); webhook = "subscribed"; } catch (e) { webhook = "failed:" + String(e.code || "error"); }
+    return { account: rec.account || null, expires_at: rec.expires_at, webhook };
   }
 
   // Vaxtı bitməmiş, ≥24 saat köhnə uzun müddətli token yenilənir (yeni 60 gün)
@@ -137,6 +140,80 @@ export class InstagramAdapter extends BaseAdapter {
     const head = await this.ctx.media.head(m.id);
     if (!head) throw new SocialError("media_error", "media tapılmadı", { platform: "instagram" });
     return await this.ctx.media.signedUrl(m.id, head.ext, 3600);
+  }
+
+  // ---- Satış sistemi (DM / şərh). Endpoint və sahələr ictimai biliyə əsaslanır, bu sessiyada sənəddən yoxlanmayıb. ----
+
+  hasScope(rec, name) {
+    const sc = String((rec && rec.scope) || "");
+    return sc.split(/[,\s]+/).includes(name);
+  }
+
+  // Hesab məlumatı + token vaxtı + icazələr (real sorğu: yalnız oxuma). Saxta uğur yoxdur: xəta olduğu kimi qaytarılır.
+  async salesStatus() {
+    const rec = await this.validRecord();
+    const acc = await this.fetchAccount(rec);
+    const days = rec.expires_at ? Math.floor((rec.expires_at - this.now()) / DAY) : null;
+    return {
+      account: acc,
+      expires_in_days: days,
+      messaging_scope: this.hasScope(rec, "instagram_business_manage_messages"),
+      comments_scope: this.hasScope(rec, "instagram_business_manage_comments"),
+      publish_scope: this.hasScope(rec, "instagram_business_content_publish"),
+    };
+  }
+
+  // Webhook abunəliyi (messages, comments). Meta panelində webhook ünvanı da qurulmalıdır.
+  async subscribeWebhooks(fields = "messages,comments") {
+    const rec = await this.validRecord();
+    if (!rec.user_id) throw new SocialError("not_connected", "Instagram user_id məlum deyil, yenidən qoşun", { platform: "instagram" });
+    const j = await this.call(this.graph("/" + rec.user_id + "/subscribed_apps") + "?" + formBody({ subscribed_fields: fields, access_token: rec.access_token }), { method: "POST" });
+    if (j.success !== true) throw new SocialError("api_error", "Instagram webhook abunəliyi təsdiqlənmədi", { platform: "instagram" });
+    return { subscribed: fields };
+  }
+
+  async userProfile(igsid) {
+    if (!/^\d{5,30}$/.test(String(igsid))) return null;
+    const rec = await this.validRecord();
+    try {
+      const j = await this.call(this.graph("/" + igsid) + "?" + formBody({ fields: "name,username", access_token: rec.access_token }), { method: "GET" });
+      return { name: j.name || null, username: j.username || null };
+    } catch (e) {
+      return null; // profil oxunmasa lead IGSID ilə saxlanır
+    }
+  }
+
+  // Son söhbətlər (polling). Hər söhbətin son mesajı.
+  async recentConversations(limit = 15) {
+    const rec = await this.validRecord();
+    const j = await this.call(this.graph("/" + rec.user_id + "/conversations") + "?" + formBody({ platform: "instagram", fields: "id,updated_time,messages.limit(3){id,message,from,created_time}", limit: String(Math.min(25, Math.max(1, limit | 0))), access_token: rec.access_token }), { method: "GET" });
+    return { own_id: String(rec.user_id), items: Array.isArray(j.data) ? j.data : [] };
+  }
+
+  // DM göndərmə. Yalnız təsdiqdən sonra çağırılmalıdır (çağıran: instagram.dm.send alətinin execute-u).
+  // recipientId: sənə yazmış istifadəçinin IGSID-si (24 saat pəncərəsi); commentId: şərhə "private reply" (7 gün, bir dəfə).
+  async sendDm({ recipientId = "", commentId = "", text }) {
+    const rec = await this.validRecord();
+    if (!this.hasScope(rec, "instagram_business_manage_messages")) throw new SocialError("permission_denied", "Instagram mesaj icazəsi (instagram_business_manage_messages) yoxdur: hesabı yenidən qoşun", { platform: "instagram" });
+    const msg = String(text || "").trim();
+    if (!msg || msg.length > 1000) throw new SocialError("invalid_request", "DM mətni boş və ya 1000 simvoldan uzundur", { platform: "instagram" });
+    const recipient = commentId ? { comment_id: String(commentId) } : { id: String(recipientId) };
+    if (!recipient.comment_id && !/^\d{5,30}$/.test(recipient.id)) throw new SocialError("invalid_request", "alıcı id-si düzgün deyil", { platform: "instagram" });
+    const j = await this.call(this.graph("/" + rec.user_id + "/messages"), { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + rec.access_token }, body: JSON.stringify({ recipient, message: { text: msg } }) });
+    if (!j.message_id) throw new SocialError("api_error", "Instagram message_id qaytarmadı: göndərildi deyə bilmərik", { platform: "instagram", retriable: false });
+    return { message_id: String(j.message_id) };
+  }
+
+  // Ictimai şərhə cavab (yalnız təsdiqdən sonra)
+  async replyToComment(commentId, text) {
+    if (!/^\d{5,30}$/.test(String(commentId))) throw new SocialError("invalid_request", "şərh id-si düzgün deyil", { platform: "instagram" });
+    const rec = await this.validRecord();
+    if (!this.hasScope(rec, "instagram_business_manage_comments")) throw new SocialError("permission_denied", "Instagram şərh icazəsi (instagram_business_manage_comments) yoxdur: hesabı yenidən qoşun", { platform: "instagram" });
+    const msg = String(text || "").trim();
+    if (!msg || msg.length > 2000) throw new SocialError("invalid_request", "cavab mətni boş və ya çox uzundur", { platform: "instagram" });
+    const j = await this.call(this.graph("/" + commentId + "/replies"), { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: formBody({ message: msg, access_token: rec.access_token }) });
+    if (!j.id) throw new SocialError("api_error", "Instagram cavab id-si qaytarmadı: göndərildi deyə bilmərik", { platform: "instagram", retriable: false });
+    return { reply_id: String(j.id) };
   }
 
   // 1) konteyner

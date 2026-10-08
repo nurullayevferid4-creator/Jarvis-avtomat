@@ -69,7 +69,8 @@ test("status: secret yoxdursa NOT_CONNECTED, token bitibsə TOKEN_EXPIRED", asyn
 function igRoutes(extra = []) {
   return [
     ...extra,
-    [/api\.instagram\.com\/oauth\/access_token/, () => json({ data: [{ access_token: "SHORT_T", user_id: "178", permissions: ["instagram_business_basic", "instagram_business_content_publish"] }] })],
+    [/api\.instagram\.com\/oauth\/access_token/, () => json({ data: [{ access_token: "SHORT_T", user_id: "178", permissions: ["instagram_business_basic", "instagram_business_content_publish", "instagram_business_manage_messages", "instagram_business_manage_comments"] }] })],
+    [/graph\.instagram\.com\/v25\.0\/178\/subscribed_apps/, () => json({ success: true })],
     [/graph\.instagram\.com\/access_token\?/, () => json({ access_token: "LONG_T", token_type: "bearer", expires_in: 5184000 })],
     [/graph\.instagram\.com\/refresh_access_token/, () => json({ access_token: "REFRESHED_T", token_type: "bearer", expires_in: 5184000 })],
     [/graph\.instagram\.com\/v25\.0\/me\?/, () => json({ user_id: "178", username: "farid_test", account_type: "BUSINESS" })],
@@ -82,12 +83,13 @@ test("Instagram: OAuth ünvanı doğru scope/state ilə, kod mübadiləsi token 
   const ig = w.hub.adapter("instagram");
   const u = new URL(ig.authUrl("st1", "https://jarvis.example.dev/oauth/instagram/callback"));
   assert.equal(u.origin + u.pathname, "https://www.instagram.com/oauth/authorize");
-  assert.equal(u.searchParams.get("scope"), "instagram_business_basic,instagram_business_content_publish");
+  assert.equal(u.searchParams.get("scope"), "instagram_business_basic,instagram_business_content_publish,instagram_business_manage_messages,instagram_business_manage_comments");
   assert.equal(u.searchParams.get("state"), "st1");
   assert.ok(!u.search.includes("ig-secret"), "app secret URL-də olmamalıdır");
 
   const r = await ig.exchangeCode("CODE123#_", "https://jarvis.example.dev/oauth/instagram/callback");
   assert.equal(r.account.username, "farid_test");
+  assert.equal(r.webhook, "subscribed");
   assert.equal(bodyParams(calls[0]).get("code"), "CODE123", "sondakı #_ silinməlidir");
   const rec = await w.hub.vault.get("instagram");
   assert.equal(rec.access_token, "LONG_T");

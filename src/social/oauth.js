@@ -40,8 +40,10 @@ export async function finishOAuth({ hub, store, env, platform, params }) {
   const code = params.get("code");
   if (!code) return { ok: false, platform, message: "Kod gəlmədi." };
   try {
-    await hub.adapter(platform).exchangeCode(code, redirectUri(env, platform));
-    return { ok: true, platform, message: "Qoşuldu. Bu pəncərəni bağlaya bilərsiniz." };
+    const r = await hub.adapter(platform).exchangeCode(code, redirectUri(env, platform));
+    let extra = "";
+    if (platform === "instagram" && r && r.webhook && r.webhook !== "subscribed") extra = " Diqqət: DM/şərh webhook abunəliyi alınmadı (" + String(r.webhook).slice(0, 40) + "). Meta panelində webhook-u və icazələri yoxlayın.";
+    return { ok: true, platform, message: "Qoşuldu." + extra + " Bu pəncərəni bağlaya bilərsiniz." };
   } catch (e) {
     return { ok: false, platform, message: String((e && e.message) || "qoşulma alınmadı").slice(0, 160) };
   }

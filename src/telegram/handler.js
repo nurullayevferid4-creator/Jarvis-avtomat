@@ -18,6 +18,8 @@ import { beginOAuth, OAUTH_PLATFORMS } from "../social/oauth.js";
 import { MEDIA_TYPES } from "../social/media.js";
 import { formatResult } from "../social/flow.js";
 import { publicError, AppError } from "../errors.js";
+import { platformFit } from "../media/rules.js";
+import { igIntent } from "../instagram/commands.js";
 import { autoCommand, statusIntent, statusAnswer } from "../autonomy/commands.js";
 import { cleanEnvValue } from "../security/envvalue.js";
 import { checkAudioFile, parseVoiceCommand, MAX_AUDIO_BYTES, speakable } from "../voice/command.js";
@@ -112,7 +114,7 @@ const HELP = [
 // runChat(text, origin, context): Claude lideri (kontekst bloku və çat tarixi ilə).
 const CHAT_DEADLINE_MS = 26000;
 
-export function createTelegramHandler({ env, hub, flow, approvals, store, audit = null, runChat = null, runner = null, library = null, transcribe = null, voiceEnabled = true, memory = null, speak = null, chatDeadlineMs = CHAT_DEADLINE_MS }) {
+export function createTelegramHandler({ env, hub, flow, approvals, store, audit = null, runChat = null, runner = null, library = null, transcribe = null, voiceEnabled = true, memory = null, speak = null, igCommands = null, chatDeadlineMs = CHAT_DEADLINE_MS }) {
   const tg = () => hub.adapter("telegram");
 
   async function say(chatId, text, extra) {
@@ -259,7 +261,23 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
     } catch (e) {
       return say(chatId, "Qaralama hazırlanmadı: " + toSocialError(e).message);
     }
-    const warn = platforms.includes("tiktok") ? "\nQeyd: TikTok tətbiqi audit olunmayıbsa yalnız «şəxsi» paylaşım mümkündür." : "";
+    // Instagram: Reel hazırlığı (video analizi) + Telegram-da media önizləməsi. Heç nə paylaşılmır.
+    let reel = "";
+    if (platforms.includes("instagram") && media) {
+      if (media.type === "video" && library) {
+        try {
+          const doc = await library.get(media.id);
+          const fit = platformFit(doc && doc.analysis, "instagram", { size: doc && doc.size });
+          reel = "\n🎞 Reel hazırlığı: " + (fit.blockers.length ? "❌ " + fit.blockers.join("; ") : fit.warnings.length ? "⚠️ " + fit.warnings.join("; ") : "✅ uyğundur") + " (həddlər tövsiyədir, Meta qaydaları dəyişə bilər)";
+        } catch (e) { reel = "\n🎞 Reel hazırlığı: video analizi alınmadı"; }
+      }
+      try {
+        const head = await hub.media.head(media.id);
+        const bytes = head ? await hub.media.bytes(media.id) : null;
+        if (bytes) await tg().sendMedia(chatId, media.type, bytes, head.content_type, "Önizləmə (hələ paylaşılmayıb)");
+      } catch (e) { reel += "\n(önizləmə göndərilmədi)"; }
+    }
+    const warn = reel + (platforms.includes("tiktok") ? "\nQeyd: TikTok tətbiqi audit olunmayıbsa yalnız «şəxsi» paylaşım mümkündür." : "");
     await say(chatId, "Hazırladım" + (fromMemory ? " (əvvəlki məzmun əsasında)" : "") + (rememberedMedia ? " (son göndərdiyin " + (media.type === "video" ? "video" : "şəkil") + " ilə)" : "") + (copy.source === "fallback" ? " (Claude cavab vermədi, mətn sənin yazdığın kimidir)" : "") + ":\n\n" + rec.content + warn + "\n\nPaylaşmağa icazə verirsən?", {
       reply_markup: { inline_keyboard: [[{ text: "✅ Bəli, paylaş", callback_data: "ap:" + rec.id + ":y" }, { text: "❌ Xeyr", callback_data: "ap:" + rec.id + ":n" }]] },
     });
@@ -464,6 +482,14 @@ export function createTelegramHandler({ env, hub, flow, approvals, store, audit 
       }
       await say(chatId, (media.type === "video" ? "Videonu" : "Şəkli") + " aldım. Nə edək? Məsələn: «Instagram-da paylaş» və ya «bu video üçün caption yaz».");
       return { handled: "ok" };
+    }
+
+    // Instagram satış əmrləri: deterministik (Claude/OpenAI çağırışı yoxdur)
+    const igI = igCommands ? igIntent(text) : null;
+    if (igI) {
+      try { await tg().sendChatAction(chatId, "typing"); } catch (e) { /* əhəmiyyətsiz */ }
+      const ans = await igCommands.run(igI);
+      if (ans) { await say(chatId, ans.slice(0, 3900)); return { handled: "ok" }; }
     }
 
     const sIntent = statusIntent(text);

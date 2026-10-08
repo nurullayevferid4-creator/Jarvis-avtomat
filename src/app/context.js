@@ -15,6 +15,10 @@ import { createShopify, registerShopifyTools } from "../shopify/index.js";
 import { registerLeadTools } from "../leads/index.js";
 import { registerMarketingTools } from "../marketing/index.js";
 import { registerInstagramReadTools } from "../social/insights.js";
+import { createSales } from "../instagram/sales.js";
+import { registerInstagramSalesTools } from "../instagram/tools.js";
+import { createInbox } from "../instagram/inbox.js";
+import { createIgCommands } from "../instagram/commands.js";
 import { createMediaLibrary } from "../media/library.js";
 import { createMediaJobs } from "../media/jobs.js";
 import { createVideoProcessor } from "../media/processor.js";
@@ -52,5 +56,10 @@ export function buildContext(env, { fetchImpl } = {}) {
   registerAgentTools(tools, agents);
 
   const runner = createActionRunner({ approvals, registry: tools, audit });
-  return { env, store, audit, coord, approvals, events, knowledge, hub, flow, providers, llm, tools, shopify, leads, agents, runner, library, mediaJobs, processor };
+  // Instagram satış sistemi (DM/şərh/lead): göndərmə alətləri yalnız təsdiq qeydi açır
+  const igSales = createSales({ store, coord });
+  registerInstagramSalesTools(tools, { hub, sales: igSales, audit });
+  const igInbox = createInbox({ env, hub, sales: igSales, runner, audit });
+  const igCommands = createIgCommands({ env, hub, sales: igSales, inbox: igInbox, flow, approvals });
+  return { igSales, igInbox, igCommands, env, store, audit, coord, approvals, events, knowledge, hub, flow, providers, llm, tools, shopify, leads, agents, runner, library, mediaJobs, processor };
 }

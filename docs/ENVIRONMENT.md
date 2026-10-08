@@ -25,7 +25,9 @@ Bindinqlər (`JARVIS_KV`, `JARVIS_MEDIA`, `COORD`) `wrangler.toml`-dadır, əl i
 | `TELEGRAM_WEBHOOK_SECRET` | Secret | 1-256 simvol, yalnız `A-Z a-z 0-9 _ -` |
 | `TELEGRAM_ALLOWED_CHAT_IDS` | Variable/Secret | İdarə edə bilən Telegram istifadəçi ID-ləri (vergüllə). Boşdursa **heç kim** idarə edə bilməz |
 | `TELEGRAM_CHANNEL_ID` | Variable | Paylaşım kanalı (`@kanal` və ya `-100...`), bot orada admin olmalıdır |
-| `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET` | Secret | Meta tətbiqi (Instagram Login) |
+| `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET` | Secret | Meta tətbiqi (Instagram Login); `INSTAGRAM_APP_SECRET` webhook imzasını da yoxlayır |
+| `INSTAGRAM_WEBHOOK_VERIFY_TOKEN` | Secret | Instagram DM/şərh webhook doğrulaması (`/instagram/webhook`), bax `docs/INSTAGRAM.md` |
+| `INSTAGRAM_POLL` | Variable | `1` = cron DM/şərhləri də yoxlayır (webhook ehtiyatı) |
 | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` | Secret | TikTok developer tətbiqi |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Secret | Google OAuth client (YouTube Data API v3) |
 
@@ -48,6 +50,7 @@ Bindinqlər (`JARVIS_KV`, `JARVIS_MEDIA`, `COORD`) `wrangler.toml`-dadır, əl i
 | `STT_MODEL` | Variable | Səs tanıma modeli (standart `gpt-4o-transcribe`; layihədə yoxdursa avtomatik `whisper-1`) |
 | `TTS_MODEL` | Variable | Səsləndirmə modeli (standart `gpt-4o-mini-tts` Azərbaycan təlimatı ilə; yoxdursa avtomatik `tts-1`) |
 | `INSTAGRAM_API_VERSION` | Variable | Standart `v25.0` |
+| `AUTONOMY_JOBS`, `DAILY_REPORT_HOUR` | Variable | 24/7 avtonom job-lar (vergüllə) və günlük Telegram hesabat saatı (Bakı, 0-23); standart söndürülüb |
 | `MAX_SUBTASKS`, `MAX_MODEL_CALLS`, `MAX_RETRIES`, `CALL_TIMEOUT_SECONDS` | Variable | Limitlər |
 | `LOGIN_MAX_FAILURES`, `LOGIN_WINDOW_SECONDS` | Variable | Parol cəhd limiti |
 | `FEATURE_VOICE`, `FEATURE_APPROVALS`, `FEATURE_KNOWLEDGE` | Variable | `0` ilə söndürür |
