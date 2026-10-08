@@ -31,5 +31,7 @@ jobs:
         run: node scripts/static-audit.mjs
       - name: Testlər (heç bir real API çağırılmır)
         run: npm test
+      - name: TikTok AI Manager (validate + bundle build + testlər, mock, real API yoxdur)
+        run: npm run build:tiktok && npm run test:tiktok
       - name: Wrangler dry-run (deploy EDİLMİR)
         run: npx --yes wrangler@4 deploy --dry-run --outdir "$RUNNER_TEMP/wrangler-out"
