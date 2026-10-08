@@ -108,6 +108,8 @@ export function registerMarketingTools(registry, deps = {}) {
         brand,
         input,
         schema: CAPTIONS_SCHEMA,
+        maxTokens: 1200,
+        order: ["claude"],
         req: { platform: input.platform, count, public: { platform: input.platform, count } },
         template: (ctx) => {
           const caps = templateCaptions({ brand, platform: input.platform, count, topic: input.topic || input.goal, offer: input.offer, facts: input.facts });

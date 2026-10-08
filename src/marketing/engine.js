@@ -31,9 +31,8 @@ export const PLAN_SCHEMA = {
 export const HOOKS_SCHEMA = { type: "object", additionalProperties: false, required: ["hooks"], properties: { hooks: { type: "array", maxItems: 10, items: str(200) } } };
 export const CAPTIONS_SCHEMA = {
   type: "object",
-  additionalProperties: false,
   required: ["captions"],
-  properties: { captions: { type: "array", maxItems: 5, items: { type: "object", required: ["text", "cta"], additionalProperties: false, properties: { text: str(LIMITS.youtube.description), cta: str(300), title: str(LIMITS.youtube.title) } } } },
+  properties: { captions: { type: "array", maxItems: 5, items: { type: "object", required: ["text"], properties: { text: str(LIMITS.youtube.description), cta: { type: "string", maxLength: 300 }, title: { type: "string", maxLength: 300 } } } } },
 };
 export const HASHTAGS_SCHEMA = { type: "object", additionalProperties: false, required: ["hashtags"], properties: { hashtags: { type: "array", maxItems: 60, items: str(60) } } };
 export const CALENDAR_SCHEMA = {
@@ -49,6 +48,7 @@ const NOTICE_AI = "AI qaralamasıdır. Dərc olunmayıb. Faktları (qiymət, end
 // Plan üçün qısa çıxış limitləri: model daha az token yazır (PLAN_SCHEMA xarici forması dəyişmir, yalnız POST.plan kəsir)
 export const PLAN_LIMITS = { segments: 4, script: 5, shots: 6, ab_ideas: 2, hashtags: 12, caption: 600 };
 const KIND_RULES = {
+  captions: "JSON shape (no other keys): {\"captions\":[N items {\"text\":str at most 600 chars,\"cta\":str at most 120 chars,\"title\":str at most 90 chars (required for youtube, omit otherwise)}]}. N = request.count. Each text is 2-4 short sentences, no hashtags.",
   plan: "JSON shape (no other keys): {\"target_audience\":{\"primary\":str,\"segments\":[str, at most " + PLAN_LIMITS.segments + "]},\"hook\":str,\"script\":[2-" + PLAN_LIMITS.script + " items {\"timing\":str,\"visual\":str,\"voiceover\":str}],\"shot_list\":[2-" + PLAN_LIMITS.shots + " items {\"shot\":int,\"description\":str,\"duration_sec\":number}],\"caption\":str at most " + PLAN_LIMITS.caption + " chars,\"cta\":str,\"hashtags\":[at most " + PLAN_LIMITS.hashtags + "],\"ab_ideas\":[1-" + PLAN_LIMITS.ab_ideas + " items {\"variable\":str,\"variant_a\":str,\"variant_b\":str,\"measure\":str}],\"youtube_title\":str at most 100 chars}. Every text field is one short sentence.",
 };
 
@@ -147,8 +147,8 @@ const POST = {
     const out = [];
     for (const c of res.captions) {
       const text = stripUnsafe(c.text, { allowedLinks: ctx.links });
-      const cta = stripUnsafe(c.cta, { allowedLinks: ctx.links });
-      const title = c.title ? stripUnsafe(c.title, { allowedLinks: ctx.links }) : "";
+      const cta = stripUnsafe(c.cta || "", { allowedLinks: ctx.links });
+      const title = c.title ? stripUnsafe(c.title, { allowedLinks: ctx.links }).slice(0, LIMITS.youtube.title) : "";
       if (text.length < 3 || text.length > max) continue;
       if (req.platform === "youtube" && (!title || title.length > LIMITS.youtube.title)) continue;
       if (textProblems(text + "\n" + cta + "\n" + title, ctx).length) continue;
@@ -179,7 +179,7 @@ const POST = {
 // Telegram arxa plan işi ~30 s-də kəsilir: model bu müddətdə cavab vermirsə şablon qaralama qaytarılır (səssiz çökmə yox)
 export const LLM_DEADLINE_MS = 13000;
 
-export async function produce({ kind, llm, brand, input, schema, req = {}, template, maxTokens = 2000 }) {
+export async function produce({ kind, llm, brand, input, schema, req = {}, template, maxTokens = 2000, order }) {
   const ctx = contextFor(brand, input);
   let fallback = null;
   if (llm && llm.provider !== "template" && typeof llm.completeJson === "function") {
@@ -188,7 +188,7 @@ export async function produce({ kind, llm, brand, input, schema, req = {}, templ
       let timer;
       const deadline = new Promise((_, rej) => { timer = setTimeout(() => rej(Object.assign(new Error("llm deadline"), { llmDeadline: true })), LLM_DEADLINE_MS); });
       try {
-        res = await Promise.race([llm.completeJson({ system: systemPrompt(kind, brand, ctx.allowCard), user: userPrompt(kind, brand, input, { request: req.public || {} }), schema, maxTokens }), deadline]);
+        res = await Promise.race([llm.completeJson({ system: systemPrompt(kind, brand, ctx.allowCard), user: userPrompt(kind, brand, input, { request: req.public || {} }), schema, maxTokens, ...(order ? { order } : {}) }), deadline]);
       } finally { clearTimeout(timer); }
     } catch (e) {
       fallback = e && e.llmDeadline ? "llm_timeout" : "llm_error";
