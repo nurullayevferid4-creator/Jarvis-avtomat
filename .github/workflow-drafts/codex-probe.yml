@@ -1,0 +1,70 @@
+# DRAFT: AKTİV DEYİL. Yalnız bir birdəfəlik canlı test üçündür (docs/CODEX-LIVE-PROBE.md).
+# Bu fayl heç vaxt main-ə getməməlidir: test PR-ının budağında (claude/codex-probe-*) .github/workflows/ altına qoyulur, PR bağlananda silinir.
+#
+# Sübut etməli olduğu tək şey: github-actions[bot] (GITHUB_TOKEN) tərəfindən yazılan "@codex review" şərhinə Codex cavab verirmi?
+# Heç bir secret, heç bir contents icazəsi, heç bir dövr yoxdur. GITHUB_TOKEN hadisələri yeni workflow run başlatmır.
+name: Codex Probe
+# run-name Actions siyahısında (API: display_title) gələn hadisənin real sahələrini göstərir: loglara çıxış lazım olmasın.
+run-name: Codex probe ${{ github.event_name }} ${{ github.event.action }} ${{ github.event.review.state }} ${{ github.event.review.user.type }} ${{ github.event.review.user.login }}
+
+on:
+  pull_request:
+    types: [synchronize]
+  pull_request_review:
+    types: [submitted]
+
+permissions: {}
+
+concurrency:
+  group: codex-probe-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  post:
+    # Yalnız draft, yalnız eyni repo, yalnız claude/codex-probe* budağı.
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.draft == true &&
+      startsWith(github.event.pull_request.head.ref, 'claude/codex-probe') &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      issues: write
+    steps:
+      - name: Post exactly one "@codex review" comment (author will be github-actions[bot])
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          # İdempotent: bu PR-da artıq belə şərh varsa heç nə yazılmır (təkrar push-lar ikinci sorğu yaratmır).
+          N="$(gh api "repos/$REPO/issues/$PR/comments?per_page=100" --paginate --jq '[.[] | select(.user.login=="github-actions[bot]" and .body=="@codex review")] | length' | awk '{s+=$1} END{print s+0}')"
+          if [ "$N" -gt 0 ]; then echo "artıq göndərilib, təkrar yoxdur"; exit 0; fi
+          gh api --method POST "repos/$REPO/issues/$PR/comments" -f body="@codex review" --jq '"comment id=\(.id) author=\(.user.login) type=\(.user.type)"'
+
+  observe:
+    # Codex review yazarsa: pull_request_review hadisəsi bu workflow-u (budaq versiyasını) başladırmı, hansı sahələrlə?
+    # Heç bir token/yazma yoxdur, yalnız run-name və bu addımın çıxışı.
+    if: >-
+      github.event_name == 'pull_request_review' &&
+      startsWith(github.event.pull_request.head.ref, 'claude/codex-probe') &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: Record event shape (read-only)
+        env:
+          ACTOR: ${{ github.actor }}
+          ACTION: ${{ github.event.action }}
+          REVIEW_STATE: ${{ github.event.review.state }}
+          REVIEW_USER: ${{ github.event.review.user.login }}
+          REVIEW_USER_TYPE: ${{ github.event.review.user.type }}
+          REVIEW_ASSOC: ${{ github.event.review.author_association }}
+          REVIEW_COMMIT: ${{ github.event.review.commit_id }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          echo "actor=$ACTOR action=$ACTION state=$REVIEW_STATE user=$REVIEW_USER type=$REVIEW_USER_TYPE assoc=$REVIEW_ASSOC"
+          echo "review.commit_id=$REVIEW_COMMIT pr.head.sha=$PR_HEAD"
