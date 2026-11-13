@@ -18,3 +18,11 @@ node_modules/
 # Sistem faylları
 .DS_Store
 .claude/
+
+# Video studiya çıxışları: istifadəçi videoları və transkriptlər repoya düşməməlidir (repo açıqdır)
+studio-out/
+*.transcript.json
+*.retranscript.json
+*.studio.json
+*.qa.json
+*.post.json

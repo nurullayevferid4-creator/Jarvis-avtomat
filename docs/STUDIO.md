@@ -1,77 +1,108 @@
 # Video studiya: montaj, SMM, dublaj, video reklam
 
-Fərid videonu atır, studiya montaj edir. Mühərrik `studio/` qovluğundadır (ffmpeg, yerli, pulsuz). Ağır AI hissələri (səsdən mətn, dublaj, generasiya) ayrı xidmətlərdir: pul xərcləyir, ona görə Fərid-in təsdiqi ilə işləyir.
+Fərid videonu atır, studiya sual vermədən montaj edir, render edir, yoxlayır və hazır MP4 verir. Mühərrik `studio/` qovluğundadır: ffmpeg + yerli Whisper, pulsuzdur. Pul xərcləyən heç nə (səs/video generasiyası, bulud transkripsiyası) Fəridin açıq "bəli" sözü olmadan çağırılmır. Paylaşım da yalnız "bəli" ilə.
 
-## Tez başlanğıc
+## Bir əmrlə
 
 ```
-npm run studio -- doctor
-npm run studio -- edit video.mp4 --preset reels --cut-silence --transcript t.json --hook "Qaçırma" --cta "DM yaz" --out reels.mp4
-npm run studio -- batch video.mp4 --presets reels,feed,youtube --transcript t.json --outdir out
-npm run studio -- edit video.mp4 --dub dublaj.mp3 --music musiqi.mp3 --logo logo.png
-npm run studio -- srt t.json --out t.srt
-npm run studio -- thumb video.mp4 --auto
-npm run studio -- post-draft --video reels.mp4 --caption "mətn" --hashtags "a,b"
+npm run studio -- setup-models                 # bir dəfə: Whisper turbo (≈ 564 MB), VAD, RNNoise
+npm run studio -- auto video.mp4 --hook "Menyunu yenidən çap etdirirsən?" --cta "DM-də MENYU yaz"
 ```
 
-Hamısı: `npm run studio -- help`. `--dry-run` ffmpeg əmrini göstərir, fayl yaratmır.
+`auto` bunları edir: yerli transkripsiya (şübhəli sözləri göstərir) → səssizlik kəsmə → danışıq təmizləmə → sözbəsöz altyazı → 9:16, 30 fps, −14 LUFS render → üz qabığı → 12 bəndlik QA. Sonda yazır: "Render olunub, PAYLAŞILMAYIB".
+
+Digər əmrlər (`npm run studio -- help`):
+
+```
+analyze video.mp4                         # kəsim yerləri, LUFS, səssizliklər, kontakt vərəqi
+transcribe video.mp4 --lang az            # yalnız transkript (.transcript.json)
+edit video.mp4 --preset reels --cut-silence --transcript t.json --caption-style word --punch-in --clean-voice
+batch video.mp4 --presets reels,feed,youtube --transcript t.json --outdir out
+edit video.mp4 --dub dublaj.mp3 --music musiqi.mp3 --logo logo.png
+qa out/video-reels.mp4 --retranscribe     # 12 bəndlik yoxlama, kəsilmiş videonun sinxronu da
+motion studio/examples/kart-numune.html --duration 6 --audio ses.wav
+thumb video.mp4 --auto
+post-draft --video out/video-reels.mp4 --caption "mətn" --hashtags "a,b"
+```
+
+## Texniki standart (studiyaya yazılıb)
+
+| Standart | Studiyada |
+|---|---|
+| 9:16, 1080×1920, 30 fps, H.264 + AAC | Preset `reels/tiktok/shorts`, `--fps` standart 30. Digərləri: `feed` 4:5, `square` 1:1, `youtube` 16:9 |
+| Təhlükəsiz zona: yuxarı 250 px, aşağı 350 px, sağ 10% | Altyazı altdan 370 px, sağdan 108 px, hook yuxarıdan 270 px |
+| Başlıq ≥ 100 px, etiket ≥ 26 px (1080 en) | Hook 100 px, sətir altyazı 54 px, sözbəsöz 78 px |
+| Oxuma vaxtı: söz sayı/3 + 1 san | Hook və CTA müddəti buna görə uzanır; video qısadırsa xəbərdarlıq verir |
+| Azərbaycan hərfləri və ₼ | Şrift avtomatik seçilir: hamısını bir ailədə verən ilk şrift (Inter, sonra DejaVu Sans). DejaVu Sans-da ₼ yoxdur |
+| Səs ≈ −14 LUFS, true peak ≤ −1.5 dBFS | Ölç → gücləndir → lazımdırsa limiter → yenidən ölç. Pik hədəfi −2 dBFS (AAC-dən sonra pay) |
+| Musiqi danışıqdan 10–15 dB aşağı | Musiqi səviyyəsi 0.12 + danışıq zamanı ducking |
+| Standart musiqi qoyulmur; musiqi varsa səssiz versiya da | Musiqi yalnız `--music` ilə. Onda `-musiqisiz.mp4` nüsxəsi də yazılır |
+| Altyazı uydurulmur | Transkript iki keçidlə tutuşdurulur, fərqli çıxan sözlər "ŞÜBHƏLİ" kimi göstərilir. `verified_by_human: false` |
+| Bir səhnədə 1 effekt + 1 keçid | Studiya yalnız sərt kəsik və (istəyə görə) punch-in edir. Başqa keçid əlavə etmir |
+| "render olunub, paylaşılmayıb" | Hər `auto` belə bitir. `post-draft` yalnız `draft_only` fayl yazır |
 
 ## Nə edir
 
 | Bacarıq | Necə |
 |---|---|
-| 9:16 / 4:5 / 1:1 / 16:9 | Presetlər: `reels tiktok shorts feed square youtube`. Uyğunsuz nisbətdə bulanıq fon (kəsmir), istəsən `--fit crop|pad` |
-| Səssizlik kəsmə | `silencedetect` + `select`. Subtitr vaxtları kəsilmiş zaman xəttinə **yenidən hesablanır** (sinxron qalır) |
-| Subtitr | Transkriptdən (`words[]` və ya `segments[]/utterances[]`) və ya hazır `.srt`-dən. DejaVu Sans: ə ş ç ğ ı ö ü düzgün çıxır. 9:16-da altdan 370 px yuxarı |
-| Hook və CTA | İlk saniyələrdə yuxarıda, sonda aşağıda. 9:16 təhlükəsiz zona: yuxarıdan 250, aşağıdan 350 px |
-| Loqo | Sağ yuxarı, təhlükəsiz zonadan aşağıda |
-| Musiqi | Döngüyə salınır, danışıq zamanı avtomatik aşağı düşür (ducking), sonda 1.5 san sönür |
-| Dublaj miksi | Hazır dublaj səsi + orijinal səs aşağı salınmış fon (və ya `--mute-original`). Dublaj danışarkən fon əlavə sıxılır |
-| Səs səviyyəsi | 2 keçidli `loudnorm`, standart −14 LUFS (`--lufs`, `--no-loudnorm`) |
-| Çoxplatformalı export | `batch`: bir mənbədən hamısı, transkript/silence bir dəfə hesablanır |
-| Thumbnail | `--at 2` və ya `--auto` (ilk 20 saniyədən ən təmsiledici kadr) |
-| SMM qaralaması | `post-draft`: `draft_only` JSON, hashtag təmizlənir. **Heç nə göndərmir** |
-| Yoxlama | Hər render-dən sonra nəticə `ffprobe` ilə yoxlanır: ölçü, h264/aac, müddət, fps. Uyğun gəlməsə çıxış kodu 2 |
+| Yerli transkripsiya | sherpa-onnx Whisper (`turbo`, `large-v3`, `medium`, `small`) + silero VAD. İki keçid (qısa və uzun parçalar) tutuşdurulur |
+| Səssizlik kəsmə | `silencedetect` + `select`. Altyazı vaxtları kəsilmiş zaman xəttinə yenidən hesablanır, heç bir söz atılmır |
+| Punch-in | `--punch-in`: kəsikdən sonrakı hər ikinci hissə 8% yaxınlaşdırılır (jump-cut ritmi) |
+| Altyazı | `--caption-style line` (2 sətirlik) və ya `word` (2–3 sözlük qrup, cari söz sarı) |
+| Danışıq təmizləmə | `--clean-voice`: highpass 80 Hz → RNNoise → EQ (220 Hz −2, 3.2 kHz +2.5) → gate → kompressor → limiter |
+| Rəng | `--grade warm`: isti ton + yüngül dən (yazıdan əvvəl tətbiq olunur) |
+| Hook, CTA, loqo | Təhlükəsiz zonada. Bir videoda bir CTA (studiya yalnız bir `--cta` qəbul edir) |
+| Musiqi, dublaj miksi | Ducking ilə. Dublaj: hazır səs faylı + orijinal səs fonda və ya `--mute-original` |
+| Analiz | `analyze`: kəsim yerləri (`scene > 0.25`), orta plan uzunluğu, LUFS, true peak, səssizliklər, kontakt vərəqi |
+| Motion qrafika | `motion`: HTML/CSS/SVG səhifəsi Chromium ilə kadr-kadr çəkilir, ffmpeg ilə yığılır. Səhifə `window.seek(t)` verir. Nümunə: `studio/examples/kart-numune.html` |
+| QA | Aşağıda |
 | Məxfilik | `-map_metadata -1`: GPS və cihaz metadatası çıxışa düşmür |
 
-Məhdudiyyət: səssizlik kəsmə + dublaj birlikdə **rədd edilir** (dublaj orijinal zaman xəttinə görə hazırlanıb). Əvvəl montaj, dublaj sonra.
+Məhdudiyyət: səssizlik kəsmə + dublaj birlikdə rədd edilir (dublaj orijinal zaman xəttinə görə hazırlanıb). Əvvəl montaj, dublaj sonra.
 
-## Araşdırma: bu tip studiya nədən qurulur
+## QA: 12 bənd
 
-Mənbələr bu sessiyada oxunan səhifələrdir. Satıcı bloqları öz məhsulunu qabağa çəkir, ona görə rəqəmləri "iddia" kimi oxu.
+`qa` hər bəndə dörd haldan birini yazır: **KEÇDİ** (ölçülüb), **QALDI** (ölçülüb, uyğun deyil), **ƏL İLƏ** (göz və ya Fərid lazımdır, kadrlar çıxarılıb), **n/a**. Ölçülməyən bənd "keçdi" yazılmır. Bir bənd qalıbsa çıxış kodu 2.
+
+| Kod | Studiya nəyi ölçür | Nə insana qalır |
+|---|---|---|
+| Q-1 Hook | İlk 2 san-də ekranda yazı və səs var | Yazı problemi/faydanı deyirmi (0.5/1/2 san kadrları) |
+| Q-2 Yazı ölçüsü | Başlıq ≥ 100, altyazı ≥ 26 px | |
+| Q-3 Oxuma vaxtı | Hook və CTA müddəti ≥ söz/3 + 1 | Danışıqla sinxron altyazı bu qaydaya daxil deyil |
+| Q-4 Hərflər | Şrift bütün hərfləri dəstəkləyir | Kəsik kadrlara göz ilə baxış |
+| Q-5 Faktlar | Qadağan söz (standart: "pulsuz") yoxdur | Qiymət və iddialar: yalnız Fərid |
+| Q-6 Səs səviyyəsi | LUFS hədəf ±1, true peak ≤ −1.5 (`ebur128`) | |
+| Q-7 Səs təmizliyi | Fasilələrdə orta səviyyə ≤ −50 dB | Nəfəs, klik, zərbə: dinləmə |
+| Q-8 Sinxron | Hər altyazı nitq olan yerdə başlayır; `--retranscribe` ilə median fərq ≤ 0.3 san | |
+| Q-9 Təhlükəsiz zona | Aşağı ≥ 15%, sağ ≥ 10%, yuxarı ≥ 250 px | |
+| Q-10 Keçidlər | Saniyədə 1 kadrlıq vərəq çıxarılır | Titrəmə və keçid növü: göz |
+| Q-11 Fayl | Ölçü, fps, kodeklər, müddət (`ffprobe`) | |
+| Q-12 Təhvil | Video + `-thumb.jpg` + `.post.json` (`draft_only`) | |
+
+Studiya render etdiyi hər faylın yanına `.studio.json` yazır (yazı ölçüləri, boşluqlar, altyazılar, hədəf səs). QA bunu oxuyur. Yan faylı olmayan (kənar) videoda Q-2, Q-3, Q-4, Q-8, Q-9 "n/a" olur.
+
+## Bilik bazası bu repoda deyil
+
+Fəridin üslub, brend və düzəliş sənədləri (`ferid-video-studio` qovluğu) **bu repoya yüklənməyib**: içində başqalarının istinad faylları və müştəri məlumatı var, bu repo isə açıqdır. Onların yeri gizli repodur. Bu repoda yalnız mühərrik kodu və ümumi texniki standartlar var.
+
+## Xarici xidmətlər (araşdırma, 2026-11-13)
+
+Mənbələr həmin sessiyada oxunan səhifələrdir. Satıcı bloqları öz məhsulunu qabağa çəkir, rəqəmləri "iddia" kimi oxu.
 
 | Qat | Alət | Nə öyrəndim | Status |
 |---|---|---|---|
-| Montaj mühərriki | ffmpeg | Bu mühitdə var (6.1.1), bütün lazım olan filtrlər işləyir | **yoxlanıb** |
-| Montaj (əl ilə) | CapCut, Descript, DaVinci Resolve, Premiere | CapCut: avto-subtitr, şablonlar; API/skript yoxdur. Descript: mətn üzrə redaktə. Opus Clip: uzun videodan qısa klip, dəqiqə-kredit sistemi | mənbə: ventureharbour.com, rework.com. Yoxlanmayıb |
-| Səsdən mətn (Azərbaycan) | ElevenLabs Scribe v3/v2 | Rəsmi sənəddə 90+ dil, **Azərbaycan dili (aze) siyahıdadır** | **sənəddən təsdiqlənib**, real səs ilə sınanmayıb |
-| Səsdən mətn | OpenAI Whisper | Azərbaycan dili rəsmən dəstəklənir, amma Whisper məqaləsində kiçik modellərdə xəta dərəcəsi yüksəkdir; rəqib Soniox "xeyli yüksək xəta" deyir (satıcı iddiası) | Azərbaycan keyfiyyəti **yoxlanmayıb**. Bu sessiyada Whisper quraşdırılmayıb |
-| Dublaj | HeyGen | 177+ dil, lip-sync, səs klonlaması (öz bloqu) | Azərbaycan dəstəyi **təsdiqlənməyib** |
-| Dublaj | Rask AI | 130+ dil, çox danışanlı (üçüncü tərəf icmalları) | Azərbaycan **təsdiqlənməyib** |
-| Dublaj | ElevenLabs Dubbing | 2026-cı ilin mayında 90+ dilə genişlənib, lip-sync yoxdur (gyre.pro) | Azərbaycan TTS **təsdiqlənməyib**: `eleven_multilingual_v2` siyahısında yoxdur, v3/v4 üçün dil siyahısı açılmayıb |
-| Dublaj / lip-sync | Pollo `translate_video` (bu sessiyada qoşulub) | "100+ dil", siyahı verilmir; mp4/mov, ≤ 8 dəq, saniyəyə görə ödəniş | Azərbaycan **təsdiqlənməyib**. Sınaq üçün qısa klip lazımdır |
-| Reklam lokalizasiyası | Runway `localize_ad` (qoşulub) | Yalnız **şəkil**, video yox; dil siyahısında Azərbaycan yoxdur | Azərbaycan üçün yararsız |
-| Generasiya (B-roll, reklam kadrı) | Runway, Pollo, Higgsfield (qoşulub) | Mətn/şəkildən video, musiqi, səs | Heç biri çağırılmayıb (kredit xərci) |
-| Planlama | Metricool (qoşulub) | Planlı paylaşım, ən yaxşı vaxt | Çağırılmayıb. Paylaşım təsdiq qapısındadır |
-
-**Nəticə:** Azərbaycan dilində dublaj ən zəif halqadır. Subtitr üçün Scribe uyğundur (təsdiqlənib). Dublajda Azərbaycan səsi üçün heç bir xidmətin dəstəyini təsdiqləyə bilmədim. Əvvəl 10-15 saniyəlik sınaq klipi ilə yoxlamaq lazımdır, yoxsa boş yerə pul gedər.
-
-## Axın (Fərid videonu atdıqdan sonra)
-
-1. `probe` + `doctor`: fayl və mühit yoxlanır.
-2. Subtitr lazımdırsa: Scribe ilə transkript (**pul xərcidir, təsdiq lazımdır**). Transkripti insan oxumalıdır: Azərbaycan dilində səhv ola bilər.
-3. `edit`/`batch`: montaj, hər platforma üçün fayl, avtomatik yoxlama.
-4. Kadrlara baxıb yoxlama (subtitr hərfləri, hook, təhlükəsiz zona).
-5. `post-draft`: qaralama. Fərid "təsdiq" yazmadan heç nə paylaşılmır.
-
-## Format qeydləri
-
-- Scribe cavab formatı (`words[]`: `text,start,end,type`) sənədə görə dəstəklənir, **real Scribe cavabı ilə sınanmayıb**. Pollo `speech2text` (`utterances[]` ms ilə) eyni şəkildə.
-- Platforma müddət həddləri `src/media/rules.js`-dən gəlir və **rəsmi sənədlə təsdiqlənməyib**. Studiya bunlara görə yalnız xəbərdarlıq verir, videonu özbaşına kəsmir (`--max-sec` istisna).
-- −14 LUFS ümumi tövsiyədir, platformalar üçün ayrıca yoxlanmayıb.
+| Səsdən mətn | sherpa-onnx Whisper (yerli) | Pulsuz, bu mühitdə işləyir | **yoxlanıb** (ingiliscə nitq). Azərbaycan dəqiqliyi **yoxlanmayıb** |
+| Səsdən mətn | ElevenLabs Scribe v3/v2 | Rəsmi sənəddə Azərbaycan dili (aze) var | sənəddən təsdiqlənib, sınanmayıb, pulludur |
+| Dublaj | HeyGen, Rask AI | 130–177+ dil, lip-sync (öz iddiaları) | Azərbaycan dəstəyi **təsdiqlənməyib** |
+| Dublaj | ElevenLabs Dubbing | 90+ dil, lip-sync yoxdur (gyre.pro) | Azərbaycan **təsdiqlənməyib** |
+| Dublaj / lip-sync | Pollo `translate_video` (qoşulub) | "100+ dil", siyahı verilmir, ≤ 8 dəq | Azərbaycan **təsdiqlənməyib**, kredit lazımdır |
+| Reklam lokalizasiyası | Runway `localize_ad` (qoşulub) | Yalnız şəkil; Azərbaycan dili siyahıda yoxdur | Azərbaycan üçün yararsız |
+| Generasiya | Runway, Pollo, Higgsfield (qoşulub) | Mətn/şəkildən video | Çağırılmayıb (kredit xərci) |
+| Planlama | Metricool (qoşulub) | Planlı paylaşım | Çağırılmayıb, təsdiq qapısındadır |
 
 ## Yoxlanılıb / yoxlanılmayıb
 
-- Yoxlanılıb: `tests/studio.test.mjs` (23 test): sintetik video ilə real ffmpeg. Ölçü 1080x1920 / 1080x1350 / 1920x1080, h264/aac, səssizlik kəsmədən sonra subtitr sinxronu, kəsilmiş videoda səssiz pəncərə yoxdur, dublajın yerləşməsi və orijinal səsin söndürülməsi, musiqi/dublaj miksi, səssiz mənbə, dry-run. Bir render kadrı gözlə baxılıb (Azərbaycan hərfləri, hook, CTA, bulanıq fon).
-- Yoxlanılmayıb: real çəkiliş (üz, hərəkət, rotasiya olan telefon videosu), uzun video performansı, Azərbaycan nitqi ilə Scribe, istənilən dublaj xidməti, Metricool ilə planlama.
-- Yoxdur: üzə görə avtomatik kadrlama (`crop` mərkəzdən kəsir; üz sağ/solda olarsa `--fit blur` istifadə et), keçid effektləri, avtomatik B-roll, lip-sync, söz-söz vurğulu subtitr.
+- **Yoxlanılıb** (`tests/studio.test.mjs`, 39 test, real ffmpeg): ölçülər və 30 fps, səssizlik kəsmə və altyazı sinxronu, sözlərin itməməsi, sözbəsöz altyazı, təhlükəsiz zona, səs səviyyəsinin real ölçüsü (−14 ±1 LUFS, pik ≤ −1.5), musiqili + musiqisiz nüsxə, dublaj miksi, QA-nın səhvləri tutması (sakit səs, qadağan söz, qısa oxuma vaxtı, kənar fayl), analiz, HTML motion render, real ingiliscə nitqin transkripsiyası və ondan montaj. Kadrlar gözlə baxılıb: Azərbaycan hərfləri, ₼, hook, CTA, sözbəsöz vurğu, punch-in.
+- **Yoxlanılmayıb:** real çəkiliş (üz, hərəkət, rotasiyalı telefon videosu), uzun video (10 dəq) performansı, **Azərbaycan nitqi ilə transkripsiya dəqiqliyi**, real səsdə RNNoise keyfiyyəti (dinləmə ilə), istənilən dublaj xidməti.
+- **Təxminidir:** söz vaxtları. Model söz-söz vaxt vermir, sözlər qısa nitq parçası daxilində uzunluğuna görə paylanır. Sınaqda yenidən transkripsiya ilə median fərq 0.05 san, maksimum 0.22 san çıxdı (bir video, ingiliscə).
+- **Yoxdur:** üzə görə avtomatik kadrlama (`crop` mərkəzdən kəsir; üz kənardadırsa `--fit blur`), keçid effektləri (whip pan, speed ramp, light sweep), SFX sintezi, avtomatik B-roll, lip-sync, səs/fon ayırma (UVR) və yerli TTS dublajı, ekran yazısının OCR-ı, hazır üslub şablonları (HUD, timeline split, Quran). Motion üçün yalnız ümumi render mühərriki və bir nümunə səhifə var.

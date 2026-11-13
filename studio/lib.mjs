@@ -1,8 +1,8 @@
 // Video studiya mühərriki: montaj, subtitr, səssizlik kəsmə, 9:16, dublaj miksi, reklam elementləri, loudnorm.
 // Hər şey yerli ffmpeg/ffprobe ilə işləyir (shell yoxdur, arqumentlər massivlə verilir). Xarici API çağırılmır, pul xərclənmir.
 import { execFile } from "node:child_process";
-import { mkdtemp, writeFile, readFile, rm, mkdir, stat } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdtemp, writeFile, readFile, rm, mkdir, stat, copyFile } from "node:fs/promises";
+import { tmpdir, homedir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { RECOMMENDED } from "../src/media/rules.js";
 
@@ -16,8 +16,31 @@ export const PRESETS = {
   square: { w: 1080, h: 1080, label: "Kvadrat (1:1)", rec: null, vertical: false },
   youtube: { w: 1920, h: 1080, label: "YouTube / üfüqi (16:9)", rec: null, vertical: false },
 };
-// 9:16-da platforma interfeysinin örtdüyü sahələr (px): mətn buraya qoyulmur.
-export const SAFE = { top: 250, bottom: 350 };
+// 9:16-da platforma interfeysinin örtdüyü sahələr: mətn buraya qoyulmur.
+// Yuxarı 250 px, aşağı 350 px (aşağı 15%-dən böyükdür), sağ 10% (TikTok düymələri).
+export const SAFE = { top: 250, bottom: 350, rightPct: 0.1, bottomPct: 0.15 };
+// Ekran yazısı ölçüləri (1080 enə görə): başlıq ≥ 100 px, etiket ≥ 26 px.
+export const MIN_TITLE_PX = 100, MIN_LABEL_PX = 26;
+export const DEFAULT_FPS = 30;
+// Modellər repoya düşmür: STUDIO_MODELS və ya ~/.cache/studio-models
+export const MODELS_DIR = process.env.STUDIO_MODELS || join(homedir(), ".cache", "studio-models");
+
+// Ekran yazısı şrifti: Azərbaycan hərflərinin hamısını VƏ ₼ işarəsini bir ailədə verən ilk şrift.
+// (DejaVu Sans-da ₼ yoxdur: başqa şriftdən götürülür və nazik görünür, ona görə Inter üstündür.)
+export const FONT_CANDIDATES = ["Inter", "DejaVu Sans"];
+export const AZ_CHARS = "ƏəıİğĞşŞçÇöÖüÜ₼";
+let fontCache = null;
+export async function pickFont() {
+  if (fontCache) return fontCache;
+  const charsets = [...AZ_CHARS].map((c) => ":charset=" + c.codePointAt(0).toString(16)).join("");
+  for (const fam of FONT_CANDIDATES) {
+    try {
+      const r = await run("fc-list", [`:family=${fam}${charsets}`, "family"]);
+      if (r.stdout.split("\n").some((l) => l.split(",").some((f) => f.trim() === fam))) return (fontCache = { family: fam, full: true });
+    } catch { /* fc-list yoxdur */ }
+  }
+  return (fontCache = { family: "DejaVu Sans", full: false });
+}
 
 export function presetOrThrow(name) {
   const p = PRESETS[name];
@@ -51,8 +74,9 @@ export async function doctor() {
   } catch (e) { add("filtrlər", false, e.message); }
   try {
     const fc = (await run("fc-list", [":family"])).stdout;
-    add("şrift DejaVu Sans (ə ş ç ğ ı ö ü)", /DejaVu Sans/.test(fc), "");
-  } catch (e) { add("şrift DejaVu Sans (ə ş ç ğ ı ö ü)", false, "fc-list yoxdur"); }
+    const f = await pickFont();
+    add("şrift (ə ş ç ğ ı ö ü ₼)", f.full || /DejaVu Sans/.test(fc), f.family + (f.full ? "" : ": ₼ işarəsi bu şriftdə yoxdur, başqa şriftdən götürüləcək"));
+  } catch (e) { add("şrift (ə ş ç ğ ı ö ü ₼)", false, "fc-list yoxdur"); }
   return out;
 }
 
@@ -210,6 +234,16 @@ export function mapTime(t, keep) {
 export function remapCues(cues, keep) {
   return cues.map((c) => ({ ...c, start: mapTime(c.start, keep), end: mapTime(c.end, keep) })).filter((c) => c.end - c.start >= 0.1);
 }
+// Sözlər üçün: heç bir söz atılmır (altyazıdan söz itməməlidir), yalnız vaxtı köçürülür və ardıcıllıq qorunur.
+export function remapWords(words, keep) {
+  let prev = 0;
+  return words.map((w) => {
+    const start = Math.max(prev, mapTime(w.start, keep));
+    const end = Math.max(start + 0.01, mapTime(w.end, keep));
+    prev = start;
+    return { ...w, start, end };
+  });
+}
 
 // ---------- ASS (subtitr + hook + CTA bir faylda) ----------
 const esc = (t) => String(t).replace(/[{}]/g, "").replace(/\r/g, "").replace(/\n/g, "\\N");
@@ -217,37 +251,84 @@ const esc = (t) => String(t).replace(/[{}]/g, "").replace(/\r/g, "").replace(/\n
 export function captionLayout(preset) {
   const fs = preset.vertical ? Math.round(preset.w * 0.05) : Math.round(Math.min(preset.w, preset.h * 1.78) * 0.045);
   const margin = Math.round(preset.w * 0.055);
-  const maxChars = Math.max(14, Math.min(42, Math.floor((preset.w - 2 * margin) / (0.6 * fs))));
+  const marginR = preset.vertical ? Math.max(margin, Math.round(preset.w * SAFE.rightPct)) : margin;
+  const usable = preset.w - margin - marginR;
+  const maxChars = Math.max(14, Math.min(42, Math.floor(usable / (0.6 * fs))));
   const marginV = preset.vertical ? SAFE.bottom + 20 : Math.round(preset.h * 0.06);
-  return { fs, margin, maxChars, marginV };
+  const hookFs = Math.max(Math.round(fs * 1.3), Math.round((MIN_TITLE_PX * preset.w) / 1080));
+  const wordFs = Math.round(fs * 1.45);
+  return { fs, margin, marginR, usable, maxChars, marginV, hookFs, wordFs };
 }
 
-export function buildAss({ preset, cues = [], hook, cta, outDur, hookSec = 3, ctaSec = 4 }) {
-  // Qısa videoda hook/CTA bütün müddəti tutmasın: hər biri ən çox müddətin 35%-i
-  hookSec = Math.min(hookSec, outDur * 0.35);
-  ctaSec = Math.min(ctaSec, outDur * 0.35);
+// Oxuma vaxtı: yazı ən azı söz sayı/3 + 1 san ekranda qalmalıdır.
+export const readingTime = (text) => String(text).trim().split(/\s+/).filter(Boolean).length / 3 + 1;
+
+// Hook/CTA müddəti: oxuma vaxtından az olmur, amma qısa videoda müddətin 45%-ni keçmir.
+export function overlayTiming({ hook, cta, outDur }) {
+  const cap = outDur * 0.45;
+  const hookSec = hook ? Math.min(Math.max(3, readingTime(hook)), cap) : 0;
+  const ctaSec = cta ? Math.min(Math.max(4, readingTime(cta)), cap) : 0;
+  return { hookSec, ctaSec };
+}
+
+// Sözbəsöz altyazı: 2-4 sözlük qruplar, hər söz öz vaxtında vurğulanır.
+export function groupWordChunks(words, { maxWords = 3, maxChars = 18, gap = 0.5 } = {}) {
+  const chunks = [];
+  let cur = null;
+  const flush = () => { if (cur && cur.words.length) chunks.push(cur); cur = null; };
+  for (const w of words) {
+    const t = String(w.text).trim();
+    if (!t) continue;
+    if (cur) {
+      const len = cur.words.reduce((n, x) => n + x.text.length + 1, 0) + t.length;
+      if (cur.words.length >= maxWords || len > maxChars || w.start - cur.end > gap) flush();
+    }
+    if (!cur) cur = { start: w.start, end: w.end, words: [] };
+    cur.words.push({ ...w, text: t });
+    cur.end = w.end;
+    if (/[.!?…]$/.test(t)) flush();
+  }
+  flush();
+  return chunks;
+}
+
+export function buildAss({ preset, cues = [], chunks = null, hook, cta, outDur, font = "DejaVu Sans" }) {
+  const { hookSec, ctaSec } = overlayTiming({ hook, cta, outDur });
   const lay = captionLayout(preset);
   const topV = preset.vertical ? SAFE.top + 20 : Math.round(preset.h * 0.06);
-  const hookFs = Math.round(lay.fs * 1.3);
+  const hookFs = lay.hookFs;
   const ctaV = preset.vertical ? SAFE.bottom + 170 : lay.marginV + lay.fs * 3;
-  const font = "DejaVu Sans";
   const head = [
     "[Script Info]", "ScriptType: v4.00+", "PlayResX: " + preset.w, "PlayResY: " + preset.h, "WrapStyle: 0", "ScaledBorderAndShadow: yes", "",
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-    `Style: Sub,${font},${lay.fs},&H00FFFFFF,&H000000FF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,4,1,2,${lay.margin},${lay.margin},${lay.marginV},1`,
-    `Style: Hook,${font},${hookFs},&H0000F0FF,&H000000FF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,5,2,8,${lay.margin},${lay.margin},${topV},1`,
-    `Style: Cta,${font},${Math.round(lay.fs * 1.05)},&H00FFFFFF,&H000000FF,&H000050E6,&H000050E6,-1,0,0,0,100,100,0,0,3,14,0,2,${lay.margin},${lay.margin},${ctaV},1`,
+    `Style: Sub,${font},${lay.fs},&H00FFFFFF,&H000000FF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,4,1,2,${lay.margin},${lay.marginR},${lay.marginV},1`,
+    `Style: Word,${font},${lay.wordFs},&H00FFFFFF,&H000000FF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,6,2,2,${lay.margin},${lay.marginR},${lay.marginV},1`,
+    `Style: Hook,${font},${hookFs},&H0000F0FF,&H000000FF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,5,2,8,${lay.margin},${lay.marginR},${topV},1`,
+    `Style: Cta,${font},${Math.round(lay.fs * 1.05)},&H00FFFFFF,&H000000FF,&H000050E6,&H000050E6,-1,0,0,0,100,100,0,0,3,14,0,2,${lay.margin},${lay.marginR},${ctaV},1`,
     "", "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
   ];
   const ev = [];
-  for (const c of cues) ev.push(`Dialogue: 0,${assTime(c.start)},${assTime(c.end)},Sub,,0,0,0,,${esc(c.text)}`);
+  if (chunks) {
+    // Cari söz sarı, qalanları ağ. Qrup növbəti qrup başlayana qədər (ən çox +0.25 san) ekranda qalır.
+    for (let ci = 0; ci < chunks.length; ci++) {
+      const ch = chunks[ci];
+      const hardEnd = Math.min(ch.end + 0.25, chunks[ci + 1] ? chunks[ci + 1].start : outDur);
+      for (let wi = 0; wi < ch.words.length; wi++) {
+        const st = wi === 0 ? ch.start : ch.words[wi].start;
+        const en = wi === ch.words.length - 1 ? Math.max(hardEnd, ch.words[wi].end) : ch.words[wi + 1].start;
+        if (en - st < 0.02) continue;
+        const txt = ch.words.map((x, k) => (k === wi ? "{\\c&H0000F0FF&}" + esc(x.text) + "{\\c&H00FFFFFF&}" : esc(x.text))).join(" ");
+        ev.push(`Dialogue: 0,${assTime(st)},${assTime(en)},Word,,0,0,0,,${txt}`);
+      }
+    }
+  } else for (const c of cues) ev.push(`Dialogue: 0,${assTime(c.start)},${assTime(c.end)},Sub,,0,0,0,,${esc(c.text)}`);
   if (hook) {
-    const t = wrapLines(hook, Math.max(10, Math.floor((preset.w - 2 * lay.margin) / (0.6 * hookFs)))).join("\n");
+    const t = wrapLines(hook, Math.max(8, Math.floor(lay.usable / (0.6 * hookFs)))).join("\n");
     ev.push(`Dialogue: 1,${assTime(0)},${assTime(Math.min(hookSec, outDur))},Hook,,0,0,0,,${esc(t)}`);
   }
   if (cta) {
-    const t = wrapLines(cta, Math.max(10, Math.floor((preset.w - 2 * lay.margin) / (0.62 * lay.fs * 1.05)))).join("\n");
+    const t = wrapLines(cta, Math.max(10, Math.floor(lay.usable / (0.62 * lay.fs * 1.05)))).join("\n");
     ev.push(`Dialogue: 1,${assTime(Math.max(0, outDur - ctaSec))},${assTime(outDur)},Cta,,0,0,0,,${esc(t)}`);
   }
   return head.concat(ev).join("\n") + "\n";
@@ -256,9 +337,14 @@ export function buildAss({ preset, cues = [], hook, cta, outDur, hookSec = 3, ct
 // ---------- Filtr qrafları ----------
 const f3 = (n) => (Math.round(n * 1000) / 1000).toString();
 
-export function buildVideoGraph({ preset, fit, info, keep, hasAss, logoIdx }) {
+export function resolveFps(opt, info) {
+  if (opt === "source") return Math.max(1, Math.min(60, Math.round(info.fps || DEFAULT_FPS)));
+  const n = Number(opt);
+  return isFinite(n) && n >= 1 && n <= 60 ? Math.round(n) : DEFAULT_FPS;
+}
+
+export function buildVideoGraph({ preset, fit, info, keep, hasAss, logoIdx, fps = DEFAULT_FPS, punchIn = false, grade = null }) {
   const { w, h } = preset;
-  const fps = Math.max(1, Math.min(30, Math.round(info.fps || 30)));
   const parts = [];
   let cur = "0:v";
   let n = 0;
@@ -268,6 +354,15 @@ export function buildVideoGraph({ preset, fit, info, keep, hasAss, logoIdx }) {
   let pre = `fps=${fps}`;
   if (keep) pre += `,select='${keep.map(([a, b]) => `between(t,${f3(a)},${f3(b)})`).join("+")}',setpts=N/FRAME_RATE/TB`;
   cur = chain(cur, pre);
+
+  // Punch-in: səssizlik kəsiyindən sonrakı hər ikinci hissə 8% yaxınlaşdırılır (jump-cut gizlənir, ritm yaranır)
+  if (punchIn && keep && keep.length > 1) {
+    const iw = Math.round(info.width / 2) * 2, ih = Math.round(info.height / 2) * 2;
+    let acc = 0;
+    const odd = [];
+    keep.forEach(([a, b], i) => { if (i % 2 === 1) odd.push(`between(in_time,${f3(acc)},${f3(acc + (b - a) - 0.001)})`); acc += b - a; });
+    cur = chain(cur, `zoompan=z='1+0.08*(${odd.join("+")})':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=${iw}x${ih}:fps=${fps}`);
+  }
 
   const sameAspect = Math.abs(info.aspect - w / h) < 0.02;
   const mode = fit === "auto" || !fit ? (sameAspect ? "scale" : "blur") : fit;
@@ -291,19 +386,28 @@ export function buildVideoGraph({ preset, fit, info, keep, hasAss, logoIdx }) {
     parts.push(`[${cur}][${lg}]overlay=W-w-${Math.round(w * 0.04)}:${top}[${o}]`);
     cur = o;
   }
+  // İsti ton + yüngül dən (yalnız görüntüyə, yazıdan əvvəl ki yazı təmiz qalsın)
+  if (grade === "warm") cur = chain(cur, "eq=contrast=1.06:saturation=1.08,colorbalance=rs=0.04:bs=-0.04:rh=0.03:bh=-0.03,noise=alls=5:allf=t");
+  else if (grade) throw new Error("Naməlum grade: " + grade + " (warm)");
   if (hasAss) cur = chain(cur, "ass=studio.ass");
   parts.push(`[${cur}]format=yuv420p,setsar=1[vout]`);
   return parts.join(";");
 }
 
 // Səs qrafı. Qaytarır { graph, label } — label loudnorm-dan əvvəlki son çıxışdır; səs yoxdursa null.
-export function buildAudioGraph({ info, keep, dubIdx, musicIdx, muteOriginal, originalVol = 0.22, musicVol = 0.12, outDur }) {
+// Danışıq təmizləmə zənciri: alçaq tezlik kəsimi → küy azaltma (RNNoise modeli varsa, yoxdursa afftdn) → EQ → gate → kompressor → limiter
+export function voiceCleanChain(rnnModel) {
+  const dn = rnnModel ? `arnndn=m=${rnnModel}:mix=0.97` : "afftdn=nr=12:nf=-40";
+  return `highpass=f=80:poles=2,${dn},equalizer=f=220:t=q:w=1:g=-2,equalizer=f=3200:t=q:w=1.2:g=2.5,agate=threshold=0.008:ratio=2:attack=5:release=150,acompressor=threshold=0.125:ratio=3:attack=10:release=150:makeup=1.5,alimiter=limit=0.9:level=0`;
+}
+
+export function buildAudioGraph({ info, keep, dubIdx, musicIdx, muteOriginal, originalVol = 0.22, musicVol = 0.12, outDur, cleanVoice = false, rnnModel = null }) {
   const parts = [];
   const fmt = "aformat=sample_fmts=fltp:channel_layouts=stereo,aresample=48000";
   let voice = null;
   if (info.hasAudio && !(dubIdx !== undefined && muteOriginal)) {
     const sel = keep ? `aselect='${keep.map(([a, b]) => `between(t,${f3(a)},${f3(b)})`).join("+")}',asetpts=N/SR/TB,` : "";
-    parts.push(`[0:a]${sel}${fmt}[orig]`);
+    parts.push(`[0:a]${sel}${fmt}${cleanVoice ? "," + voiceCleanChain(rnnModel) : ""}[orig]`);
     voice = "orig";
   }
   if (dubIdx !== undefined) {
@@ -329,6 +433,24 @@ export function buildAudioGraph({ info, keep, dubIdx, musicIdx, muteOriginal, or
   }
   if (!voice) return null;
   return { graph: parts.join(";"), label: voice };
+}
+
+export function parseEbur128(stderr) {
+  const s = String(stderr);
+  const tail = s.slice(s.lastIndexOf("Summary:") >= 0 ? s.lastIndexOf("Summary:") : 0);
+  const i = tail.match(/\bI:\s+(-?[\d.]+|-inf)\s+LUFS/);
+  const lra = tail.match(/\bLRA:\s+(-?[\d.]+)\s+LU/);
+  const pk = tail.match(/\bPeak:\s+(-?[\d.]+|-inf)\s+dBFS/);
+  const num = (m) => (m ? (m[1] === "-inf" ? -Infinity : parseFloat(m[1])) : null);
+  return { lufs: num(i), lra: num(lra), true_peak: num(pk) };
+}
+
+// Səs səviyyəsi: ölç → gücləndir → pik hədəfi keçirsə limiter → yenidən ölç və düzəlt.
+// (loudnorm-un dinamik rejimi qısa və zirvəli səsdə hədəfə çatmır, ona görə ölçüb-düzəltmə işlədilir.)
+export const TP_CEILING = -2; // AAC kodlaşdırmadan sonra real pik ≤ −1.5 dBFS qalsın
+const LIMITER = "alimiter=limit=0.708:attack=5:release=80:level=0"; // 0.708 ≈ −3 dBFS
+export function loudnessFilter(gainDb, needLimiter) {
+  return `volume=${gainDb.toFixed(2)}dB` + (needLimiter ? "," + LIMITER : "");
 }
 
 export function parseLoudnormJson(stderr) {
@@ -363,20 +485,51 @@ export async function render(prep, presetName, opts = {}, output) {
   const preset = presetOrThrow(presetName);
   const { info, keep } = prep;
   const warnings = [];
+  const fps = resolveFps(opts.fps, info);
   const rec = preset.rec && RECOMMENDED[preset.rec];
   if (rec && rec.maxDuration && prep.outDur > rec.maxDuration) warnings.push(`müddət ${f3(prep.outDur)} san: ${presetName} üçün tövsiyə olunan maksimum ${rec.maxDuration} san (rəsmi sənədlə təsdiqlənməyib)`);
   if (info.width < preset.w * 0.6 && info.height < preset.h * 0.6) warnings.push(`mənbə ${info.width}x${info.height}: ${preset.w}x${preset.h}-ə böyüdüləcək, keyfiyyət düşə bilər`);
 
-  let cues = [];
-  if (prep.words) cues = groupWords(prep.words, { maxChars: captionLayout(preset).maxChars });
-  else if (prep.srtCues) cues = prep.srtCues;
-  if (keep) cues = remapCues(cues, keep);
+  const lay = captionLayout(preset);
+  const wordStyle = opts.captionStyle === "word";
+  if (opts.captionStyle && !["word", "line"].includes(opts.captionStyle)) throw new Error("Naməlum caption-style: " + opts.captionStyle + " (line, word)");
+  if (wordStyle && !prep.words) throw new Error("Sözbəsöz altyazı üçün söz vaxtları olan transkript lazımdır (--transcript)");
+
+  // Qruplaşdırma ORİJİNAL zaman xəttində edilir (təbii fasilələr qrup sərhədidir), sonra vaxtlar kəsilmiş
+  // zaman xəttinə köçürülür. Heç bir söz atılmır; yalnız --max-sec ilə kəsilən hissənin sözləri düşür.
+  const mt = (t) => (keep ? mapTime(t, keep) : t);
+  let cues = [], chunks = null;
+  if (prep.words) {
+    const ow = prep.words.filter((w) => String(w.text).trim()).map((w, i) => ({ ...w, i }));
+    const mapped = keep ? remapWords(ow, keep) : ow;
+    if (wordStyle) {
+      chunks = groupWordChunks(ow, { maxChars: Math.floor(lay.usable / (0.62 * lay.wordFs)) })
+        .map((ch) => { const ws = ch.words.map((x) => ({ text: x.text, start: mapped[x.i].start, end: mapped[x.i].end })); return { start: ws[0].start, end: ws[ws.length - 1].end, words: ws }; })
+        .filter((ch) => ch.start < prep.outDur);
+      cues = chunks.map((c) => ({ start: c.start, end: Math.min(c.end, prep.outDur), text: c.words.map((x) => x.text).join(" ") }));
+    } else {
+      const raw = groupWords(ow, { maxChars: lay.maxChars }).map((c) => ({ text: c.text, start: mt(c.start), end: mt(c.end) }));
+      cues = raw.map((c, i) => ({ ...c, end: Math.max(c.end, Math.min(c.start + 0.3, raw[i + 1] ? raw[i + 1].start : Infinity)) }));
+    }
+  } else if (prep.srtCues) cues = keep ? remapCues(prep.srtCues, keep) : prep.srtCues;
   cues = cues.filter((c) => c.start < prep.outDur).map((c) => ({ ...c, end: Math.min(c.end, prep.outDur) }));
+  const font = (await pickFont()).family;
+
+  const timing = overlayTiming({ hook: opts.hook, cta: opts.cta, outDur: prep.outDur });
+  if (opts.hook && timing.hookSec < readingTime(opts.hook) - 0.01) warnings.push(`hook oxuma vaxtı ${f3(readingTime(opts.hook))} san lazımdır, video qısa olduğu üçün ${f3(timing.hookSec)} san göstərilir`);
+  if (opts.cta && timing.ctaSec < readingTime(opts.cta) - 0.01) warnings.push(`CTA oxuma vaxtı ${f3(readingTime(opts.cta))} san lazımdır, ${f3(timing.ctaSec)} san göstərilir`);
 
   const work = await mkdtemp(join(tmpdir(), "studio-"));
   try {
     const hasAss = cues.length > 0 || !!opts.hook || !!opts.cta;
-    if (hasAss) await writeFile(join(work, "studio.ass"), buildAss({ preset, cues, hook: opts.hook, cta: opts.cta, outDur: prep.outDur }));
+    if (hasAss) await writeFile(join(work, "studio.ass"), buildAss({ preset, cues, chunks, hook: opts.hook, cta: opts.cta, outDur: prep.outDur, font }));
+
+    let rnnModel = null;
+    if (opts.cleanVoice) {
+      const src = join(MODELS_DIR, "rnn", "sh.rnnn");
+      if (await fileExists(src)) { await copyFile(src, join(work, "voice.rnnn")); rnnModel = "voice.rnnn"; }
+      else warnings.push("RNNoise modeli yoxdur (npm run studio -- setup-models): küy azaltma afftdn ilə edildi");
+    }
 
     const inputs = ["-i", prep.input];
     let n = 1;
@@ -385,45 +538,71 @@ export async function render(prep, presetName, opts = {}, output) {
     if (opts.music) { inputs.push("-stream_loop", "-1", "-i", resolve(opts.music)); idx.music = n++; }
     if (opts.logo) { inputs.push("-i", resolve(opts.logo)); idx.logo = n++; }
 
-    const audio = buildAudioGraph({ info, keep, dubIdx: idx.dub, musicIdx: idx.music, muteOriginal: !!opts.muteOriginal, originalVol: opts.originalVol, musicVol: opts.musicVol, outDur: prep.outDur });
-    const video = buildVideoGraph({ preset, fit: opts.fit, info, keep, hasAss, logoIdx: idx.logo });
+    const audio = buildAudioGraph({ info, keep, dubIdx: idx.dub, musicIdx: idx.music, muteOriginal: !!opts.muteOriginal, originalVol: opts.originalVol, musicVol: opts.musicVol, outDur: prep.outDur, cleanVoice: !!opts.cleanVoice, rnnModel });
+    const video = buildVideoGraph({ preset, fit: opts.fit, info, keep, hasAss, logoIdx: idx.logo, fps, punchIn: !!opts.punchIn, grade: opts.grade || null });
 
     let audioFinal = audio ? audio.graph : null;
     let audioLabel = audio ? audio.label : null;
     let loudness = null;
     if (audio && opts.loudnorm !== false) {
-      const lufs = opts.lufs ?? -14, tp = -1.5, lra = 11;
-      let ln = `loudnorm=I=${lufs}:TP=${tp}:LRA=${lra}`;
-      // 1-ci keçid: yalnız səs, ölçmə
-      const meas = await run("ffmpeg", [...FF, ...inputs, "-vn", "-filter_complex", `${audio.graph};[${audio.label}]${ln}:print_format=json[m]`, "-map", "[m]", "-t", f3(prep.outDur), "-f", "null", "-"], { cwd: work });
-      const j = parseLoudnormJson(meas.stderr);
-      if (j && isFinite(Number(j.input_i))) {
-        loudness = { before_lufs: Number(j.input_i), target_lufs: lufs };
-        ln += `:measured_I=${j.input_i}:measured_TP=${j.input_tp}:measured_LRA=${j.input_lra}:measured_thresh=${j.input_thresh}:offset=${j.target_offset}:linear=true`;
-        audioFinal = `${audio.graph};[${audio.label}]${ln}[aout]`;
+      const lufs = opts.lufs ?? -14;
+      const measure = async (post) => parseEbur128((await run("ffmpeg", [...FF, ...inputs, "-vn", "-filter_complex", `${audio.graph};[${audio.label}]${post}ebur128=peak=true[m]`, "-map", "[m]", "-t", f3(prep.outDur), "-f", "null", "-"], { cwd: work })).stderr);
+      const m0 = await measure("");
+      if (m0.lufs !== null && isFinite(m0.lufs)) {
+        let gain = lufs - m0.lufs;
+        const needLimiter = m0.true_peak === null || m0.true_peak + gain > TP_CEILING;
+        if (needLimiter) {
+          // Limiter səs səviyyəsini bir az aşağı salır: ölçüb düzəldirik (ən çox 3 dəfə)
+          for (let k = 0; k < 3; k++) {
+            const m1 = await measure(loudnessFilter(gain, true) + ",");
+            if (m1.lufs === null || !isFinite(m1.lufs) || Math.abs(lufs - m1.lufs) <= 0.3) break;
+            gain += lufs - m1.lufs;
+          }
+        }
+        loudness = { before_lufs: m0.lufs, target_lufs: lufs, gain_db: Math.round(gain * 100) / 100, limiter: needLimiter };
+        audioFinal = `${audio.graph};[${audio.label}]${loudnessFilter(gain, needLimiter)}[aout]`;
         audioLabel = "aout";
-      } else warnings.push("loudnorm ölçülə bilmədi (səs çox səssizdir?), normallaşdırma keçildi");
+      } else warnings.push("səs səviyyəsi ölçülə bilmədi (səs tam səssizdir?), normallaşdırma keçildi");
     }
 
     const graph = audioFinal ? `${video};${audioFinal}` : video;
     const args = [...FF, ...inputs, "-filter_complex", graph, "-map", "[vout]"];
     if (audioLabel) args.push("-map", `[${audioLabel}]`, "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-ac", "2");
     else args.push("-an");
-    args.push("-c:v", "libx264", "-preset", opts.fast ? "veryfast" : "medium", "-crf", String(opts.crf ?? 20), "-pix_fmt", "yuv420p", "-profile:v", "high", "-movflags", "+faststart", "-map_metadata", "-1", "-t", f3(prep.outDur), resolve(output));
+    args.push("-c:v", "libx264", "-preset", opts.fast ? "veryfast" : "medium", "-crf", String(opts.crf ?? 20), "-r", String(fps), "-pix_fmt", "yuv420p", "-profile:v", "high", "-movflags", "+faststart", "-map_metadata", "-1", "-t", f3(prep.outDur), resolve(output));
 
     if (opts.dryRun) return { output: resolve(output), dryRun: true, command: ["ffmpeg", ...args].join(" "), warnings };
 
     await mkdir(dirname(resolve(output)), { recursive: true });
     await run("ffmpeg", args, { cwd: work });
-    if (cues.length) await writeFile(resolve(output).replace(/\.[^.]+$/, "") + ".srt", cuesToSrt(cues));
-    const verify = await verifyOutput(output, preset, prep.outDur, !!audioLabel);
-    return { output: resolve(output), preset: presetName, duration: verify.info.duration, cues: cues.length, loudness, warnings, verify };
+    const base = resolve(output).replace(/\.[^.]+$/, "");
+    if (cues.length) await writeFile(base + ".srt", cuesToSrt(cues));
+    const verify = await verifyOutput(output, preset, prep.outDur, !!audioLabel, fps);
+    // QA üçün yan fayl: studiya nəyi hara qoyduğunu yazır (qa əmri bunu oxuyur)
+    const sidecar = {
+      studio: 1, preset: presetName, width: preset.w, height: preset.h, vertical: preset.vertical, fps, expected_duration: prep.outDur,
+      target_lufs: audioLabel === "aout" ? (opts.lufs ?? -14) : null, has_audio: !!audioLabel, has_music: !!opts.music, has_dub: !!opts.dub, clean_voice: !!opts.cleanVoice,
+      caption_style: cues.length ? (wordStyle ? "word" : "line") : null, font,
+      layout: { caption_px: wordStyle ? lay.wordFs : lay.fs, hook_px: lay.hookFs, margin_left: lay.margin, margin_right: lay.marginR, caption_margin_bottom: lay.marginV, hook_margin_top: preset.vertical ? SAFE.top + 20 : Math.round(preset.h * 0.06) },
+      hook: opts.hook ? { text: opts.hook, start: 0, end: timing.hookSec } : null,
+      cta: opts.cta ? { text: opts.cta, start: Math.max(0, prep.outDur - timing.ctaSec), end: prep.outDur } : null,
+      cues, cuts: keep ? keep.length - 1 : 0,
+    };
+    await writeFile(base + ".studio.json", JSON.stringify(sidecar, null, 2) + "\n");
+    const result = { output: resolve(output), preset: presetName, duration: verify.info.duration, cues: cues.length, loudness, warnings, verify };
+    // Qayda: musiqi qoyulubsa musiqisiz nüsxə də verilir (platforma başqasının musiqisini susdura bilər)
+    if (opts.music && opts.noMusicCopy !== false) {
+      const alt = await render(prep, presetName, { ...opts, music: undefined, noMusicCopy: false }, base + "-musiqisiz.mp4");
+      result.noMusicCopy = alt.output;
+      if (!alt.verify.ok) result.verify = { ...result.verify, ok: false, checks: result.verify.checks.concat(alt.verify.checks.filter((c) => !c.ok).map((c) => ({ ...c, name: "musiqisiz: " + c.name }))) };
+    }
+    return result;
   } finally {
     await rm(work, { recursive: true, force: true });
   }
 }
 
-export async function verifyOutput(file, preset, expectedDur, expectAudio) {
+export async function verifyOutput(file, preset, expectedDur, expectAudio, fps = null) {
   const info = await probe(file);
   const checks = [];
   const add = (name, ok, detail) => checks.push({ name, ok, detail });
@@ -431,7 +610,8 @@ export async function verifyOutput(file, preset, expectedDur, expectAudio) {
   add("video kodek h264", info.vcodec === "h264", info.vcodec);
   add("səs", expectAudio ? info.hasAudio && info.acodec === "aac" : true, expectAudio ? String(info.acodec) : "səs gözlənilmirdi");
   add("müddət", Math.abs(info.duration - expectedDur) <= 0.4, `${f3(info.duration)} san (gözlənilən ≈ ${f3(expectedDur)})`);
-  add("fps ≤ 30", info.fps <= 30.5, f3(info.fps));
+  if (fps) add("fps " + fps, Math.abs(info.fps - fps) < 0.5, f3(info.fps));
+  else add("fps ≤ 60", info.fps <= 60.5, f3(info.fps));
   return { ok: checks.every((c) => c.ok), checks, info };
 }
 
