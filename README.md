@@ -37,6 +37,7 @@ Hər cavabın statusunu sistem təyin edir (`achieved`, `partial`, `blocked`, `p
 | `docs/ENVIRONMENT.md` | Bütün mühit dəyişənləri və sirlər |
 | `docs/DEPLOYMENT.md` | Deploy, dry-run, geri qaytarma |
 | `docs/SMOKE.md` | Real açarlar əlavə olunandan sonra ilk sınaq |
+| `docs/STUDIO.md` | Video studiya: montaj, subtitr, dublaj miksi, reklam, çoxplatformalı export (`npm run studio`) |
 | `docs/API.md` | HTTP ünvanları |
 | `docs/INTEGRATIONS.md` | Telegram / Instagram / TikTok / YouTube / Shopify / Kimi: nə lazımdır, hansı icazələr |
 | `docs/VIDEO.md` | Video emal xidməti |
