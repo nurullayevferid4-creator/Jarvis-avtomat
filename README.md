@@ -40,6 +40,7 @@ Hər cavabın statusunu sistem təyin edir (`achieved`, `partial`, `blocked`, `p
 | `docs/API.md` | HTTP ünvanları |
 | `docs/INTEGRATIONS.md` | Telegram / Instagram / TikTok / YouTube / Shopify / Kimi: nə lazımdır, hansı icazələr |
 | `docs/VIDEO.md` | Video emal xidməti |
+| `docs/VIDEO-PAKET.md` | Video Studio → Instapilot / JARVIS video paketi (`integrations/video-studio-instapilot/`) |
 | `docs/TROUBLESHOOTING.md` | Tipik xətalar |
 | `SECURITY.md`, `APPROVALS.md`, `TOOLS.md`, `SOCIAL.md`, `docs/SHOPIFY.md`, `docs/LEADS.md`, `docs/MARKETING.md`, `docs/AGENTS.md` | Hissə üzrə təfərrüat |
 
