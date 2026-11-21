@@ -17,4 +17,6 @@ node_modules/
 
 # Sistem faylları
 .DS_Store
-.claude/
+.claude/*
+# Layihə skill-ləri (aitmpl.com) izlənir: yalnız .claude/ içindəki digər fayllar (lokal ayarlar) ignor olunur
+!.claude/skills/
