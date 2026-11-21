@@ -1,0 +1,15 @@
+{
+  "_comment": "MOCK TEST DATA. Real hesab deyil.",
+  "open_id": "mock-open-id-0001",
+  "union_id": "mock-union-0001",
+  "avatar_url": "https://example.invalid/avatar.jpg",
+  "display_name": "Mock Şirniyyat Evi",
+  "username": "mock_sirniyyat",
+  "bio_description": "Ev üsulu tortlar və şirniyyatlar 🍰 Sifariş üçün DM",
+  "profile_deep_link": "https://example.invalid/@mock_sirniyyat",
+  "is_verified": false,
+  "follower_count": 1840,
+  "following_count": 120,
+  "likes_count": 25300,
+  "video_count": 12
+}

@@ -1,0 +1,9 @@
+# Hesab məlumatları şəxsidir, repo isə açıqdır: workspace məzmunu GitHub-a getmir.
+workspace/*
+!workspace/.gitkeep
+!workspace/README.md
+# Build nəticələri
+dist/
+# Token faylları
+.secrets/
+*.token.json
