@@ -1,6 +1,12 @@
 # Xəzər: dəniz, yoxsa göl? (coğrafi fakt videosu)
 
-9:16, 1080x1920, 30 fps, 61,7 san. Xəritə animasiyası, sözbəsöz subtitr, sonda şərh CTA-sı.
+**v2 (əsas):** 9:16, 1080x1920, 30 fps, 69,5 san. Dublaj: Speko, Soniox "Adrian" səsi (AI), 1,07x sürət.
+Subtitr STT söz vaxtlarına bağlıdır (`words.py`), vizual işarələr də sözlərə bağlıdır. Fayllar: `render2.py`, `audio2.py`, `words.py`.
+Rəng istinad tərzinə yaxındır: tünd yaşılımtıl relyef, firuzəyi sahil xətti, açıq yaşıl vurğu.
+Səs miksi: dublaj −16 LUFS, musiqi sidechain ilə səs altında enir, yekun −15 LUFS, pik −1,2 dB.
+Dublaj mətni v1-dən bir az genişdir (aşağıdakı cədvəl v1-dir; v2 mətni `words.py`-dadır).
+
+**v1:** 61,7 san, səssiz diktor, yalnız fon səsi (`render.py`, `audio.py`).
 Kür çayı videosunun tərzindən ilhamlanıb: tünd relyef xəritə, xətt animasiyası, iri başlıq.
 Mövzu, mətn, rəng və dizayn ayrıdır. Heç nə kopyalanmayıb.
 
@@ -37,8 +43,7 @@ Xəritə: Natural Earth (sahil, çaylar, sərhədlər, ictimai mülkiyyət), Map
 
 ## Səs
 
-Fon səsi kodla sintez olunub (`audio.py`), lisenziya problemi yoxdur. Ortalama −20 dB, pik −6 dB.
-Diktor səsi yoxdur: bu mühitdə Azərbaycan dilli TTS əlçatan deyildi. Səs yazmaq istəsən, yuxarıdakı mətni vaxtlarla oxu, ffmpeg ilə üstünə qoyulacaq.
+Fon musiqisi kodla sintez olunub, lisenziya problemi yoxdur. v2-də dublaj AI səsidir: platformada "AI ilə yaradılıb" işarəsi qoyulmalıdır. Səs klipləri repoya yazılmayıb.
 
 ## Yenidən qurmaq
 
@@ -49,7 +54,9 @@ python3 fetch.py $W/tiles                 # z7 relyef plitələri
 # t5/: z5 plitələr x 19-21, y 10-13 (batimetriya)
 python3 base.py $W/build $W               # relyef + quru maskası (geo.py $W/build-də olmalıdır)
 python3 prep.py $W                        # vec.json, depth.npy, su rəngi
-XEZER_WORK=$W/build python3 render.py $W/out.mp4
+XEZER_WORK=$W/build python3 render.py $W/out.mp4      # v1
+python3 grade.py $W/build && XEZER_WORK=$W/build python3 render2.py $W/v2.mp4   # v2 (words.py lazımdır)
+# v2 səsi: Speko klipləri atempo=1.07 ilə hər səhnənin 'vs' vaxtına qoyulur, audio2.py musiqi verir
 python3 audio.py $W/out.mp4.scenes.json $W/bed.wav
 ffmpeg -i $W/out.mp4 -i $W/bed.wav -filter_complex "[1]loudnorm=I=-18:TP=-1.5[a]" -map 0:v -map "[a]" -c:v copy -c:a aac final.mp4
 ```
