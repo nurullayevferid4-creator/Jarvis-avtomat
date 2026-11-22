@@ -18,3 +18,9 @@ Fayllar: `script.json` (dublaj mətni), `align.py` → `align.json` (söz vaxtla
 - "Böyük hissəsi XII əsrə aiddir" ümumi qəbul olunan fikir kimi Wikipedia-da qeyd olunur.
 
 Fotolar Wikimedia Commons-dan (müəlliflər və lisenziyalar `youtube.md`-də və videoda hər fotonun altında). Commons birbaşa yüklənmədiyi üçün şəkillər media görüntüləyicinin skrinşotundan kəsilib (~950–1900 px).
+
+## İngiliscə versiya və Short (`en/`)
+- `en/qq_en.py`: eyni video, bütün ekran yazıları ingiliscə; `en/script.json` dublaj mətni, `en/align.json` söz vaxtları, `en/qq_audio_en.py` musiqi/kliklər. ~3:36.
+- `en/short.py`: YouTube Shorts, 1080x1920, ~51 san, ingiliscə (`en/short.json`, `en/salign.json`, `en/short_audio.py`). Hook → əfsanələr → tarix → quyu/şərq → nəticə + abunə düyməsi.
+- `en/youtube_en.md`: ingiliscə başlıq, təsvir, fəsillər, Short təsviri.
+- İşə salmaq: `QQ_ALIGN=en/align.json python3 en/qq_en.py out.mp4`, `QQ_ALIGN=en/salign.json python3 en/short.py short.mp4` (img/ qovluğu QQ_WORK-da).
