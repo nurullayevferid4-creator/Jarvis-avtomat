@@ -1,0 +1,260 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1080px;height:1920px;overflow:hidden;background:#07110c;font-family:Inter,"Noto Color Emoji",sans-serif;color:#fff}
+#world{position:absolute;inset:0;transform-origin:50% 45%}
+#bg{position:absolute;inset:-100px;background:radial-gradient(circle at 50% 38%,#1f4a33 0%,#0b1d14 45%,#050b08 80%)}
+#rays{position:absolute;left:50%;top:40%;width:2400px;height:2400px;margin:-1200px 0 0 -1200px;opacity:.10;
+ background:repeating-conic-gradient(from 0deg,#fff 0 6deg,transparent 6deg 18deg);border-radius:50%}
+#prog{position:absolute;top:0;left:0;height:12px;background:linear-gradient(90deg,#ffd54a,#5be38a);z-index:9}
+#head{position:absolute;top:70px;left:0;right:0;text-align:center;font-weight:800;font-size:46px;letter-spacing:.5px}
+#head .y{color:#ffd54a}
+#chip{position:absolute;top:150px;left:50%;transform:translateX(-50%);font-size:30px;font-weight:700;color:#0b1d14;background:#ffd54a;padding:8px 26px;border-radius:40px;white-space:nowrap}
+.scene{position:absolute;left:50px;right:50px;top:260px;height:1100px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;opacity:0}
+.big{font-size:170px;font-weight:900;letter-spacing:-4px;line-height:1}
+.mid{font-size:64px;font-weight:800;line-height:1.15}
+.sm{font-size:38px;font-weight:600;color:#b9cbbf;line-height:1.3}
+.emo{font-size:200px;line-height:1;display:inline-block}
+.g{color:#5be38a}.r{color:#ff6b6b}.y{color:#ffd54a}
+.card{background:rgba(255,255,255,.07);border:2px solid rgba(255,255,255,.15);border-radius:40px;padding:34px 44px;margin:16px 0;backdrop-filter:blur(4px)}
+.row{display:flex;gap:26px;align-items:center;justify-content:center;width:100%}
+.flock{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 10px;width:940px;font-size:96px;line-height:1.1}
+.flock span{display:inline-block;opacity:0;position:relative}
+.tag{position:absolute;top:-22px;left:50%;transform:translateX(-50%);font-size:24px;font-weight:800;background:#ff6bb5;color:#fff;padding:2px 10px;border-radius:14px;white-space:nowrap}
+.cal{position:relative;width:960px;height:300px;margin-top:20px}
+.months{display:flex;width:100%}
+.months div{flex:1;font-size:26px;font-weight:700;color:#8fa79a;text-align:center;padding-top:110px}
+.track{position:absolute;top:60px;left:0;right:0;height:22px;border-radius:12px;background:rgba(255,255,255,.12)}
+.fill{position:absolute;top:60px;height:22px;border-radius:12px;background:linear-gradient(90deg,#ff6bb5,#ffd54a)}
+.pin{position:absolute;top:-10px;font-size:64px;transform:translateX(-50%)}
+.plab{position:absolute;top:190px;transform:translateX(-50%);font-size:30px;font-weight:800;white-space:nowrap}
+.bar{height:56px;border-radius:28px;background:rgba(255,255,255,.12);width:900px;overflow:hidden;margin-top:18px}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,#5be38a,#b6ff5b);border-radius:28px}
+.drop{display:inline-block;font-size:120px;opacity:0}
+#sub{position:absolute;left:40px;right:40px;top:1420px;height:300px;display:flex;flex-wrap:wrap;justify-content:center;align-content:center;gap:8px 0}
+#sub span{font-size:66px;font-weight:900;text-shadow:0 4px 0 #000,0 0 22px rgba(0,0,0,.9);-webkit-text-stroke:2px #000;display:inline-block;margin:0 16px}
+#sub span.on{color:#ffd54a;transform:scale(1.12)}
+#disc{position:absolute;bottom:70px;left:0;right:0;text-align:center;font-size:28px;color:#6f857a}
+#flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+</style></head><body>
+<div id="world">
+<div id="bg"></div><div id="rays"></div>
+<div id="head">Vaqif: <span class="y">iPhone 18</span> yoxsa <span class="g">qoyun</span>? 🐑</div>
+<div id="chip"></div>
+
+<!-- 0 hook -->
+<div class="scene" id="s0">
+  <div class="big y" id="h0">3 660 ₼</div>
+  <div class="row" style="margin-top:70px">
+    <div class="card" style="flex:1"><div class="emo" id="h0a">📱</div><div class="mid" style="font-size:48px;margin-top:16px">1 telefon</div></div>
+    <div class="mid" style="font-size:70px">ya</div>
+    <div class="card" style="flex:1;border-color:#5be38a"><div class="emo" id="h0b">🐑</div><div class="mid" style="font-size:48px;margin-top:16px">10 qoyun</div></div>
+  </div>
+  <div class="mid" id="h0q" style="margin-top:60px;opacity:0">Hansı varlandırar? 🤔</div>
+</div>
+
+<!-- 1 phone -->
+<div class="scene" id="s1">
+  <div class="emo" id="ph" style="font-size:300px">📱</div>
+  <div class="mid" style="margin-top:20px">iPhone 18 Pro Max <span class="sm">256 GB</span></div>
+  <div class="card"><div class="big y"><span id="c1">0</span> ₼</div></div>
+  <div class="sm">Kontakt.az · endirimli qiymət · 24.11.2026</div>
+</div>
+
+<!-- 2 market -->
+<div class="scene" id="s2">
+  <div class="card mid">🏷️ 1 qoyun ≈ <span class="y">350 ₼</span></div>
+  <div class="flock" id="f2" style="margin:30px 0"></div>
+  <div class="card mid" id="eq2" style="opacity:0">3 660 ÷ 350 = <span class="g">10 🐑</span><br><span class="sm">+ 160 ₼ artıq qalır</span></div>
+</div>
+
+<!-- 3 calendar -->
+<div class="scene" id="s3">
+  <div class="mid">🔑 Sirr buradadır</div>
+  <div class="sm" style="margin-top:12px">Qoyun balasını <b class="y">~5 ay</b> daşıyır</div>
+  <div class="cal">
+    <div class="track"></div><div class="fill" id="fill3"></div>
+    <div class="pin" id="pinA">💞</div><div class="pin" id="pinB" style="opacity:0">🐣</div>
+    <div class="plab y" id="labA">Payız: cütləşmə</div><div class="plab g" id="labB" style="opacity:0">Yaz: quzulama</div>
+    <div class="months"><div>Okt</div><div>Noy</div><div>Dek</div><div>Yan</div><div>Fev</div><div>Mar</div><div>Apr</div><div>May</div><div>İyn</div></div>
+  </div>
+  <div class="card mid" id="pg3" style="opacity:0;margin-top:30px">🤰 ~5 ay = <span class="y">~150 gün</span></div>
+</div>
+
+<!-- 4 twins -->
+<div class="scene" id="s4">
+  <div class="mid">Bəziləri <span class="y">əkiz</span> doğur 👯</div>
+  <div class="flock" id="f4" style="margin:40px 0;font-size:80px"></div>
+  <div class="card mid">10 qoyun → <span class="g" id="c4">0</span> <span class="g">quzu</span></div>
+</div>
+
+<!-- 5 growth -->
+<div class="scene" id="s5">
+  <div class="mid">☀️ Yaz–yay: otlaqda böyüyür</div>
+  <div style="height:420px;display:flex;align-items:flex-end;justify-content:center;margin:20px 0">
+    <span class="emo" id="lamb5" style="font-size:120px">🐑</span>
+  </div>
+  <div style="font-size:70px;letter-spacing:10px">🌿🌱🌿🌱🌿</div>
+  <div class="row" style="margin-top:20px">
+    <div class="card mid"><span id="m5">0</span> ay</div>
+    <div class="card mid" id="p5" style="opacity:0">≈ <span class="y">200 ₼</span></div>
+  </div>
+</div>
+
+<!-- 6 revenue -->
+<div class="scene" id="s6">
+  <div class="mid">12 × 200 ₼</div>
+  <div id="rain" style="position:relative;width:900px;height:380px"></div>
+  <div class="card" style="border-color:#5be38a"><div class="big g">+<span id="c6">0</span> ₼</div></div>
+</div>
+
+<!-- 7 costs -->
+<div class="scene" id="s7">
+  <div class="mid">Amma pulsuz deyil 😬</div>
+  <div class="row" style="margin:40px 0">
+    <div class="card" id="k1" style="opacity:0"><div class="emo" style="font-size:110px">🌾</div><div class="sm">ot</div></div>
+    <div class="card" id="k2" style="opacity:0"><div class="emo" style="font-size:110px">🌽</div><div class="sm">arpa</div></div>
+    <div class="card" id="k3" style="opacity:0"><div class="emo" style="font-size:110px">💉</div><div class="sm">baytar</div></div>
+  </div>
+  <div class="card"><div class="sm">Qış xərci (təxmini)</div><div class="big r">−<span id="c7">0</span> ₼</div></div>
+</div>
+
+<!-- 8 net -->
+<div class="scene" id="s8">
+  <div class="sm">2 400 − 700 =</div>
+  <div class="big g" style="font-size:210px;margin:20px 0"><span id="c8">0</span> ₼</div>
+  <div class="mid">təmiz qazanc 💚</div>
+  <div class="bar"><i id="bar8" style="width:0"></i></div>
+  <div class="sm" style="margin-top:14px">qoyulan pulun <b class="y">~46%-i</b> · 1 ildə</div>
+</div>
+
+<!-- 9 phone value -->
+<div class="scene" id="s9">
+  <div class="mid">Bəs telefon? 📱</div>
+  <svg width="900" height="520" viewBox="0 0 900 520" style="margin-top:30px">
+    <line x1="60" y1="460" x2="860" y2="460" stroke="#ffffff33" stroke-width="4"/>
+    <line x1="60" y1="40" x2="60" y2="460" stroke="#ffffff33" stroke-width="4"/>
+    <path id="dropline" d="M60 90 C 300 120, 480 250, 840 380" fill="none" stroke="#ff6b6b" stroke-width="12" stroke-linecap="round" stroke-dasharray="1000" stroke-dashoffset="1000"/>
+    <text x="70" y="500" fill="#8fa79a" font-size="30" font-family="Inter">bu gün</text>
+    <text x="700" y="500" fill="#8fa79a" font-size="30" font-family="Inter">1 il sonra</text>
+  </svg>
+  <div class="card mid" id="nm9" style="opacity:0">Yeni model çıxır ✨<br><span class="r">köhnənin dəyəri düşür 📉</span></div>
+</div>
+
+<!-- 10 final -->
+<div class="scene" id="s10">
+  <div class="row">
+    <div class="card" style="flex:1;opacity:.75"><div class="emo" style="font-size:110px">📱</div><div class="sm">iPhone</div><div class="mid r" style="font-size:52px">📉</div></div>
+    <div class="card" style="flex:1.6;border-color:#5be38a;text-align:left">
+      <div class="sm">🐑 10 qoyun <b style="float:right;color:#fff">3 500 ₼</b></div>
+      <div class="sm" style="margin-top:8px">💵 nağd <b style="float:right;color:#fff">1 860 ₼</b></div>
+    </div>
+  </div>
+  <div class="card" style="width:100%;border-color:#5be38a;margin-top:26px"><div class="sm">Vaqifdə il sonunda</div><div class="big g"><span id="c10">0</span> ₼</div></div>
+  <div class="card sm" id="warn" style="opacity:0;border-color:#ff6b6b">⚠️ Qoyun = zəhmət + risk</div>
+  <div class="mid" id="cta" style="opacity:0;margin-top:16px">Sən hansını seçərdin? 👇</div>
+</div>
+
+<div id="sub"></div>
+<div id="disc">Təxmini hesablama · qiymətlər bazara görə dəyişir</div>
+</div>
+<div id="flash"></div>
+<div id="prog"></div>
+
+<script>
+const TL = __TIMELINE__;
+const CAP = [
+ "3 660 manat. Ya bir telefon… ya da 10 canlı qoyun. Bir ildən sonra hansı səni varlandırar?",
+ "Vaqif yeni iPhone 18 Pro Max almaq istəyir. Kontaktda endirimlə qiyməti 3 660 manatdır.",
+ "Bazarda orta ölçülü bir qoyun təxminən 350 manatdır. Bu pula 10 qoyun gəlir, üstəlik 160 manat da artır.",
+ "İndi sirr buradadır. Qoyun balasını təxminən 5 ay daşıyır. Payızda cütləşən qoyun yazda quzulayır.",
+ "Bəzi qoyunlar əkiz doğur. Ona görə 10 qoyundan orta hesabla 12 quzu alınır.",
+ "Yaz və yay boyu quzular otlaqda böyüyür. 6 aydan sonra satışa hazırdır. Hər biri təxminən 200 manat.",
+ "12 quzu, hər biri 200 manat. Bu, 2 400 manat edir!",
+ "Amma qoyun pulsuz saxlanılmır. Qış üçün ot, arpa və baytar xərci təxminən 700 manatdır.",
+ "Təmiz qazanc 1 700 manat. Yəni qoyduğu pulun təxminən yarısı qədər, cəmi bir ildə.",
+ "Bəs telefon? Bir ildən sonra yeni model çıxır, sənin telefonunun qiyməti isə düşür.",
+ "İl sonunda Vaqifdə 10 qoyun və 1 860 manat nağd pul var. Cəmi 5 360 manat. Amma unutma: qoyun zəhmət və risk istəyir. Sən olsaydın hansını seçərdin? Şərhdə yaz!"
+];
+const CHIPS=["","1-ci addım · telefon","2-ci addım · bazar","3-cü addım · təbiət","3-cü addım · təbiət","4-cü addım · böyümə","5-ci addım · gəlir","6-cı addım · xərc","Nəticə","Müqayisə","Final"];
+// spoken weight of numerals (how long they take to say)
+const SPOKEN={"3":3,"660":16,"10":2,"18":8,"350":10,"160":9,"5":3,"12":6,"6":4,"200":7,"2":3,"400":7,"700":8,"1":3,"860":13,"360":11};
+// word timing: proportional to spoken length, over the voiced part of the clip
+const WORDS=CAP.map((c,i)=>{
+  const ws=c.split(/\s+/); const w=ws.map(x=>{const k=x.replace(/[^\dA-Za-zƏəĞğİıÖöŞşÜüÇç]/g,'');return (SPOKEN[k]||k.length||1)+(/[.!?…:,]$/.test(x)?3:0)+1});
+  const tot=w.reduce((a,b)=>a+b,0), dur=TL.durs[i]-0.35; let acc=0.1;
+  return ws.map((x,j)=>{const s=acc;acc+=w[j]/tot*dur;return {t:x,s,e:acc}});
+});
+// caption chunks of ~3 words
+const CHUNKS=WORDS.map(ws=>{const out=[];let cur=[];ws.forEach(w=>{cur.push(w);if(cur.length>=3||/[.!?…:]$/.test(w.t)){out.push(cur);cur=[]}});if(cur.length)out.push(cur);return out});
+
+const $=id=>document.getElementById(id);
+const cl=(x)=>Math.min(Math.max(x,0),1);
+const ease=x=>1-Math.pow(1-cl(x),3);
+const back=x=>{x=cl(x);const c=1.9;return 1+(c+1)*Math.pow(x-1,3)+c*Math.pow(x-1,2)};
+const fmt=n=>Math.round(n).toLocaleString('en-US').replace(/,/g,' ');
+const count=(id,to,p)=>{$(id).textContent=fmt(to*ease(p))};
+const pop=(el,p)=>{el.style.opacity=cl(p*3);el.style.transform=`scale(${0.2+0.8*back(p)})`};
+
+// build flocks
+for(let i=0;i<10;i++){const s=document.createElement('span');s.textContent='🐑';$('f2').appendChild(s)}
+for(let i=0;i<10;i++){const s=document.createElement('span');s.innerHTML='🐑<small style="font-size:52px">🐑</small>';if(i===2||i===7){s.innerHTML+='<small style="font-size:52px">🐑</small><b class="tag">əkiz!</b>'};$('f4').appendChild(s)}
+for(let i=0;i<12;i++){const s=document.createElement('span');s.className='drop';s.textContent=i%2?'💵':'💰';s.style.position='absolute';s.style.left=(20+ (i*73)%820)+'px';$('rain').appendChild(s)}
+
+// event list for SFX (absolute seconds)
+const EV=[]; const S=TL.starts;
+S.forEach((s,i)=>{if(i>0)EV.push({t:s-0.15,k:'whoosh'})});
+EV.push({t:S[0]+0.05,k:'boom'});
+for(let i=0;i<10;i++)EV.push({t:S[2]+1.2+i*0.22,k:'pop'});
+EV.push({t:S[2]+3.6,k:'ding'});
+EV.push({t:S[3]+3.2,k:'pop'});
+for(let i=0;i<10;i++)EV.push({t:S[4]+0.6+i*0.25,k:'pop'});
+EV.push({t:S[1]+2.6,k:'cash'});EV.push({t:S[6]+2.6,k:'cash'});EV.push({t:S[8]+2.0,k:'cash'});
+[0,1,2].forEach(k=>EV.push({t:S[7]+3.0+k*0.6,k:'thud'}));
+EV.push({t:S[9]+1.0,k:'down'});
+EV.push({t:S[10]+5.6,k:'boom'});EV.push({t:S[10]+5.6,k:'cash'});
+window.EVENTS=EV;
+
+let lastShake=[S[0]+0.05,S[10]+5.6,S[8]+2.0];
+window.render=function(t){
+  $('prog').style.width=(t/TL.total*100)+'%';
+  let cur=0; for(let i=0;i<S.length;i++) if(t>=S[i]-0.15) cur=i;
+  const lt=t-S[cur];
+  // camera: slow push + shake
+  let sh=0; lastShake.forEach(x=>{const d=t-x;if(d>0&&d<0.45)sh+=(1-d/0.45)*16});
+  const z=1+0.035*cl((lt+0.15)/(TL.durs[cur]+0.4));
+  $('world').style.transform=`scale(${z}) translate(${Math.sin(t*90)*sh}px,${Math.cos(t*77)*sh}px)`;
+  $('rays').style.transform=`rotate(${t*6}deg)`;
+  // flash on cut
+  const fl=Math.max(...S.slice(1).map(s=>{const d=t-(s-0.15);return d>0&&d<0.25?(1-d/0.25)*0.35:0}),0);
+  $('flash').style.opacity=fl;
+  $('chip').textContent=CHIPS[cur]; $('chip').style.opacity=CHIPS[cur]?1:0;
+  for(let i=0;i<11;i++){const el=$('s'+i);if(i!==cur){el.style.opacity=0;continue}
+    const a=ease((lt+0.15)/0.35);el.style.opacity=a;el.style.transform=`translateX(${(1-a)*120}px)`}
+  // per-scene animation
+  if(cur===0){const p=back(lt/0.5);$('h0').style.transform=`scale(${2.4-1.4*p})`;$('h0').style.opacity=cl(lt/0.2);
+    pop($('h0a'),(lt-1.8)/0.5);pop($('h0b'),(lt-3.5)/0.5);$('h0q').style.opacity=ease((lt-4.8)/0.4)}
+  if(cur===1){$('ph').style.transform=`rotate(${Math.sin(lt*2)*6}deg) scale(${0.9+0.1*ease(lt/0.6)})`;count('c1',3660,(lt-0.8)/1.8)}
+  if(cur===2){[...$('f2').children].forEach((s,k)=>pop(s,(lt-1.2-k*0.22)/0.35));$('eq2').style.opacity=ease((lt-3.6)/0.4)}
+  if(cur===3){const p=ease((lt-1.6)/2.6);const L=960/9;$('fill3').style.left=(0.5*L)+'px';$('fill3').style.width=(p*5*L)+'px';
+    $('pinA').style.left=(0.5*L)+'px';$('labA').style.left=(0.5*L+40)+'px';
+    $('pinB').style.left=(5.5*L)+'px';$('labB').style.left=(5.5*L)+'px';pop($('pinB'),(lt-3.2)/0.4);$('labB').style.opacity=ease((lt-3.3)/0.3);
+    $('pg3').style.opacity=ease((lt-2.0)/0.4)}
+  if(cur===4){[...$('f4').children].forEach((s,k)=>pop(s,(lt-0.6-k*0.25)/0.35));
+    const n=[...$('f4').children].filter((s,k)=>lt>0.6+k*0.25).length;$('c4').textContent=Math.min(12,n+(n>2?1:0)+(n>7?1:0))}
+  if(cur===5){const p=ease((lt-0.5)/3.8);$('lamb5').style.fontSize=(120+200*p)+'px';$('lamb5').style.transform=`translateY(${-Math.abs(Math.sin(lt*5))*20}px)`;
+    $('m5').textContent=Math.round(6*p);pop($('p5'),(lt-4.6)/0.4)}
+  if(cur===6){[...$('rain').children].forEach((s,k)=>{const d=lt-0.2-k*0.12;s.style.opacity=d>0?1:0;s.style.top=(-140+Math.min(d,1)*Math.min(d,1)*380+(k%3)*30)+'px'});count('c6',2400,(lt-0.8)/1.8)}
+  if(cur===7){['k1','k2','k3'].forEach((id,k)=>{const p=(lt-3.0-k*0.6)/0.4;$(id).style.opacity=cl(p*2);$(id).style.transform=`translateY(${(1-back(p))*-200}px)`});count('c7',700,(lt-4.0)/1.4)}
+  if(cur===8){count('c8',1700,(lt-0.3)/1.7);$('bar8').style.width=(46*ease((lt-2.6)/1.5))+'%'}
+  if(cur===9){$('dropline').style.strokeDashoffset=1000-1000*ease((lt-0.8)/2.2);$('nm9').style.opacity=ease((lt-2.2)/0.4)}
+  if(cur===10){count('c10',5360,(lt-3.2)/2.4);$('warn').style.opacity=ease((lt-7.4)/0.4);pop($('cta'),(lt-11.0)/0.5)}
+  // karaoke captions
+  const ws=WORDS[cur], ch=CHUNKS[cur]; let ci=0; ch.forEach((c,k)=>{if(lt>=c[0].s-0.05)ci=k});
+  const sub=$('sub'); sub.innerHTML='';
+  if(lt>-0.05) ch[ci].forEach(w=>{const sp=document.createElement('span');sp.textContent=w.t;if(lt>=w.s&&lt<w.e+0.05)sp.className='on';sub.appendChild(sp)});
+};
+render(0);
+</script>
+</body></html>
