@@ -1,0 +1,154 @@
+<!doctype html><html><head><meta charset="utf-8">
+<style>
+@font-face{font-family:Hand;src:url(caveat-latin.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+2000-206F}
+@font-face{font-family:Hand;src:url(caveat-latin-ext.woff2) format('woff2');unicode-range:U+0100-02BA,U+20A0-20C4}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1080px;height:1920px;overflow:hidden;background:#000;font-family:Inter,"Noto Color Emoji",sans-serif}
+#street{position:absolute;inset:0}
+#cam{position:absolute;inset:0;transform-origin:0 0}
+#nb{position:absolute;inset:0;background:radial-gradient(circle at 50% 30%,#2a5a3e,#0f2418 75%);opacity:0}
+#page{position:absolute;left:50px;top:130px;width:980px;height:960px;background:#FFFBEA;border-radius:26px;box-shadow:0 18px 0 #d8cfae,0 30px 60px rgba(0,0,0,.45);overflow:hidden;transform-origin:50% 0}
+#page .lines{position:absolute;inset:0;background:repeating-linear-gradient(#FFFBEA 0 98px,#B9D3F0 98px 101px);background-position:0 40px}
+#page .margin{position:absolute;left:120px;top:0;bottom:0;width:4px;background:#F2A3A3}
+#rings{position:absolute;left:50px;top:110px;width:980px;height:50px;display:flex;justify-content:space-around;padding:0 60px}
+#rings i{width:26px;height:56px;border-radius:14px;background:linear-gradient(90deg,#9aa,#eee,#9aa);box-shadow:0 2px 0 #667}
+.w{position:absolute;left:150px;font-family:Hand,"Noto Color Emoji",cursive;font-size:96px;font-weight:700;color:#23408E;white-space:nowrap;line-height:1}
+.w .em{font-family:"Noto Color Emoji";font-size:70px}
+#pen{position:absolute;font-size:90px;transform:rotate(-10deg);pointer-events:none}
+#bust{position:absolute;left:190px;top:1060px;width:700px;height:770px}
+#sub{position:absolute;left:24px;right:24px;top:1560px;text-align:center}
+#who{display:inline-block;font-size:34px;font-weight:900;padding:6px 22px;border-radius:30px;color:#fff;margin-bottom:12px}
+#line{display:flex;flex-wrap:wrap;justify-content:center}
+#line span{font-size:68px;font-weight:900;color:#fff;-webkit-text-stroke:3px #000;paint-order:stroke fill;text-shadow:0 6px 0 #000;margin:0 18px;display:inline-block}
+#line span.on{color:#ffd54a}
+#chip{position:absolute;top:70px;left:50%;transform:translateX(-50%);font-size:32px;font-weight:900;background:#2E9E5B;color:#fff;padding:12px 32px;border-radius:40px;white-space:nowrap;box-shadow:0 6px 0 #1F7442}
+#price{position:absolute;font-size:110px;font-weight:900;color:#fff;background:#D8353A;padding:6px 30px;border-radius:26px;box-shadow:0 8px 0 #8f1d21;opacity:0;white-space:nowrap}
+#think{position:absolute;opacity:0}
+#burst{position:absolute;left:0;right:0;top:250px;text-align:center;font-size:140px;font-weight:900;color:#ffd54a;-webkit-text-stroke:7px #1F7442;paint-order:stroke fill;letter-spacing:-2px;opacity:0;line-height:1}
+#bub{position:absolute;left:560px;top:1200px;background:#fff;color:#222;font-size:64px;font-weight:900;padding:18px 34px;border-radius:40px;opacity:0;box-shadow:0 6px 0 #ccc}
+#end{position:absolute;inset:0;background:#2E9E5B;opacity:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;text-align:center}
+#disc{position:absolute;bottom:40px;left:0;right:0;text-align:center;font-size:26px;color:rgba(255,255,255,.55)}
+#flash{position:absolute;inset:0;background:#fff;opacity:0}
+</style><script src="../rig.js"></script></head><body>
+<div id="street"><svg id="cam" width="1080" height="1920" viewBox="0 0 1080 1920">
+  <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7EC8F2"/><stop offset=".6" stop-color="#FCE2B6"/></linearGradient></defs>
+  <rect x="-700" width="2600" height="1920" fill="url(#sky)"/><circle cx="860" cy="330" r="90" fill="#FFE9A6"/>
+  <g fill="#B9C7D6" id="city"></g><g fill="#93A7BD" id="city2"></g>
+  <rect x="-700" y="1380" width="2600" height="540" fill="#C9B79A"/><rect x="-700" y="1380" width="2600" height="24" fill="#AE9A7B"/><g id="tiles"></g>
+  <g id="R"></g><g id="V"></g><g id="B"></g>
+</svg>
+<div id="price">3 660 ₼</div>
+<div id="think"><svg width="420" height="300" viewBox="0 0 420 300"><ellipse cx="230" cy="120" rx="190" ry="110" fill="#fff" stroke="#ccc" stroke-width="6"/><circle cx="70" cy="250" r="24" fill="#fff" stroke="#ccc" stroke-width="5"/><circle cx="30" cy="290" r="12" fill="#fff" stroke="#ccc" stroke-width="4"/><text x="230" y="110" font-size="70" text-anchor="middle" font-family="Noto Color Emoji">🐑🐑🐑</text><text x="230" y="185" font-size="56" font-weight="900" text-anchor="middle" font-family="Inter" fill="#2E9E5B">× 10</text></svg></div>
+<div id="burst">GƏL<br>HESABLAYAQ!</div>
+<div id="bub">mə-ə! 🔔</div>
+</div>
+<div id="nb"><div id="page"><div class="lines"></div><div class="margin"></div><div id="ink"></div><svg id="marks" width="980" height="1000" style="position:absolute;left:0;top:0"></svg><div id="pen">✏️</div></div><div id="rings"></div>
+  <svg id="bust" viewBox="60 60 280 308"></svg><div id="disc">Təxmini hesablama · qiymətlər: Kontakt.az, Bakı bazarı · Noy 2026</div></div>
+<div id="chip">VAQİF HESABLAYIR · Bölüm 1</div>
+<div id="sub"><div id="who"></div><div id="line"></div></div>
+<div id="end"><div style="font-size:140px">🧮🐑</div><div style="font-size:100px;font-weight:900;letter-spacing:-2px;line-height:1.05;margin-top:10px">VAQİF<br>HESABLAYIR</div>
+  <div style="font-size:44px;font-weight:800;margin-top:24px;opacity:.9">Bölüm 1 · iPhone yoxsa qoyun?</div>
+  <div style="font-size:56px;font-weight:900;margin-top:60px;background:#fff;color:#2E9E5B;padding:18px 40px;border-radius:44px">Sən hansını seçərdin? 👇</div>
+  <div style="font-size:28px;margin-top:50px;opacity:.75">Təxmini hesablama · real nəticə bazara və baxıma görə dəyişir</div></div>
+<div id="flash"></div>
+<script>
+const LIP=__LIP__, FPS=30, TOTAL=65.0;
+const $=id=>document.getElementById(id);
+const cl=x=>Math.min(Math.max(x,0),1),ease=x=>1-Math.pow(1-cl(x),3),eio=x=>{x=cl(x);return x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2};
+const back=x=>{x=cl(x);const c=2.2;return 1+(c+1)*Math.pow(x-1,3)+c*Math.pow(x-1,2)},lerp=(a,b,p)=>a+(b-a)*p;
+const blinkAt=(t,s)=>{const p=(t+s)%3.9;return p<0.12?Math.sin(p/0.12*Math.PI):0};
+// --- fon
+(()=>{let s='',s2='';let x=-500,i=0;while(x<1800){const w=70+((i*37)%60),h=180+((i*53)%220);s+=`<rect x="${x}" y="${1380-h-120}" width="${w}" height="${h+120}"/>`;x+=w+8;i++}
+ x=-520;i=3;while(x<1800){const w=90+((i*29)%70),h=120+((i*41)%160);s2+=`<rect x="${x}" y="${1380-h}" width="${w}" height="${h}" rx="6"/>`;for(let wy=1380-h+20;wy<1370;wy+=40)for(let wx=x+14;wx<x+w-20;wx+=30)s2+=`<rect x="${wx}" y="${wy}" width="14" height="20" fill="#C8D6E4"/>`;x+=w+14;i++}
+ $('city').innerHTML=s;$('city2').innerHTML=s2;let t='';for(let k=-8;k<22;k++)t+=`<path d="M${k*110-200} 1920 L${k*110+40} 1404" stroke="#B8A585" stroke-width="4"/>`;$('tiles').innerHTML=t;
+ $('rings').innerHTML='<i></i>'.repeat(9)})();
+// --- dialoq (söz vaxtları ASR-dən, yazılış ssenaridən)
+const L=[
+ {s:'R',o:0.15,w:[["Vaqif,",.1,.8],["bax!",.8,1.3],["Yeni",1.4,1.8],["iPhone",1.8,2.2],["18",2.2,3.0],["Pro",3.0,3.2],["Max!",3.2,3.6],["3 660",3.9,5.4],["manat!",5.4,5.8]]},
+ {s:'V',o:6.2,w:[["3 660?",.1,1.4],["Mən",2.1,2.3],["bu",2.3,2.4],["pula",2.4,2.7],["10",2.7,3.0],["qoyun",3.0,3.4],["alardım.",3.4,3.8]]},
+ {s:'R',o:10.25,w:[["Qoyun?",.2,.8],["Ciddisən?",1.4,2.3],["Qoyun",2.7,3.2],["pul",3.2,3.6],["gətirməz!",3.6,4.6]]},
+ {s:'V',o:15.1,w:[["Gəl,",.1,.5],["hesablayaq!",.6,1.1]]},
+ {s:'V',o:16.8,w:[["Bazarda",.1,.5],["bir",.5,.7],["qoyun",.7,1.0],["təxminən",1.0,1.5],["350",1.5,2.1],["manatdır.",2.1,2.5],["Deməli,",3.0,3.3],["10",3.3,3.5],["qoyun,",3.5,4.0],["üstəlik",4.1,4.7],["160",4.8,5.4],["manat",5.4,5.6],["da",5.6,5.7],["artıq",5.7,6.0],["qalır.",6.0,6.2]]},
+ {s:'V',o:23.35,w:[["Qoyun",.1,.3],["balasını",.3,.7],["5",.7,.9],["ay",.9,1.0],["daşıyır.",1.0,1.5],["Payızda",2.0,2.4],["cütləşir,",2.4,3.1],["yazda",3.2,3.5],["quzulayır.",3.5,4.0],["Bəziləri",4.5,4.9],["əkiz",4.9,5.2],["doğur.",5.2,5.6],["Beləliklə,",6.1,6.6],["10",7.0,7.2],["qoyundan",7.2,7.8],["12",7.9,8.2],["quzu.",8.2,8.5]]},
+ {s:'V',o:32.2,w:[["Quzular",.1,.6],["6",.6,.9],["ay",.9,1.1],["otlaqda",1.1,1.6],["böyüyür.",1.6,2.0],["Payızda",2.7,3.1],["hərəsi",3.1,3.5],["200",3.5,4.0],["manat.",4.0,4.4],["Cəmi",4.9,5.3],["2 400",5.3,6.4],["manat!",6.4,6.6]]},
+ {s:'R',o:39.05,w:[["Bəs",.1,.7],["yem?",.9,1.2],["Bəs",1.9,2.3],["baytar?",2.6,3.2]]},
+ {s:'V',o:42.5,w:[["Düz",.1,.3],["deyirsən.",.3,.6],["Qış",1.1,1.3],["xərci",1.3,1.6],["təxminən",1.6,2.1],["700",2.1,2.5],["manatdır.",2.5,2.9],["Təmiz",3.5,3.8],["qazanc:",3.8,4.4],["1 700",4.5,5.2],["manat.",5.2,5.4]]},
+ {s:'V',o:48.25,w:[["Bir",.1,.2],["ildən",.2,.5],["sonra…",.5,.8],["10",1.7,1.8],["qoyunum",1.8,2.2],["yerində",2.2,2.6],["qalır.",2.6,2.9],["Üstəlik,",3.5,4.0],["cibimdə",4.4,4.9],["1 860",4.9,6.2],["manat.",6.2,6.4],["Səndə",7.1,7.4],["isə,",7.4,7.7],["köhnəlmiş",8.0,8.5],["telefon.",8.5,8.7]]},
+ {s:'R',o:57.3,w:[["Vaqif…",.1,.6],["bəlkə",1.4,1.8],["mənə",1.8,2.2],["də",2.2,2.4],["bir",2.7,2.9],["qoyun",2.9,3.4],["satasan?",3.4,4.0]]}];
+// --- dəftər yazıları: [vaxt, müddət, səhifə, y, html, rəng]
+const B='#23408E',G='#1E8A4C',Rd='#C8343A';
+const INK=[
+ [17.1,1.6,1,190,'1 <span class=em>🐑</span> ≈ 350 ₼',B],[19.8,1.5,1,390,'3 660 ÷ 350 = 10 <span class=em>🐑</span>',B],[21.1,1.2,1,590,'+ 160 ₼ qalır',G],
+ [23.45,1.0,2,190,'<span class=em>🤰</span> ~5 ay',B],[25.3,1.8,2,390,'Okt <span class=em>💞</span> → Mar <span class=em>🐣</span>',B],[27.8,0.9,2,590,'əkiz! <span class=em>🐑🐑</span>',Rd],[29.45,1.8,2,790,'10 <span class=em>🐑</span> → 12 quzu',G],
+ [32.3,1.2,3,170,'6 ay otlaq <span class=em>🌿</span>',B],[34.9,1.0,3,350,'12 × 200 ₼',B],[37.1,1.0,3,500,'= 2 400 ₼',G],[43.6,1.6,3,670,'− 700 ₼ <span style="font-size:60px">ot · arpa · baytar</span>',Rd],[46.0,1.0,3,840,'= 1 700 ₼ təmiz',G],
+ [48.35,0.8,4,170,'1 il sonra:',B],[49.95,1.0,4,350,'Vaqif: 10 <span class=em>🐑</span>',G],[52.9,1.2,4,500,'+ 1 860 ₼ <span class=em>💵</span>',G],[54.2,0.8,4,650,'≈ 5 360 ₼',G],[55.35,1.3,4,830,'Ramin: <span class=em>📱📉</span>',Rd]];
+// işarələr: [vaxt, müddət, səhifə, svg path]
+const MARK=[[22.4,0.5,1,'M130 640 Q120 570 330 570 Q580 575 580 650 Q575 730 330 730 Q120 728 135 650',G],[31.2,0.4,2,'M150 900 L760 900',G],
+ [38.1,0.35,3,'M150 610 L560 610 M150 628 L560 628',G],[47.0,0.5,3,'M130 890 Q125 815 380 815 Q720 820 720 895 Q715 965 380 965 Q120 963 140 895',G],[54.9,0.4,4,'M140 645 L520 645 L520 770 L140 770 Z',G],[56.6,0.4,4,'M150 890 L720 890',Rd]];
+const PAGE_AT=[16.6,23.2,32.05,48.1];
+const pageOf=t=>{let p=1;PAGE_AT.forEach((a,i)=>{if(t>=a)p=i+1});return p};
+// --- kamera (küçə)
+function cam(t){const K=[[0,1.04,540,1010],[3.3,1.04,540,1010],[3.8,1.55,250,1110],[6.2,1.5,770,1118,1],[10.25,2.1,250,979,1],[15.1,1.9,770,985,1],[15.4,2.25,770,960],[16.6,2.25,770,960],
+  [56.9,1.04,540,1010,1],[61.3,1.04,540,1010],[62.4,1.04,540,1010]];
+ for(let i=0;i<K.length-1;i++){const a=K[i],b=K[i+1];if(t>=a[0]&&t<b[0]){if(b[4]&&false)return a;const p=eio((t-a[0])/(b[0]-a[0]));return b[4]?[a[1],a[2],a[3]]:[lerp(a[1],b[1],p),lerp(a[2],b[2],p),lerp(a[3],b[3],p)]}}
+ return [1.04,540,1010]}
+window.TOTAL=TOTAL;
+window.EVENTS=[{t:4.05,k:'pop'},{t:8.9,k:'pop'},{t:15.15,k:'boom'},{t:15.15,k:'stamp'},{t:16.35,k:'whoosh'},{t:23.15,k:'swoosh'},{t:32.0,k:'swoosh'},{t:48.05,k:'swoosh'},
+ {t:21.2,k:'ding'},{t:29.5,k:'ding'},{t:37.2,k:'cash'},{t:46.1,k:'cash'},{t:54.3,k:'cash'},{t:55.4,k:'down'},{t:56.9,k:'whoosh'},{t:61.5,k:'pop'},{t:61.7,k:'bell'},{t:62.4,k:'whoosh'},
+ ...INK.map(([t,d])=>({t,k:'scribble',d}))];
+window.render=function(t){
+  const f=Math.min(Math.round(t*FPS),LIP.ramin.length-1), mv=LIP.vaqif[f], mr=LIP.ramin[f];
+  const inNB=t>=16.6&&t<56.9;
+  // ---------- KÜÇƏ
+  $('street').style.display=inNB&&t>17.0?'none':'block';
+  const [s,cx,cy]=cam(t);let sh=0;[15.15].forEach(x=>{const d=t-x;if(d>0&&d<0.4)sh+=(1-d/0.4)*20});
+  $('cam').style.transform=`translate(${540-cx*s+Math.sin(t*90)*sh}px,${1000-cy*s+Math.cos(t*70)*sh}px) scale(${s})`;
+  const rTalk=mr!=='X';let rE='smug',rArm=-30,gl=true;
+  if(t<6.2){rE='happy';rArm=-40-Math.abs(Math.sin(t*4))*30} if(t>=10.25&&t<15){rE='laugh';rArm=-25}
+  if(t>=15&&t<17)rE='surprised'; if(t>=56.9){rE='worried';gl=false;rArm=-10}
+  $('R').innerHTML=`<g transform="translate(-10 ${640+(rTalk?Math.abs(Math.sin(t*6))*4:0)}) scale(1.25)">${ramin({expr:rE,mouth:mr,armR:rArm,bob:rTalk?Math.sin(t*9)*3:0,glasses:gl,blink:blinkAt(t,1.1)})}</g>`;
+  let vE='neutral',look=[-1,0],vArm=-8,vArmL=8;
+  if(t>=6.2&&t<10.2){vE='smug';look=[0,0]} if(t>=10.2&&t<15){vE='smug';look=[-1,0]}
+  if(t>=15&&t<17){vE=mv==='X'?'laugh':'happy';look=[0,0];vArm=-150+Math.sin(t*10)*8;vArmL=30}
+  if(t>=56.9){vE=t>61.3?'laugh':'smug';look=[-1,0];vArm=-20}
+  const vTalk=mv!=='X';
+  $('V').innerHTML=`<g transform="translate(520 ${640+(vTalk?Math.abs(Math.sin(t*7))*4:0)}) scale(1.25)">${vaqif({expr:vE,mouth:mv,blink:blinkAt(t,.4),look,armR:vArm,armL:vArmL,bob:vTalk?Math.sin(t*8)*3:0})}</g>`;
+  const bp=(t-61.5)/0.45;$('B').innerHTML=t>61.4?`<g transform="translate(340 ${lerp(1960,1240,back(bp))}) scale(.75)">${baba({bleat:t>61.7&&t<62.5?Math.abs(Math.sin((t-61.7)*8)):0,look:[0,-1],blink:blinkAt(t,2)})}</g>`:'';
+  const pr=$('price');pr.style.opacity=t>4.0&&t<6.2?1:0;pr.style.left='600px';pr.style.top='760px';pr.style.transform=`rotate(-6deg) scale(${back((t-4.0)/0.35)})`;
+  const th=$('think');th.style.opacity=t>8.85&&t<10.25?1:0;th.style.left='520px';th.style.top='160px';th.style.transform=`scale(${back((t-8.85)/0.35)})`;
+  const bu=$('burst');bu.style.opacity=t>15.15&&t<16.6?1:0;bu.style.transform=`scale(${lerp(2.3,1,ease((t-15.15)/0.2))}) rotate(-4deg)`;
+  const bb=$('bub');bb.style.opacity=t>61.75&&t<62.6?1:0;bb.style.transform=`scale(${back((t-61.75)/0.3)})`;
+  // ---------- DƏFTƏR
+  const nb=$('nb');nb.style.display=inNB?'block':'none';
+  if(inNB){const op=ease((t-16.6)/0.45);nb.style.opacity=t<56.6?op:1-ease((t-56.6)/0.3);
+    const pg=$('page');pg.style.transform=`translateY(${(1-op)*900}px) rotate(${(1-op)*-14}deg) scale(${0.4+0.6*op})`;
+    const P=pageOf(t), pf=PAGE_AT[P-1]; const flip=t-pf; // səhifə çevrilməsi
+    pg.style.transform+=` perspective(1800px) rotateX(${P>1&&flip<0.35?(1-ease(flip/0.35))*-80:0}deg)`;
+    let ink='',pen=null;
+    INK.forEach(([a,d,p,y,h,c])=>{if(p!==P||t<a)return;const q=cl((t-a)/d);
+      ink+=`<div class="w" style="top:${y}px;color:${c};clip-path:inset(-20px ${100-q*100}% -30px -10px)">${h}</div>`;if(q<1)pen={a,d,y,q,h}});
+    $('ink').innerHTML=ink;
+    let mk='';MARK.forEach(([a,d,p,path,c])=>{if(p!==P||t<a)return;const q=ease((t-a)/d);mk+=`<path d="${path}" fill="none" stroke="${c}" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="${1-q}"/>`});
+    $('marks').innerHTML=mk;
+    const pn=$('pen');if(pen){const el=[...$('ink').children].pop();const wdt=el?el.getBoundingClientRect().width:400;pn.style.opacity=1;pn.style.left=(150+wdt*pen.q-10)+'px';pn.style.top=(pen.y-40+Math.sin(t*40)*6)+'px'}else pn.style.opacity=0;
+    // aşağıda danışan
+    const who=t>=39.0&&t<42.4?'R':'V';
+    let e='happy';if(t>=23.3&&t<28)e='thinking';if(t>=48.2)e='smug';if(t>=42.4&&t<43.2)e='happy';
+    $('bust').innerHTML=who==='V'?vaqif({expr:e,mouth:mv,bust:true,prop:false,blink:blinkAt(t,.4),look:e==='thinking'?[1,-1]:[0,-1],bob:vTalk?Math.sin(t*8)*3:0}):
+      `<g transform="translate(0 ${(1-ease((t-39.0)/0.25))*300})">${ramin({expr:'smug',mouth:mr,bust:true,armR:-10,bob:Math.sin(t*9)*3})}</g>`;
+  }
+  // ---------- ümumi
+  $('chip').style.opacity=t<6.2?1:0;
+  const fl=Math.max(t>15.15&&t<15.3?(1-(t-15.15)/0.15)*0.55:0,t>56.9&&t<57.05?(1-(t-56.9)/0.15)*0.35:0);$('flash').style.opacity=fl;
+  const ec=$('end');ec.style.opacity=t>62.4?1:0;ec.style.clipPath=`circle(${ease((t-62.4)/0.5)*150}% at 50% 70%)`;
+  // altyazı
+  const who=$('who'),line=$('line');line.innerHTML='';who.style.opacity=0;
+  for(const D of L){const lt=t-D.o,last=D.w[D.w.length-1][2];if(lt<0||lt>last+0.3)continue;
+    who.textContent=D.s==='V'?'VAQİF':'RAMİN';who.style.background=D.s==='V'?'#2E9E5B':'#4A5BD6';who.style.opacity=1;
+    const ch=[];let c=[];D.w.forEach(w=>{c.push(w);if(c.length>=3||(/[.!?,…:]$/.test(w[0])&&c.length>=2)){ch.push(c);c=[]}});if(c.length)ch.push(c);
+    let ci=0;ch.forEach((c,k)=>{if(lt>=c[0][1]-0.1)ci=k});
+    ch[ci].forEach(w=>{const sp=document.createElement('span');sp.textContent=w[0];if(lt>=w[1]-0.05&&lt<w[2]+0.1)sp.className='on';sp.style.opacity=lt>=w[1]-0.1?1:0.4;line.appendChild(sp)})}
+  $('sub').style.top=inNB?'1690px':'1560px';
+};
+render(0);
+</script></body></html>
