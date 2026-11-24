@@ -1,6 +1,40 @@
 # Bölüm 1 — "iPhone yoxsa qoyun?"
 
-`vaqif_bolum1.mp4` — 65 san, 1080×1920, 30 fps. Musiqi yoxdur. Səs səviyyəsi -14.6 LUFS-dur, ölçülüb.
+## v2 (əsas versiya) — `vaqif_bolum1_v2.mp4`
+
+63 san, 1080×1920, 30 fps, musiqisiz. Səs səviyyəsi -14.1 LUFS, pik -1.6 dBFS — ölçülüb.
+
+**Səs:**
+- Raminin 4 sətri də Adrian səsi ilə yazılıb. 4-ü də mətnə çevrilərək yoxlanıb və düzgündür.
+- İki personaj eyni səslə danışmasın deyə Raminin səsi `rubberband` ilə 2 ton yuxarı qaldırılıb və 1.06 dəfə sürətləndirilib. Fayllar: `audio_ramin_adrian/R*p.wav`.
+
+**Keçidlər:**
+| Keçid | Necə işləyir |
+|---|---|
+| Açılış | Raminin telefonunun yaxın planından ("18") ümumi plana açılır |
+| Danışan dəyişəndə | Sürətli kamera sürüşməsi (whip-pan), üfüqi hərəkət bulanıqlığı ilə |
+| "Gəl, hesablayaq!" | Vaqifə qəfil yaxınlaşma (crash zoom), ağ flaş, kamera silkələnməsi |
+| Dəftərə giriş | Kamera Vaqifin əlindəki dəftərin içinə girir, səhifə dəftərin yerindən böyüyür |
+| Səhifə dəyişəndə | 3D səhifə çevrilməsi (spiralın ətrafında), kölgə və kağız səsi ilə |
+| Dəftərdən çıxış | Səhifə Vaqifin əlinə geri kiçilir, kamera ümumi plana açılır |
+| Final | Dairə Bəbənin üzündə bağlanır (iris), son kart dairəvi açılır |
+
+**Animasiya:**
+- fonda 4 qatlı dərinlik (paralaks), "əl kamerası" titrəməsi;
+- personajların kölgəsi, nəfəsi, başının əyilməsi;
+- Raminin telefon ekranı parlayır, gülüşü "HA HA" yazıları ilə görünür, sonda gözlüyünü çıxarır və tərləyir;
+- Ramin dəftər səhnəsinə yandan girir, Vaqif ona baxır və razılıqla başını tərpədir;
+- nəticə rəqəmlərində pul hissəcikləri partlayır.
+
+**Səs dizaynı:**
+- effektlər: parıltı, whip, möhür, boom, kağız, karandaş cızıltısı, kassa və sikkə, zınqırov, iris;
+- yalnız küçə səhnələrində çox zəif şəhər fonu (musiqi deyil).
+
+**Fayllar:** `ep1v2.html`, `mix2.py`, `lip2.json`.
+
+## v1 — `vaqif_bolum1.mp4`
+
+65 san, 1080×1920, 30 fps. Musiqi yoxdur. Səs səviyyəsi -14.6 LUFS-dur, ölçülüb. Bu versiyada Ramini OpenAI Echo səsləndirir.
 
 ## Ssenari və səs yoxlaması (QC)
 

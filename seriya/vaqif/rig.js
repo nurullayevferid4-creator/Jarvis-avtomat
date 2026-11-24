@@ -55,7 +55,7 @@ function arm(sx,sy,deg,len,sleeve,sleeveD,skin,hand=''){
 }
 
 window.vaqif=function(o={}){
-  const {expr='neutral',mouth='X',blink=0,look=[0,0],armL=8,armR=-8,bob=0,prop=true,bust=false}=o; const P=PAL,L=P.line;
+  const {expr='neutral',mouth='X',blink=0,look=[0,0],armL=8,armR=-8,bob=0,prop=true,bust=false,tilt=0}=o; const P=PAL,L=P.line;
   const note=prop?`<g transform="rotate(${-armR-10})"><rect x="-6" y="-38" width="52" height="64" rx="6" fill="${P.note}" stroke="${L}" stroke-width="3"/><path d="M2 -24 H38 M2 -12 H38 M2 0 H30 M2 12 H34" stroke="${P.cap}" stroke-width="3"/><text x="20" y="-28" font-family="Inter" font-weight="900" font-size="11" fill="${P.capD}" text-anchor="middle">₼</text></g>`:'';
   let g='';
   if(!bust){
@@ -86,13 +86,13 @@ window.vaqif=function(o={}){
   h+=`<path d="M202 186 Q190 212 196 220 Q204 226 214 216" stroke="${P.skinD}" stroke-width="5" fill="none" stroke-linecap="round"/>`;
   h+=`<path d="M174 232 Q188 220 200 229 Q212 220 226 232 Q214 240 200 235 Q186 240 174 232 Z" fill="${P.hair}"/>`; // bığ
   h+=mouthShape(expr==='laugh'&&mouth==='X'?'D':mouth,expr,200,250);
-  g+=`<g transform="translate(0 ${bob})">${h}</g>`;
+  g+=`<g transform="translate(0 ${bob}) rotate(${tilt} 200 270)">${h}</g>`;
   return `<g>${g}</g>`;
 };
 
 window.ramin=function(o={}){
-  const {expr='smug',mouth='X',blink=0,look=[0,0],armL=10,armR=-35,bob=0,glasses=true,bust=false}=o; const P=PAL,L=P.line;
-  const phone=`<g transform="rotate(${-armR})"><rect x="-16" y="-44" width="34" height="62" rx="7" fill="#111" stroke="#555" stroke-width="3"/><rect x="-12" y="-38" width="26" height="50" rx="4" fill="#6EC6FF"/><circle cx="1" cy="-30" r="3" fill="#fff" opacity=".8"/></g>`;
+  const {expr='smug',mouth='X',blink=0,look=[0,0],armL=10,armR=-35,bob=0,glasses=true,bust=false,tilt=0,sweat=0,glow=0}=o; const P=PAL,L=P.line;
+  const phone=`<g transform="rotate(${-armR})"><rect x="-16" y="-44" width="34" height="62" rx="7" fill="#111" stroke="#555" stroke-width="3"/><rect x="-12" y="-38" width="26" height="50" rx="4" fill="#6EC6FF"/><rect x="-12" y="-38" width="26" height="50" rx="4" fill="#fff" opacity="${glow*0.5}"/><text x="1" y="-6" font-family="Inter" font-weight="900" font-size="17" fill="#fff" text-anchor="middle">18</text><path d="M-12 -14 L14 -34" stroke="#fff" stroke-width="3" opacity=".35"/></g>`;
   let g='';
   if(!bust){
     g+=`<rect x="162" y="474" width="34" height="136" rx="10" fill="#3B3B4A"/><rect x="206" y="474" width="34" height="136" rx="10" fill="#3B3B4A"/>`;
@@ -115,7 +115,8 @@ window.ramin=function(o={}){
   h+=`<path d="M202 194 Q194 214 198 220 Q204 224 212 218" stroke="${P.rSkinD}" stroke-width="5" fill="none" stroke-linecap="round"/>`;
   h+=mouthShape(expr==='laugh'&&mouth==='X'?'D':mouth,expr,200,244);
   h+=`<path d="M190 266 Q200 272 210 266" stroke="${P.rHair}" stroke-width="5" fill="none" stroke-linecap="round"/>`;
-  g+=`<g transform="translate(0 ${bob})">${h}</g>`;
+  if(sweat>0) h+=`<path d="M262 ${150+sweat*30} q-12 20 0 28 q12 -8 0 -28 Z" fill="#7FD3FF" stroke="#2a8bc0" stroke-width="2.5" opacity="${Math.min(1,sweat*3)}"/>`;
+  g+=`<g transform="translate(0 ${bob}) rotate(${tilt} 200 270)">${h}</g>`;
   return `<g>${g}</g>`;
 };
 
