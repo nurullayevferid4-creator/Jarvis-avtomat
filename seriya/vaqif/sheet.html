@@ -1,0 +1,56 @@
+<!doctype html><html><head><meta charset="utf-8">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{width:2400px;height:1500px;background:#F4EFE3;font-family:Inter,sans-serif;color:#1d2a22;position:relative;overflow:hidden}
+.h{position:absolute;left:60px;top:40px;font-size:64px;font-weight:900;letter-spacing:-1px}
+.h small{font-size:30px;font-weight:700;color:#5c6b61;margin-left:20px}
+.box{position:absolute;background:#fff;border-radius:28px;box-shadow:0 6px 0 #e0d8c6}
+.t{position:absolute;font-size:26px;font-weight:800;color:#2E9E5B;letter-spacing:2px}
+.lab{font-size:22px;font-weight:700;color:#5c6b61;text-align:center}
+.grid{position:absolute;display:grid;gap:10px}
+.sw{display:flex;align-items:center;gap:14px;font-size:22px;font-weight:700;margin:10px 0}
+.sw i{width:56px;height:56px;border-radius:14px;display:inline-block;border:3px solid rgba(0,0,0,.12)}
+p.note{font-size:24px;line-height:1.45;color:#2d3a31;margin-bottom:10px}
+</style><script src="rig.js"></script></head><body>
+<div class="h">VAQİF <small>personaj vərəqi · "Vaqif hesablayır" seriyası · v1</small></div>
+
+<div class="box" style="left:60px;top:150px;width:620px;height:1290px"></div>
+<div class="t" style="left:100px;top:180px">ƏSAS POZA</div>
+<svg style="position:absolute;left:90px;top:230px" width="560" height="900" viewBox="0 0 400 640" id="full"></svg>
+<div style="position:absolute;left:100px;top:1150px;width:540px">
+  <p class="note"><b>Vaqif, 27 yaş.</b> Kənddən Bakıya gəlib. Sakit, zarafatcıl, hər qərardan əvvəl hesablayır.</p>
+  <p class="note">İmza: <b>yaşıl kepka</b>, qulağının arxasında <b>karandaş</b>, əlində <b>hesab dəftəri</b>. Bığ, xardal sviter.</p>
+  <p class="note">Bəyanatı: <b>"Gəl hesablayaq!"</b></p>
+</div>
+
+<div class="box" style="left:720px;top:150px;width:1060px;height:760px"></div>
+<div class="t" style="left:760px;top:180px">İFADƏLƏR</div>
+<div class="grid" id="ex" style="left:750px;top:220px;grid-template-columns:repeat(4,250px)"></div>
+
+<div class="box" style="left:720px;top:940px;width:1060px;height:500px"></div>
+<div class="t" style="left:760px;top:970px">AĞIZ FORMALARI · DUBLAJ (Rhubarb A–H, X)</div>
+<div class="grid" id="mo" style="left:750px;top:1010px;grid-template-columns:repeat(5,200px)"></div>
+
+<div class="box" style="left:1820px;top:150px;width:520px;height:560px"></div>
+<div class="t" style="left:1860px;top:180px">RƏNG PALİTRASI</div>
+<div style="position:absolute;left:1860px;top:220px" id="pal"></div>
+
+<div class="box" style="left:1820px;top:740px;width:520px;height:700px"></div>
+<div class="t" style="left:1860px;top:770px">KOMANDA</div>
+<svg style="position:absolute;left:1840px;top:810px" width="250" height="400" viewBox="0 0 400 640" id="ramin"></svg>
+<svg style="position:absolute;left:2080px;top:880px" width="240" height="384" viewBox="0 120 400 520" id="baba"></svg>
+<div style="position:absolute;left:1860px;top:1220px;width:470px">
+  <p class="note" style="font-size:22px"><b>Ramin</b> — dost, hər yeni telefonu ilk alan. Vaqifə gülür, sonda məğlub olur.</p>
+  <p class="note" style="font-size:22px"><b>Bəbə</b> — maskot qoyun, zınqırovlu. Hər bölümdə "mə-ə" reaksiyası.</p>
+</div>
+<script>
+document.getElementById('full').innerHTML=vaqif({expr:'happy',armR:-25,armL:10});
+const ex=[['neutral','X','Sakit'],['happy','B','Xoşbəxt'],['laugh','X','Gülür'],['surprised','E','Təəccüb'],['thinking','X','Fikirləşir'],['smug','X','Arxayın'],['worried','A','Narahat'],['angry','C','Əsəbi']];
+document.getElementById('ex').innerHTML=ex.map(([e,m,l])=>`<div><svg width="250" height="300" viewBox="100 50 200 240">${vaqif({expr:e,mouth:m,bust:true,look:e==='thinking'?[1,-1]:[0,0],prop:false})}</svg><div class="lab">${l}</div></div>`).join('');
+const mo=[['X','dinc'],['A','M B P'],['B','S T K'],['C','E Ə'],['D','A (geniş)'],['E','O Ö'],['F','U Ü W'],['G','F V'],['H','L']];
+document.getElementById('mo').innerHTML=mo.map(([m,l])=>`<div><svg width="200" height="150" viewBox="140 170 120 110">${vaqif({expr:'neutral',mouth:m,bust:true,prop:false})}</svg><div class="lab"><b>${m}</b> · ${l}</div></div>`).join('');
+const pal=[['#2E9E5B','Kepka yaşılı (brend)'],['#F2B632','Sviter xardalı'],['#E9B48C','Dəri'],['#2A1C13','Saç / bığ'],['#2D4370','Cins'],['#FFF6DC','Hesab dəftəri'],['#F5C542','Karandaş / zınqırov']];
+document.getElementById('pal').innerHTML=pal.map(([c,l])=>`<div class="sw"><i style="background:${c}"></i>${l} <span style="color:#8a958d;font-weight:600">${c}</span></div>`).join('');
+document.getElementById('ramin').innerHTML=ramin({expr:'laugh'});
+document.getElementById('baba').innerHTML=baba({look:[-1,0]});
+</script></body></html>
