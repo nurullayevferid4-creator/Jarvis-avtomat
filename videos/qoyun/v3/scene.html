@@ -1,0 +1,325 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1080px;height:1920px;overflow:hidden;background:#000;font-family:Inter,"Noto Color Emoji",sans-serif;color:#fff}
+#stage{position:absolute;inset:0;perspective:1600px}
+.scene{position:absolute;inset:0;display:none;overflow:hidden}
+.bg{position:absolute;inset:-60px}
+.c{position:absolute;left:0;right:0;text-align:center}
+.abs{position:absolute}
+.k{font-weight:900;letter-spacing:-2px;line-height:1}
+.y{color:#ffd54a}.g{color:#5be38a}.r{color:#ff5a5a}.w{color:#fff}
+.emo{display:inline-block;line-height:1}
+.card{background:rgba(255,255,255,.08);border:3px solid rgba(255,255,255,.16);border-radius:44px}
+.stamp{position:absolute;font-weight:900;border:10px solid;border-radius:24px;padding:10px 34px;letter-spacing:4px}
+.bubble{position:absolute;max-width:760px;font-size:52px;font-weight:700;padding:26px 36px;border-radius:40px;background:#2b3440;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+.bubble.me{background:#2f7d4f}
+.digit{display:inline-block;height:230px;overflow:hidden;vertical-align:top}
+.digit div{display:flex;flex-direction:column}
+.digit span{height:230px;line-height:230px}
+#ui{position:absolute;inset:0;pointer-events:none}
+#prog{position:absolute;top:0;left:0;height:12px;background:linear-gradient(90deg,#ffd54a,#5be38a)}
+#sub{position:absolute;left:30px;right:30px;top:1470px;height:280px;display:flex;flex-wrap:wrap;justify-content:center;align-content:center;gap:6px 0}
+#sub span{font-size:72px;font-weight:900;-webkit-text-stroke:3px #000;paint-order:stroke fill;text-shadow:0 6px 0 #000;display:inline-block;margin:0 24px}
+#sub span.on{color:#ffd54a}
+#disc{position:absolute;bottom:60px;left:0;right:0;text-align:center;font-size:28px;color:rgba(255,255,255,.45)}
+#flash{position:absolute;inset:0;background:#fff;opacity:0}
+#vig{position:absolute;inset:0;background:radial-gradient(circle at 50% 45%,transparent 45%,rgba(0,0,0,.65) 100%)}
+.scan{position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(255,255,255,.06) 0 2px,transparent 2px 6px);mix-blend-mode:overlay}
+</style></head><body>
+<div id="stage">
+
+<!-- 0 HOOK -->
+<div class="scene" id="s0">
+  <div class="bg" style="background:radial-gradient(circle at 50% 40%,#3a1010,#0d0404 70%)"></div>
+  <div class="abs" id="h_phone" style="left:340px;top:330px;font-size:400px">📱</div>
+  <div class="stamp r" id="h_x" style="left:250px;top:560px;font-size:110px;border-color:#ff5a5a;transform:rotate(-14deg)">ALMADI</div>
+  <div id="h_herd"></div>
+  <div class="c k" id="h_t2" style="top:300px;font-size:120px;opacity:0"><span class="g">10 QOYUN</span><br>ALDI</div>
+  <div id="h_laugh"></div>
+  <div class="c k" id="h_t3" style="top:420px;font-size:110px;opacity:0">Dostları<br><span class="y">güldü</span> 😂</div>
+  <div class="c k" id="h_t4" style="top:560px;font-size:140px;opacity:0"></div>
+</div>
+
+<!-- 1 NUMBER -->
+<div class="scene" id="s1">
+  <div class="bg" style="background:radial-gradient(circle at 50% 35%,#24205a,#07061a 70%)"></div>
+  <div class="c" style="top:250px;font-size:50px;font-weight:800;color:#b8b4ff">Hər şey bu rəqəmlə başladı</div>
+  <div class="c" id="phone3d" style="top:380px;font-size:330px;transform-style:preserve-3d">📱</div>
+  <div class="c k y" id="slot" style="top:800px;font-size:230px"></div>
+  <div class="c" id="tag1" style="top:1110px;opacity:0"><span class="card" style="display:inline-block;padding:20px 40px;font-size:44px;font-weight:800">iPhone 18 Pro Max · 256 GB<br><span style="font-size:32px;color:#b8b4ff">Kontakt.az · endirimli · 24.11.2026</span></span></div>
+</div>
+
+<!-- 2 MARKET -->
+<div class="scene" id="s2">
+  <div class="bg" style="background:radial-gradient(circle at 50% 40%,#5a3510,#140a02 72%)"></div>
+  <div class="c k" style="top:230px;font-size:76px">🏪 Bazar</div>
+  <div class="abs" id="tag2" style="left:330px;top:350px;transform-origin:50% 0"><div class="card" style="padding:20px 46px;font-size:80px;font-weight:900;background:#ffd54a;color:#3a2200;border:none">🏷️ 350 ₼</div></div>
+  <div id="bills"></div>
+  <div id="flock2"></div>
+  <div class="c k" id="eq2" style="top:1180px;font-size:72px;opacity:0">= <span class="g">10 qoyun</span> + <span class="y">160 ₼</span> 👖</div>
+</div>
+
+<!-- 3 FRIENDS / SECRET -->
+<div class="scene" id="s3">
+  <div class="bg" style="background:#11161c"></div>
+  <div class="c" style="top:230px;font-size:40px;color:#8b98a8;font-weight:700">💬 Dostlar qrupu</div>
+  <div class="bubble" id="b1" style="left:60px;top:330px">Qoyun pul gətirməz 😂</div>
+  <div class="bubble" id="b2" style="left:60px;top:500px">Telefon al, rahat ol 📱</div>
+  <div class="bubble me" id="b3" style="right:60px;top:670px">Görək 🙂</div>
+  <div id="dark3" class="abs" style="inset:0;background:#000;opacity:0"></div>
+  <div class="c" id="key3" style="top:520px;font-size:300px;opacity:0">🔑</div>
+  <div class="c k y" id="sir3" style="top:880px;font-size:150px;opacity:0;letter-spacing:20px">SİRR</div>
+</div>
+
+<!-- 4 NATURE CLOCK -->
+<div class="scene" id="s4">
+  <div class="bg" style="background:radial-gradient(circle at 50% 40%,#4a1a3a,#12060f 72%)"></div>
+  <svg class="abs" style="left:140px;top:260px" width="800" height="800" viewBox="-400 -400 800 800">
+    <circle r="320" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="40"/>
+    <path id="arc4" fill="none" stroke="url(#gr4)" stroke-width="40" stroke-linecap="round"/>
+    <defs><linearGradient id="gr4"><stop offset="0" stop-color="#ff6bb5"/><stop offset="1" stop-color="#ffd54a"/></linearGradient></defs>
+    <g id="mon4" font-family="Inter" font-size="34" font-weight="800" fill="#c9a9bf" text-anchor="middle"></g>
+  </svg>
+  <div class="abs emo" id="dot4" style="font-size:90px">💞</div>
+  <div class="c k" id="mid4" style="top:560px;font-size:120px"><span id="n4">0</span><span style="font-size:60px"> ay</span></div>
+  <div class="c" id="lab4" style="top:700px;font-size:44px;font-weight:800;color:#ffb3dc">hamiləlik</div>
+  <div class="c" id="tw4" style="top:1100px;opacity:0;font-size:150px">🐑<span style="font-size:90px">🐑🐑</span></div>
+  <div class="stamp" id="ek4" style="left:600px;top:1080px;font-size:64px;color:#ff6bb5;border-color:#ff6bb5;transform:rotate(12deg);opacity:0">ƏKİZ!</div>
+</div>
+
+<!-- 5 GROWTH -->
+<div class="scene" id="s5">
+  <div class="bg" style="background:linear-gradient(#5fb8ff 0%,#a8dcff 55%,#3c9a46 55%,#256b2e 100%)"></div>
+  <div class="abs" id="sun5" style="font-size:150px">☀️</div>
+  <div class="c k" style="top:230px;font-size:72px;color:#0d2b55">🏡 Vaqifin həyəti</div>
+  <div id="lambs5"></div>
+  <div class="c" style="top:1210px"><span class="card k" style="display:inline-block;padding:18px 44px;font-size:80px;background:rgba(0,0,0,.35)"><span id="m5">0</span> ay</span></div>
+</div>
+
+<!-- 6 SALE -->
+<div class="scene" id="s6">
+  <div class="bg" style="background:radial-gradient(circle at 50% 45%,#6b5200,#1a1300 72%)"></div>
+  <div class="c k" style="top:230px;font-size:72px">🍂 Payız · bazar</div>
+  <div id="coins6"></div>
+  <div class="c k y" id="c6" style="top:960px;font-size:220px">0 ₼</div>
+  <div class="c" style="top:1210px;font-size:48px;font-weight:800;color:#ffe9a0">12 × 200 ₼</div>
+  <div id="burst6"></div>
+</div>
+
+<!-- 7 COSTS -> NET -->
+<div class="scene" id="s7">
+  <div class="bg" id="bg7" style="background:radial-gradient(circle at 50% 40%,#4a0f0f,#140303 72%)"></div>
+  <div class="c k" id="t7" style="top:240px;font-size:64px">Gəlir: <span class="g">2 400 ₼</span></div>
+  <div class="abs" style="left:90px;top:380px;width:900px;height:120px;border-radius:30px;background:rgba(255,255,255,.1);overflow:hidden">
+    <div id="barG" class="abs" style="left:0;top:0;bottom:0;width:100%;background:linear-gradient(90deg,#2fbf65,#7dff9e)"></div>
+    <div id="barR" class="abs" style="top:0;bottom:0;background:#ff5a5a"></div>
+  </div>
+  <div id="items7"></div>
+  <div class="c k r" id="minus7" style="top:560px;font-size:130px;opacity:0">−700 ₼</div>
+  <div class="c" id="net7" style="top:780px;opacity:0"><div style="font-size:52px;font-weight:800;color:#b8ffcc">TƏMİZ QAZANC</div><div class="k g" style="font-size:250px;text-shadow:0 0 60px rgba(91,227,138,.6)"><span id="c7">0</span> ₼</div></div>
+</div>
+
+<!-- 8 PHONE DROPS -->
+<div class="scene" id="s8">
+  <div class="bg" style="background:radial-gradient(circle at 50% 40%,#2a2f36,#0a0c0f 72%)"></div>
+  <div class="c k" style="top:230px;font-size:66px">Bəs dostların telefonu? 🤔</div>
+  <div class="abs" id="old8" style="left:200px;top:420px;font-size:300px">📱</div>
+  <svg class="abs" id="crack8" style="left:230px;top:450px;opacity:0" width="260" height="300"><path d="M130 0 L110 80 L150 120 L100 190 L140 300 M110 80 L40 110 M150 120 L230 150 M100 190 L20 240" stroke="#fff" stroke-width="7" fill="none"/></svg>
+  <div class="abs" id="new8" style="left:1100px;top:420px;font-size:300px">📱<span style="position:absolute;right:-30px;top:-20px;font-size:110px">✨</span></div>
+  <svg class="abs" style="left:110px;top:870px" width="860" height="360"><path id="line8" d="M20 40 C 250 60, 420 160, 840 320" fill="none" stroke="#ff5a5a" stroke-width="16" stroke-linecap="round" stroke-dasharray="1100" stroke-dashoffset="1100"/><text id="lab8" x="560" y="200" fill="#ff5a5a" font-family="Inter" font-weight="900" font-size="64" opacity="0">dəyər 📉</text></svg>
+</div>
+
+<!-- 9 RESULT -->
+<div class="scene" id="s9">
+  <div class="bg" style="background:radial-gradient(circle at 50% 40%,#0f4a2a,#03140a 72%)"></div>
+  <div class="c k" id="t9" style="top:230px;font-size:80px">📅 BİR İL SONRA</div>
+  <div class="abs card" id="col1" style="left:70px;top:380px;width:440px;height:470px;text-align:center;padding-top:40px">
+    <div style="font-size:150px">🐑</div><div class="k" style="font-size:60px;margin-top:20px">10 qoyun</div><div class="k g" style="font-size:72px;margin-top:10px">3 500 ₼</div></div>
+  <div class="abs card" id="col2" style="left:570px;top:380px;width:440px;height:470px;text-align:center;padding-top:40px">
+    <div style="font-size:150px">💵</div><div class="k" style="font-size:60px;margin-top:20px">cibində</div><div class="k g" style="font-size:72px;margin-top:10px">1 860 ₼</div></div>
+  <div class="c k y" id="c9" style="top:920px;font-size:230px;text-shadow:0 0 70px rgba(255,213,74,.5)">0 ₼</div>
+  <div class="c k" id="laugh9" style="top:1190px;font-size:70px;opacity:0">İndi Vaqif gülür 😎😂</div>
+  <div id="conf9"></div>
+</div>
+
+<!-- 10 CTA -->
+<div class="scene" id="s10">
+  <div class="bg" style="background:radial-gradient(circle at 50% 40%,#1b1b2e,#050509 72%)"></div>
+  <div class="c" id="warn10" style="top:250px"><span class="card" style="display:inline-block;padding:26px 44px;font-size:56px;font-weight:900;border-color:#ff5a5a">⚠️ Zəhmət + risk</span></div>
+  <div class="c k" id="q10" style="top:470px;font-size:110px;opacity:0">SƏN HANSINI<br><span class="y">SEÇƏRDİN?</span></div>
+  <div class="abs card" id="opA" style="left:90px;top:800px;width:420px;height:330px;text-align:center;padding-top:40px;opacity:0"><div style="font-size:150px">📱</div><div class="k" style="font-size:50px">iPhone</div></div>
+  <div class="abs card" id="opB" style="left:570px;top:800px;width:420px;height:330px;text-align:center;padding-top:40px;opacity:0;border-color:#5be38a"><div style="font-size:150px">🐑</div><div class="k" style="font-size:50px">Qoyun</div></div>
+  <div class="c" id="down10" style="top:1170px;font-size:120px;opacity:0">👇</div>
+</div>
+
+</div>
+<div id="ui"><div id="vig"></div><div id="sub"></div><div id="disc">Təxmini hesablama · qiymətlər bazara görə dəyişir</div><div id="flash"></div><div id="prog"></div></div>
+
+<script>
+const TL=__TIMELINE__, S=TL.starts, D=TL.durs, N=S.length;
+const CAP=[
+ "Vaqif iPhone 18 almadı. Əvəzinə 10 qoyun aldı. Dostları ona güldü. Bir il sonra isə…",
+ "Hər şey bu rəqəmlə başladı: 3 660 manat. Kontaktda iPhone 18 Pro Maxın qiyməti.",
+ "Vaqif bu pulla bazara getdi. Bir qoyun 350 manat. 10 qoyun aldı, 160 manat da cibində qaldı.",
+ "Dostları deyirdi: qoyun pul gətirməz. Amma onlar bir sirri bilmirdilər.",
+ "Qoyun balasını 5 ay daşıyır. Payızda cütləşir, yazda quzulayır. Bəziləri isə əkiz doğur.",
+ "Yazda Vaqifin həyətində 12 quzu var idi. 6 ay otlaqda böyüdülər.",
+ "Payızda bazara apardı. Hər quzu 200 manat. Cəmi 2 400 manat!",
+ "Qış yemi, arpa, baytar: 700 manat getdi. Təmiz qazanc: 1 700 manat.",
+ "Bəs dostlarının telefonu? Yeni model çıxdı, köhnələrin qiyməti düşdü.",
+ "Bir il sonra: Vaqifdə 10 qoyun, cibində 1 860 manat. Cəmi 5 360 manat. İndi o, dostlarına gülür.",
+ "Amma unutma: qoyun zəhmət və risk istəyir. Sən hansını seçərdin? Şərhdə yaz!"
+];
+const TR=[null,'zoom','whip','glitch','circle','slice','flip','drop','glitch','zoom','whip'];
+const SPOKEN={"3":3,"660":16,"10":2,"18":8,"350":10,"160":9,"5":3,"12":6,"6":4,"200":7,"2":3,"400":7,"700":8,"1":3,"860":13,"360":11};
+const WORDS=CAP.map((c,i)=>{const ws=c.split(/\s+/);const w=ws.map(x=>{const k=x.replace(/[^\dA-Za-zƏəĞğİıÖöŞşÜüÇç]/g,'');return (SPOKEN[k]||k.length||1)+(/[.!?…:,]$/.test(x)?3:0)+1});
+  const tot=w.reduce((a,b)=>a+b,0),dur=D[i]-0.3;let acc=0.1;return ws.map((x,j)=>{const s=acc;acc+=w[j]/tot*dur;return{t:x,s,e:acc}})});
+const CHUNKS=WORDS.map(ws=>{const o=[];let c=[];ws.forEach(w=>{c.push(w);if(c.length>=3||/[.!?…:]$/.test(w.t)){o.push(c);c=[]}});if(c.length)o.push(c);return o});
+
+const $=id=>document.getElementById(id);
+const cl=x=>Math.min(Math.max(x,0),1), lerp=(a,b,p)=>a+(b-a)*p;
+const ease=x=>1-Math.pow(1-cl(x),3), eio=x=>{x=cl(x);return x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2};
+const back=x=>{x=cl(x);const c=2.2;return 1+(c+1)*Math.pow(x-1,3)+c*Math.pow(x-1,2)};
+const bounce=x=>{x=cl(x);const n=7.5625,d=2.75;if(x<1/d)return n*x*x;if(x<2/d)return n*(x-=1.5/d)*x+.75;if(x<2.5/d)return n*(x-=2.25/d)*x+.9375;return n*(x-=2.625/d)*x+.984375};
+const fmt=n=>Math.round(n).toLocaleString('en-US').replace(/,/g,' ');
+const rnd=(i)=>{const x=Math.sin(i*127.1+311.7)*43758.5453;return x-Math.floor(x)};
+const pop=(el,p,base='')=>{el.style.opacity=cl(p*4);el.style.transform=`${base} scale(${back(p)})`};
+
+// ---------- build dynamic elements
+for(let i=0;i<10;i++){const s=document.createElement('div');s.className='abs';s.style.fontSize='120px';s.textContent='🐑';$('h_herd').appendChild(s)}
+for(let i=0;i<9;i++){const s=document.createElement('div');s.className='abs';s.style.fontSize='130px';s.textContent=['😂','🤣','😆'][i%3];$('h_laugh').appendChild(s)}
+for(let i=0;i<10;i++){const b=document.createElement('div');b.className='abs';b.style.fontSize='110px';b.textContent='💵';$('bills').appendChild(b);
+  const f=document.createElement('div');f.className='abs';f.style.fontSize='130px';f.textContent='🐑';$('flock2').appendChild(f)}
+const mon=['Okt','Noy','Dek','Yan','Fev','Mar','Apr','May','İyn','İyl','Avq','Sen'];
+mon.forEach((m,i)=>{const a=(i/12)*2*Math.PI-Math.PI/2;const t=document.createElementNS('http://www.w3.org/2000/svg','text');t.setAttribute('x',Math.cos(a)*385);t.setAttribute('y',Math.sin(a)*385+12);t.textContent=m;$('mon4').appendChild(t)});
+for(let i=0;i<12;i++){const s=document.createElement('div');s.className='abs';s.textContent='🐑';$('lambs5').appendChild(s)}
+for(let i=0;i<12;i++){const s=document.createElement('div');s.className='abs';s.style.fontSize='120px';s.innerHTML='🐑';$('coins6').appendChild(s)}
+for(let i=0;i<24;i++){const s=document.createElement('div');s.className='abs';s.style.fontSize='70px';s.textContent=i%2?'🪙':'💵';$('burst6').appendChild(s)}
+['🌾','🌽','💉'].forEach(e=>{const s=document.createElement('div');s.className='abs';s.style.fontSize='150px';s.textContent=e;$('items7').appendChild(s)});
+for(let i=0;i<60;i++){const s=document.createElement('div');s.className='abs';s.style.width='22px';s.style.height='34px';s.style.borderRadius='5px';s.style.background=['#ffd54a','#5be38a','#ff6bb5','#5fb8ff','#fff'][i%5];$('conf9').appendChild(s)}
+
+// ---------- SFX events
+const EV=[];const E=(t,k)=>EV.push({t,k});
+TR.forEach((tr,i)=>{if(!tr)return;const t=S[i]-0.3;E(t,{zoom:'riser',whip:'whoosh',glitch:'glitch',circle:'swoosh',slice:'whoosh',flip:'swoosh',drop:'thud'}[tr])});
+E(S[0]+0.9,'stamp');for(let i=0;i<10;i++)E(S[0]+1.6+i*0.07,'step');E(S[0]+3.6,'pop');E(S[0]+3.75,'pop');E(S[0]+3.9,'pop');
+for(let i=0;i<10;i++)E(S[0]+5.0+i*0.09,'type');E(S[0]+6.3,'boom');
+for(let i=0;i<26;i++)E(S[1]+1.4+i*0.07,'tick');E(S[1]+3.3,'cash');
+for(let i=0;i<10;i++)E(S[2]+2.6+i*0.18,'pop');E(S[2]+5.0,'ding');
+E(S[3]+0.3,'msg');E(S[3]+1.2,'msg');E(S[3]+2.0,'msg');E(S[3]+2.6,'riser');E(S[3]+3.4,'boom');
+E(S[4]+4.6,'stamp');E(S[4]+3.6,'pop');
+for(let i=0;i<12;i++)E(S[5]+0.4+i*0.12,'pop');
+for(let i=0;i<12;i++)E(S[6]+0.5+i*0.13,'coin');E(S[6]+3.4,'cash');E(S[6]+3.4,'boom');
+[0,1,2].forEach(k=>E(S[7]+1.0+k*0.45,'thud'));E(S[7]+2.4,'crack');E(S[7]+3.6,'cash');
+E(S[8]+1.0,'whoosh');E(S[8]+1.6,'crack');E(S[8]+2.4,'down');
+E(S[9]+4.2,'boom');E(S[9]+4.2,'cash');E(S[9]+4.2,'confetti');
+E(S[10]+2.0,'pop');E(S[10]+3.0,'pop');E(S[10]+3.3,'pop');
+window.EVENTS=EV;
+const SHAKES=[S[0]+0.9,S[0]+6.3,S[1]+3.3,S[3]+3.4,S[4]+4.6,S[6]+3.4,S[7]+3.6,S[8]+1.6,S[9]+4.2];
+
+// ---------- scene animators (lt = local time)
+const A=[];
+A[0]=lt=>{const ph=$('h_phone');ph.style.transform=`scale(${0.6+0.4*back(lt/0.4)}) rotate(${Math.sin(lt*3)*4}deg)`;ph.style.opacity=lt<1.5?1:1-ease((lt-1.5)/0.3);
+  const x=$('h_x');x.style.opacity=lt>0.9&&lt<1.7?1:0;x.style.transform=`rotate(-14deg) scale(${lerp(3,1,ease((lt-0.9)/0.15))})`;
+  [...$('h_herd').children].forEach((s,i)=>{const p=eio((lt-1.6-i*0.07)/0.7);const col=i%5,row=Math.floor(i/5);const tx=140+col*170,ty=620+row*170;
+    s.style.left=lerp(1200+i*60,tx,p)+'px';s.style.top=(ty-Math.abs(Math.sin(lt*14+i))*30*(1-p))+'px';s.style.transform=`scaleX(${p<1?1:-1})`;s.style.opacity=lt<3.4?1:1-ease((lt-3.4)/0.3)});
+  $('h_t2').style.opacity=lt>1.8&&lt<3.5?1:0;$('h_t2').style.transform=`scale(${back((lt-1.8)/0.35)})`;
+  [...$('h_laugh').children].forEach((s,i)=>{const p=(lt-3.5-i*0.06)/0.3;s.style.left=(80+rnd(i)*820)+'px';s.style.top=(i%2?250+rnd(i+9)*120:800+rnd(i+9)*450)+'px';pop(s,p,`rotate(${Math.sin(lt*10+i)*15}deg)`);if(lt>4.9)s.style.opacity=1-ease((lt-4.9)/0.2)});
+  $('h_t3').style.opacity=lt>3.5&&lt<4.9?1:0;$('h_t3').style.transform=`scale(${back((lt-3.5)/0.35)})`;
+  const t4=$('h_t4'),txt='Bir il sonra isə…',n=Math.floor(cl((lt-5.0)/0.9)*txt.length);t4.innerHTML=txt.slice(0,n).replace('isə','<br><span class="y">isə</span>');
+  t4.style.opacity=lt>5?1:0;t4.style.transform=`scale(${1+0.25*ease((lt-6.3)/0.6)})`};
+A[1]=lt=>{$('phone3d').style.transform=`rotateY(${lt*140}deg) scale(${back(lt/0.5)})`;
+  const digs='3660';let h='';digs.split('').forEach((d,i)=>{const p=eio((lt-1.4-i*0.25)/1.2);const total=10*(2+i)+ +d;const pos=p*total;
+   h+=`<span class="digit"><div style="transform:translateY(${-pos*230}px)">${Array.from({length:total+1},(_,k)=>`<span>${k%10}</span>`).join('')}</div></span>`;if(i===0)h+='<span style="display:inline-block;width:50px"></span>'});
+  $('slot').innerHTML=h+' ₼';$('slot').style.transform=`scale(${1+0.12*Math.max(0,1-Math.abs(lt-3.3)/0.25)})`;
+  pop($('tag1'),(lt-3.7)/0.4)};
+A[2]=lt=>{$('tag2').style.transform=`rotate(${Math.sin(lt*4)*12*Math.exp(-lt*0.5)}deg) translateY(${(1-bounce(lt/0.8))*-500}px)`;
+  [...$('bills').children].forEach((b,i)=>{const p=eio((lt-1.2-i*0.12)/0.9);const col=i%5,row=Math.floor(i/5);const tx=110+col*180,ty=650+row*220;
+    b.style.left=lerp(480,tx,p)+'px';b.style.top=lerp(1150,ty,p)+'px';b.style.transform=`rotate(${p*540}deg) scale(${1-0.3*p})`;b.style.opacity=lt<2.6+i*0.18?(lt>1.2?1:0):0});
+  [...$('flock2').children].forEach((f,i)=>{const col=i%5,row=Math.floor(i/5);f.style.left=(100+col*180)+'px';f.style.top=(640+row*220)+'px';pop(f,(lt-2.6-i*0.18)/0.35)});
+  $('eq2').style.opacity=ease((lt-4.8)/0.3);$('eq2').style.transform=`translateY(${(1-back((lt-4.8)/0.4))*80}px)`};
+A[3]=lt=>{['b1','b2','b3'].forEach((id,k)=>{const p=(lt-[0.3,1.2,2.0][k])/0.35;$(id).style.opacity=cl(p*3);$(id).style.transform=`translateY(${(1-back(p))*60}px) scale(${0.8+0.2*back(p)})`});
+  $('dark3').style.opacity=0.92*ease((lt-2.7)/0.5);
+  const kp=(lt-3.0)/0.5;$('key3').style.opacity=cl(kp*3);$('key3').style.transform=`rotate(${(1-back(kp))*-180}deg) scale(${back(kp)})`;
+  $('sir3').style.opacity=cl((lt-3.4)/0.1);$('sir3').style.transform=`scale(${lerp(2.5,1,ease((lt-3.4)/0.25))})`;$('sir3').style.letterSpacing=lerp(60,20,ease((lt-3.4)/0.6))+'px'};
+A[4]=lt=>{const p=eio((lt-0.4)/2.6);const ang=p*(5/12)*2*Math.PI;const r=320;const a0=-Math.PI/2+(0.5/12)*2*Math.PI;
+  const a1=a0+ang;$('arc4').setAttribute('d',`M ${Math.cos(a0)*r} ${Math.sin(a0)*r} A ${r} ${r} 0 ${ang>Math.PI?1:0} 1 ${Math.cos(a1)*r} ${Math.sin(a1)*r}`);
+  $('dot4').style.left=(540+Math.cos(a1)*r-45)+'px';$('dot4').style.top=(660+Math.sin(a1)*r-45)+'px';$('dot4').textContent=p>=1?'🐣':'💞';$('dot4').style.transform=`scale(${p>=1?back((lt-3.0)/0.3)*1.4:1})`;
+  $('n4').textContent=Math.round(p*5);$('lab4').textContent=p>=1?'Yaz · quzulama 🌸':'Payız → hamiləlik';
+  pop($('tw4'),(lt-3.6)/0.4);const sp=(lt-4.6)/0.15;$('ek4').style.opacity=cl(sp*3);$('ek4').style.transform=`rotate(12deg) scale(${lerp(3,1,ease(sp))})`};
+A[5]=lt=>{const sp=cl(lt/D[5]);$('sun5').style.left=(80+sp*800)+'px';$('sun5').style.top=(420-Math.sin(sp*Math.PI)*200)+'px';
+  const g=eio((lt-0.4)/4.0);[...$('lambs5').children].forEach((s,i)=>{const col=i%4,row=Math.floor(i/4);const sz=lerp(60,120,g);
+    s.style.fontSize=sz+'px';s.style.left=(80+col*240+Math.sin(lt*1.5+i)*25)+'px';s.style.top=(780+row*140-Math.abs(Math.sin(lt*6+i*0.7))*28)+'px';pop(s,(lt-0.4-i*0.12)/0.3,i%2?'scaleX(-1)':'')});
+  $('m5').textContent=Math.round(6*g)};
+A[6]=lt=>{[...$('coins6').children].forEach((s,i)=>{const col=i%4,row=Math.floor(i/4);s.style.left=(110+col*230)+'px';s.style.top=(370+row*170)+'px';
+    const p=(lt-0.5-i*0.13)/0.3;const rot=cl(p)*180;s.style.transform=`rotateY(${rot}deg)`;s.textContent=rot>90?'💰':'🐑';if(rot>90)s.style.transform=`rotateY(${rot-180}deg) scale(${1+0.2*Math.sin(cl(p)*Math.PI)})`});
+  const cp=eio((lt-1.4)/2.0);$('c6').textContent=fmt(2400*cp)+' ₼';$('c6').style.transform=`scale(${1+0.25*Math.max(0,1-Math.abs(lt-3.4)/0.3)})`;
+  [...$('burst6').children].forEach((s,i)=>{const d=lt-3.4;const a=rnd(i)*Math.PI*2,v=600+rnd(i+3)*700;s.style.opacity=d>0&&d<1.6?1-d/1.6:0;
+    s.style.left=(500+Math.cos(a)*v*d)+'px';s.style.top=(1050+Math.sin(a)*v*d+900*d*d)+'px';s.style.transform=`rotate(${d*720*(rnd(i)-.5)}deg)`})};
+A[7]=lt=>{const it=[...$('items7').children];it.forEach((s,k)=>{const t0=0.6+k*0.45;const p=(lt-t0)/0.4;s.style.left=(130+k*300)+'px';s.style.top=(lerp(-200,560,eio(p)))+'px';
+    s.style.opacity=p>0&&lt<t0+0.6?1:0;s.style.transform=`rotate(${p*360}deg)`});
+  const cut=ease((lt-1.0)/1.4)*(700/2400);$('barR').style.width=(cut*100)+'%';$('barR').style.left=(100-cut*100)+'%';
+  $('barR').style.transform=`translateY(${lt>2.4?(lt-2.4)*(lt-2.4)*900:0}px) rotate(${lt>2.4?(lt-2.4)*30:0}deg)`;
+  $('minus7').style.opacity=lt>2.4&&lt<3.4?1:0;$('minus7').style.transform=`scale(${back((lt-2.4)/0.3)})`;
+  $('barG').style.width=(100-cut*100)+'%';
+  $('net7').style.opacity=cl((lt-3.3)/0.2);$('net7').style.transform=`scale(${back((lt-3.3)/0.45)})`;$('c7').textContent=fmt(1700*eio((lt-3.3)/1.2));
+  $('bg7').style.background=lt>3.3?'radial-gradient(circle at 50% 40%,#0f4a2a,#03140a 72%)':'radial-gradient(circle at 50% 40%,#4a0f0f,#140303 72%)'};
+A[8]=lt=>{const p=eio((lt-1.0)/0.6);$('new8').style.left=lerp(1100,560,p)+'px';$('new8').style.transform=`rotate(${(1-p)*20}deg)`;
+  $('old8').style.left=lerp(370,120,p)+'px';$('old8').style.filter=`grayscale(${p})`;$('old8').style.transform=`rotate(${-p*12}deg)`;
+  $('crack8').style.opacity=lt>1.6?1:0;$('crack8').style.left=lerp(400,150,p)+'px';
+  $('line8').style.strokeDashoffset=1100-1100*eio((lt-2.2)/1.4);$('lab8').setAttribute('opacity',cl((lt-3.2)/0.3))};
+A[9]=lt=>{$('t9').style.transform=`scale(${back(lt/0.4)})`;
+  pop($('col1'),(lt-0.6)/0.4);pop($('col2'),(lt-2.0)/0.4);
+  $('c9').textContent=fmt(5360*eio((lt-2.8)/1.4))+' ₼';$('c9').style.transform=`scale(${1+0.3*Math.max(0,1-Math.abs(lt-4.2)/0.3)})`;
+  pop($('laugh9'),(lt-7.0)/0.4,`rotate(${Math.sin(lt*8)*3}deg)`);
+  [...$('conf9').children].forEach((s,i)=>{const d=lt-4.2;const a=-Math.PI/2+(rnd(i)-.5)*2.4,v=900+rnd(i+5)*900;s.style.opacity=d>0&&d<2.5?1:0;
+    s.style.left=(540+Math.cos(a)*v*d)+'px';s.style.top=(1000+Math.sin(a)*v*d+1100*d*d)+'px';s.style.transform=`rotate(${d*900*rnd(i+2)}deg) rotateX(${d*700}deg)`})};
+A[10]=lt=>{const fp=(lt-0.1)/0.6;$('warn10').style.transform=`perspective(800px) rotateX(${(1-back(fp))*90}deg)`;$('warn10').style.opacity=cl(fp*3);
+  pop($('q10'),(lt-2.0)/0.45);pop($('opA'),(lt-3.0)/0.4,`translateY(${Math.sin(lt*4)*10}px)`);pop($('opB'),(lt-3.3)/0.4,`translateY(${Math.sin(lt*4+1.5)*10}px)`);
+  $('down10').style.opacity=cl((lt-4.0)/0.3);$('down10').style.transform=`translateY(${Math.abs(Math.sin(lt*6))*-40}px)`};
+
+// ---------- transitions
+function place(el,tr,p,dir){ // dir: 'out' | 'in'; p 0..1 transition progress
+  el.style.clipPath='none';el.style.filter='none';el.style.opacity=1;el.style.transform='none';el.style.zIndex=dir==='in'?2:1;
+  const q=eio(p);
+  if(tr==='zoom'){ if(dir==='out'){el.style.transform=`scale(${1+2.5*q})`;el.style.filter=`blur(${q*30}px)`;el.style.opacity=1-q}
+                   else{el.style.transform=`scale(${0.35+0.65*q})`;el.style.opacity=cl(q*2);el.style.filter=`blur(${(1-q)*20}px)`}}
+  if(tr==='whip'){ const x=dir==='out'?-q*1300:(1-q)*1300;el.style.transform=`translateX(${x}px) skewX(${(dir==='out'?q:1-q)*-12}deg)`;el.style.filter=`blur(${Math.sin(q*Math.PI)*28}px)`}
+  if(tr==='glitch'){ if(dir==='in'){const steps=Math.floor(p*8);const sl=[];for(let i=0;i<6;i++){const y=rnd(i+steps*7)*100;sl.push(`0 ${y}%, 100% ${y}%`)}
+      el.style.clipPath=p<0.9?`inset(${(1-q)*100*rnd(steps)}% 0 ${(1-q)*100*rnd(steps+3)}% 0)`:'none';
+      el.style.transform=`translateX(${(rnd(steps)-.5)*80*(1-q)}px)`;el.style.filter=`hue-rotate(${(1-q)*180}deg) saturate(${1+(1-q)*3})`}
+    else{el.style.transform=`translateX(${(rnd(Math.floor(p*12))-.5)*120}px)`;el.style.filter=`hue-rotate(${q*90}deg) contrast(${1+q})`}}
+  if(tr==='circle'&&dir==='in'){el.style.clipPath=`circle(${q*150}% at 50% 45%)`}
+  if(tr==='slice'&&dir==='in'){const a=q*220-60;el.style.clipPath=`polygon(0 0, ${a+60}% 0, ${a}% 100%, 0 100%)`}
+  if(tr==='flip'){ if(dir==='out'){el.style.transform=`rotateY(${q*90}deg)`;el.style.opacity=p<0.5?1:0}else{el.style.transform=`rotateY(${(1-q)*-90}deg)`;el.style.opacity=p>=0.5?1:0}}
+  if(tr==='drop'&&dir==='in'){el.style.transform=`translateY(${(1-bounce(p))*-1920}px)`}
+  if(tr==='drop'&&dir==='out'){el.style.transform=`translateY(${q*300}px) scale(${1-0.15*q})`;el.style.filter=`brightness(${1-0.6*q})`}
+}
+const TW=0.55;
+window.render=function(t){
+  $('prog').style.width=(t/TL.total*100)+'%';
+  let cur=0;for(let i=0;i<N;i++)if(t>=S[i]-0.3)cur=i;
+  for(let i=0;i<N;i++)$('s'+i).style.display='none';
+  const el=$('s'+cur);el.style.display='block';const lt=t-S[cur];
+  // transition window starts at S[cur]-0.3 and lasts TW
+  const tp=(t-(S[cur]-0.3))/TW;
+  if(cur>0&&tp<1){const pe=$('s'+(cur-1));pe.style.display='block';place(pe,TR[cur],tp,'out');A[cur-1](t-S[cur-1]);place(el,TR[cur],tp,'in')}
+  else place(el,null,1,'in');
+  A[cur](lt);
+  // camera shake on stage
+  let sh=0;SHAKES.forEach(x=>{const d=t-x;if(d>0&&d<0.4)sh+=(1-d/0.4)*22});
+  $('stage').style.transform=`translate(${Math.sin(t*93)*sh}px,${Math.cos(t*71)*sh}px)`;
+  // flash on zoom/drop cuts
+  let fl=0;TR.forEach((tr,i)=>{if(tr==='zoom'||tr==='drop'){const d=t-(S[i]-0.3+TW*0.45);if(d>0&&d<0.2)fl=Math.max(fl,(1-d/0.2)*0.6)}});
+  SHAKES.forEach(x=>{const d=t-x;if(d>0&&d<0.12)fl=Math.max(fl,(1-d/0.12)*0.25)});
+  $('flash').style.opacity=fl;
+  // captions
+  const ch=CHUNKS[cur];let ci=0;ch.forEach((c,k)=>{if(lt>=c[0].s-0.05)ci=k});
+  const sub=$('sub');sub.innerHTML='';
+  if(lt>-0.05&&lt<D[cur]+0.2){ch[ci].forEach((w,k)=>{const sp=document.createElement('span');sp.textContent=w.t;const on=lt>=w.s&&lt<w.e+0.05;if(on)sp.className='on';
+    const ap=(lt-w.s+0.08)/0.15;sp.style.transform=`scale(${on?1.12:1}) translateY(${(1-ease(ap))*20}px)`;sp.style.opacity=lt>=w.s-0.08?1:0.35;sub.appendChild(sp)})}
+};
+render(0);
+</script>
+</body></html>
