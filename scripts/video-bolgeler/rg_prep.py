@@ -14,7 +14,7 @@ REG = {
  "Quba-Xaçmaz": ["Dəvəçi", "Xaçmaz", "Quba", "Qusar", "Siyəzən"],
  "Mərkəzi Aran": ["Ağdaş", "Göyçay", "Kürdəmir", "Ucar", "Yevlakh", "Yevlakh Rayon", "Zərdab", "Mingəçevir"],
  "Qarabağ": ["Ağcabədi", "Ağdam", "Bərdə", "Füzuli", "Xocalı", "Xocavənd", "Şuşa", "Tərtər", "Stepanakert"],
- "Şərqi Zəngəzur": ["Cəbrayıl", "Kəlbəcər", "Qubadli", "Zəngilan"],
+ "Şərqi Zəngəzur": ["Cəbrayıl", "Kəlbəcər", "Qubadli", "Zəngilan"],  # Laçın: aşağıda OVR ilə
  "Dağlıq Şirvan": ["Ağsu", "İsmayıllı", "Qobustan", "Şamaxı"],
  "Naxçıvan": ["Babək", "Culfa", "Kangarli", "Naxçıvan", "Ordubad", "Sədərək", "Şahbuz", "Şərur"],
  "Qazax-Tovuz": ["Ağstafa", "Gədəbəy", "Qazax", "Şəmkir", "Tovuz"],
@@ -22,17 +22,22 @@ REG = {
  "Şirvan-Salyan": ["Biləsuvar", "Hajigabul", "Neftçala", "Salyan", "Shirvan"]}
 NAMES = list(REG)
 d2r = {d: i+1 for i, r in enumerate(NAMES) for d in REG[r]}
+# Natural Earth ad səhvləri: kod -> (düzgün ad, iqtisadi rayon). AZE-1735 "Lankaran" adlanır, amma gn_name "Lacin Rayonu"-dur.
+OVR = {"AZE-1735": ("Laçın", "Şərqi Zəngəzur")}
 def polys(g): return [g["coordinates"]] if g["type"] == "Polygon" else g["coordinates"]
 idim = Image.new("L", (WW, HH), 0); di = ImageDraw.Draw(idim)
 dist = {}
 for ft in json.load(open(f"{S}/rg/adm1.geojson"))["features"]:
     p = ft["properties"]
     if p.get("adm0_a3") != "AZE": continue
-    rid = d2r.get(p["name"])
-    if rid is None: print("?", p["name"]); continue
+    if p.get("adm1_code") in OVR:
+        nm, reg = OVR[p["adm1_code"]]; rid = NAMES.index(reg) + 1
+    else:
+        nm = p["name"]; rid = d2r.get(nm)
+    if rid is None: print("?", nm); continue
     for pg in polys(ft["geometry"]):
         pts = [xy(*q[:2]) for q in pg[0]]; di.polygon(pts, fill=rid)
-        dist.setdefault(p["name"], []).append(pts)
+        dist.setdefault(nm, []).append(pts)
 # ölkə maskası (admin_0) – boşluqları (məs. Laçın) ən yaxın rayonla doldur
 c0 = json.load(open(f"{S}/data/ne_10m_admin_0_countries.geojson"))
 cm = Image.new("L", (WW, HH), 0); dc = ImageDraw.Draw(cm)

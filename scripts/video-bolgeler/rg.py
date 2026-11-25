@@ -5,7 +5,9 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from multiprocessing import Pool
 
 HERE = os.environ.get("RG_WORK", os.path.dirname(os.path.abspath(__file__)))
-VARIANT = os.environ.get("VARIANT", "yt")       # yt | tt
+VARIANT = os.environ.get("VARIANT", "yt")       # yt | tt | ig (Instagram Reels: tt sonluğu, təhlükəsiz zona)
+IG = VARIANT == "ig"
+CTA_KEY = {"yt": "cta_yt", "tt": "cta_tt", "ig": "cta_tt"}[VARIANT]
 AL = json.load(open(os.path.join(HERE, "align.json")))
 META = json.load(open(os.path.join(HERE, "meta.json")))
 W, H, FPS = 1080, 1920, 30
@@ -35,26 +37,26 @@ RC = {"Bakı": (255, 196, 64), "Abşeron-Xızı": (255, 160, 70), "Gəncə-Daşk
 # səhnələr: (açar, başlıq, işıqlanan rayonlar, sancaqlar [(rayon/lonlat, emoji, yazı, işarə sözü)], çiplər [(işarə sözü, emoji, yazı)])
 SC_DEF = {
  "intro": ("14 İQTİSADİ RAYON", NAMES, [], []),
- "baku": ("BAKI · ABŞERON", ["Bakı", "Abşeron-Xızı"], [("Bakı", "⛽", "Neft və qaz", "neft"), ((49.38, 40.11), "🌋", "Qobustan", "Qobustanda")],
+ "baku": ("BAKI · ABŞERON-XIZI", ["Bakı", "Abşeron-Xızı"], [("Bakı", "⛽", "Neft və qaz", "neft"), ((49.38, 40.11), "🌋", "Qobustan", "Qobustanda")],
           [("neft", "⛽", "Neft"), ("qaz", "🔥", "Qaz"), ("palçıq", "🌋", "Palçıq vulkanları"), ("qayaüstü", "🗿", "Qayaüstü rəsmlər")]),
- "ganja": ("GƏNCƏ-DAŞKƏSƏN", ["Gəncə-Daşkəsən"], [("Daşkəsən", "⛏️", "Daşkəsən", "dəmir"), ("Naftalan", "🛢️", "Naftalan", "Naftalan")],
-           [("dəmir", "⛏️", "Dəmir filizi"), ("kobalt", "⛏️", "Kobalt"), ("alunit", "⛏️", "Alunit"), ("müalicəvi", "🛢️", "Müalicəvi neft")]),
- "qazax": ("QAZAX-TOVUZ", ["Qazax-Tovuz"], [("Gədəbəy", "🪙", "Gədəbəy", "Gədəbəy"), ("Şəmkir", "⛏️", "Şəmkir", "Şəmkir")],
-           [("qızıl", "🪙", "Qızıl"), ("alunit", "⛏️", "Alunit")]),
- "sheki": ("ŞƏKİ-ZAQATALA", ["Şəki-Zaqatala"], [("Şəki", "🏰", "Şəki", "Şəki"), ("Qəbələ", "⛰️", "Qəbələ", "Qəbələ"), ("Zaqatala", "🌰", "Zaqatala", "Zaqatala")],
-           [("halvası", "🍬", "Şəki halvası"), ("ipəyi", "🧵", "İpək"), ("Xan", "🏰", "Xan sarayı"), ("fındıq", "🌰", "Fındıq"), ("kurortları", "⛷️", "Dağ kurortları")]),
- "quba": ("QUBA-XAÇMAZ", ["Quba-Xaçmaz"], [("Quba", "🍎", "Quba", "Quba"), ("Qusar", "⛷️", "Qusar", "Qusar"), ("Dəvəçi", "💧", "Şabran", "Şabran")],
-          [("almas", "🍎", "Quba alması"), ("xalçalar", "🧶", "Xalça"), ("Şahdağ", "⛷️", "Şahdağ"), ("Qalaaltı", "💧", "Qalaaltı suyu")]),
+ "ganja": ("GƏNCƏ-DAŞKƏSƏN", ["Gəncə-Daşkəsən"], [("Daşkəsən", "⛏️", "Daşkəsən", "dəmir"), ("Goranboy", "🪨", "Goranboy", "Goranboyda", "l"), ("Naftalan", "🛢️", "Naftalan", "Naftalan", "r"), ("Samux", "🌲", "Samux", "Samux")],
+           [("dəmir", "⛏️", "Dəmir"), ("kobalt", "⛏️", "Kobalt"), ("alunit", "⛏️", "Alunit"), ("gips", "🪨", "Gips"), ("müalicəvi", "🛢️", "Müalicəvi neft"), ("Eldar", "🌲", "Eldar şamı")]),
+ "qazax": ("QAZAX-TOVUZ", ["Qazax-Tovuz"], [("Gədəbəy", "🪙", "Gədəbəy", "Gədəbəy"), ("Qazax", "🧱", "Qazax", "isə")],
+           [("qızıl", "🪙", "Qızıl"), ("mis", "🟠", "Mis"), ("bentonit", "🧱", "Bentonit gili")]),
+ "sheki": ("ŞƏKİ-ZAQATALA", ["Şəki-Zaqatala"], [("Şəki", "🏰", "Şəki", "Şəki"), ("Qəbələ", "⛰️", "Qəbələ", "Qəbələ"), ("Zaqatala", "🌰", "Zaqatala", "Zaqatala"), ("Balakən", "🟠", "Balakən", "Balakən"), ("Qax", "🏘️", "Qax", "Qax")],
+           [("halvası", "🍬", "Şəki halvası"), ("ipəyi", "🧵", "İpək"), ("Xan", "🏰", "Xan sarayı"), ("fındıq", "🌰", "Fındıq"), ("xurması", "🟠", "Xurma"), ("İlisu", "🏘️", "İlisu")]),
+ "quba": ("QUBA-XAÇMAZ", ["Quba-Xaçmaz"], [("Quba", "🍎", "Quba", "Quba"), ("Qusar", "⛷️", "Qusar", "Qusar"), ("Dəvəçi", "💧", "Şabran", "Şabran"), ("Xaçmaz", "🌳", "Xaçmaz", "Xaçmaz")],
+          [("almas", "🍎", "Quba alması"), ("xalçalar", "🧶", "Xalça"), ("Şahdağ", "⛷️", "Şahdağ"), ("Qalaaltı", "💧", "Qalaaltı suyu"), ("Samur", "🌳", "Samur-Yalama")]),
  "shirvan": ("DAĞLIQ ŞİRVAN", ["Dağlıq Şirvan"], [("Şamaxı", "🍇", "Şamaxı", "Şamaxı")],
-             [("üzüm", "🍇", "Üzüm bağları"), ("Pirqulu", "🔭", "Pirqulu rəsədxanası")]),
- "lenkoran": ("LƏNKƏRAN-ASTARA", ["Lənkəran-Astara"], [("Lankaran", "🍵", "Lənkəran", "Lənkəran"), ("Astara", "🍋", "Astara", "Astara")],
+             [("üzüm", "🍇", "Üzüm bağları"), ("Pirqulu", "🔭", "Pirqulu rəsədxanası"), ("Cümə", "🕌", "Cümə məscidi")]),
+ "lenkoran": ("LƏNKƏRAN-ASTARA", ["Lənkəran-Astara"], [((48.85, 38.75), "🍵", "Lənkəran", "Lənkəran"), ("Astara", "🍋", "Astara", "Astara")],
               [("çay", "🍵", "Çay"), ("sitrus", "🍋", "Sitrus"), ("Hirkan", "🌳", "Hirkan meşələri")]),
- "aran": ("MƏRKƏZİ ARAN", ["Mərkəzi Aran"], [("Mingəçevir", "⚡", "Mingəçevir", "Mingəçevirdə")],
-          [("anbarı", "💧", "Ən böyük su anbarı"), ("elektrik", "⚡", "Su elektrik stansiyası")]),
- "mil": ("MİL-MUĞAN · ŞİRVAN-SALYAN", ["Mil-Muğan", "Şirvan-Salyan"], [("Saatlı", "🌱", "Saatlı", "pambıq"), ("Neftçala", "⛽", "Neftçala", "Neftçala")],
+ "aran": ("MƏRKƏZİ ARAN", ["Mərkəzi Aran"], [("Mingəçevir", "⚡", "Mingəçevir", "Mingəçevirdə"), ("Göyçay", "🔴", "Göyçay", "Göyçay")],
+          [("kubmetrlik", "💧", "16 mlrd m³ su anbarı"), ("elektrik", "⚡", "SES"), ("narı", "🔴", "Göyçay narı"), ("UNESCO", "🏛️", "UNESCO irsi")]),
+ "mil": ("MİL-MUĞAN · ŞİRVAN-SALYAN", ["Mil-Muğan", "Şirvan-Salyan"], [("Saatlı", "🌱", "Saatlı", "pambıq"), ("İmişli", "⛽", "İmişli", "İmişli"), ("Neftçala", "⛽", "Neftçala", "Neftçala")],
          [("pambıq", "🌱", "Pambıq"), ("taxıl", "🌾", "Taxıl"), ("neft", "⛽", "Neft")]),
- "qarabag": ("QARABAĞ · ŞƏRQİ ZƏNGƏZUR", ["Qarabağ", "Şərqi Zəngəzur"], [("Şuşa", "🏰", "Şuşa", "Şuşa"), ("Kəlbəcər", "💧", "Kəlbəcər", "Kəlbəcərdə")],
-             [("atı", "🐎", "Qarabağ atı"), ("Şuşa", "🏰", "Şuşa"), ("İstisu", "💧", "İstisu"), ("qızıl", "🪙", "Söyüdlü qızılı")]),
+ "qarabag": ("QARABAĞ · ŞƏRQİ ZƏNGƏZUR", ["Qarabağ", "Şərqi Zəngəzur"], [("Şuşa", "🏰", "Şuşa", "Şuşa"), ("Bərdə", "🏛️", "Bərdə", "Bərdə"), ("Kəlbəcər", "💧", "Kəlbəcər", "Kəlbəcərdə")],
+             [("atı", "🐎", "Qarabağ atı"), ("türbəsi", "🏛️", "Bərdə türbəsi"), ("İstisu", "💧", "İstisu"), ("qızıl", "🪙", "Söyüdlü qızılı"), ("civə", "⚗️", "Civə")]),
  "naxcivan": ("NAXÇIVAN", ["Naxçıvan"], [((45.38, 39.24), "🧂", "Duzdağ", "Duzdağ"), ("Ordubad", "⛏️", "Ordubad", "Ordubadda")],
               [("duz", "🧂", "Duz"), ("Badamlı", "💧", "Badamlı"), ("Sirab", "💧", "Sirab"), ("molibden", "⛏️", "Molibden")]),
  "cta": ("SƏNİN RAYONUN?", NAMES, [], []),
@@ -64,7 +66,7 @@ ALK = {a["key"]: a for a in AL}
 
 SC = []; T = 0.0
 for i, k in enumerate(ORDER):
-    a = ALK["cta_" + VARIANT] if k == "cta" else ALK[k]
+    a = ALK[CTA_KEY] if k == "cta" else ALK[k]
     vs = T + (0.2 if i == 0 else 0.3)
     words = [(vs + t/TEMPO, w) for w, t in a["words"]]
     vend = vs + a["end"]/TEMPO
@@ -129,7 +131,9 @@ def map_image(s, lt):
     img[BORDER & (RID > 0)] = img[BORDER & (RID > 0)]*0.45
     return Image.fromarray(np.clip(img, 0, 255).astype(np.uint8))
 
-MAP_BOX = (40, 400, 1040, 1180)   # kadrda xəritə sahəsi
+MAP_BOX = (40, 380, 1040, 1120) if IG else (40, 400, 1040, 1180)   # kadrda xəritə sahəsi
+# Instagram: altdakı ~420 px və sağdakı düymə sütunu boş qalır
+CAP_Y, CAP_W, CHIP_R = (1475, 840, W - 140) if IG else (1560, 960, W - 60)
 def cam_for(key):
     if key in ("intro", "cta"): x0, y0, x1, y1 = BOX[key]; pad = 0.05
     else: x0, y0, x1, y1 = BOX[key]; pad = 0.22
@@ -175,7 +179,8 @@ def frame(i):
     d.rounded_rectangle(MAP_BOX, 40, outline=(60, 75, 110), width=3)
     def P(px, py): return (mx0 + (px - box[0])*sc, my0 + (py - box[1])*sc)
     # sancaqlar
-    for loc, emoji, lab, cue in SC_DEF[k][2]:
+    for pin in SC_DEF[k][2]:
+        loc, emoji, lab, cue = pin[:4]; side = pin[4] if len(pin) > 4 else "b"   # yazı: altda / solda / sağda
         tc = wt(s, cue); tc = (tc - 0.2) if tc is not None else 0.6
         a = ease((lt-tc)/0.3)
         if a <= 0: continue
@@ -185,7 +190,8 @@ def frame(i):
         kk = back((lt-tc)/0.4)
         d.ellipse((x-10, y-10, x+10, y+10), fill=(255, 255, 255, int(255*a)), outline=INK + (int(255*a),), width=3)
         paste_emo(img, emoji, x, y-58*kk, 70*kk, a)
-        d.text((x, y+34), lab, font=font("Inter-ExtraBold.otf", 34), fill=WHITE + (int(255*a),), anchor="mm", stroke_width=5, stroke_fill=INK + (int(255*a),))
+        tx, ty, an = {"b": (x, y+34, "mm"), "l": (x-20, y+4, "rm"), "r": (x+20, y+4, "lm")}[side]
+        d.text((tx, ty), lab, font=font("Inter-ExtraBold.otf", 34), fill=WHITE + (int(255*a),), anchor=an, stroke_width=5, stroke_fill=INK + (int(255*a),))
     # başlıq
     title = SC_DEF[k][0]
     d.text((W/2, 140), "AZƏRBAYCANIN BÖLGƏLƏRİ", font=font("Inter-ExtraBold.otf", 34), fill=DIM, anchor="mm")
@@ -195,48 +201,48 @@ def frame(i):
     col = RC[SC_DEF[k][1][0]] if k not in ("intro", "cta") else YEL
     d.text((W/2, 245+oy), title, font=font("InterDisplay-Black.otf", fs), fill=col + (int(255*ta),), anchor="mm", stroke_width=4, stroke_fill=INK + (int(255*ta),))
     if k not in ("intro", "cta"):
-        n = ORDER.index(k); tot = len(ORDER)-2
+        n = sum(len(SC_DEF[o][1]) for o in ORDER[1:ORDER.index(k)+1]); tot = len(NAMES)   # 14 nöqtə = 14 rayon
         for j in range(tot):
             x = W/2 - (tot-1)*22 + j*44
             d.ellipse((x-8, 330-8, x+8, 330+8), fill=(col if j < n else (60, 70, 95)) + (255,))
     # çiplər
     chips = SC_DEF[k][3]
     if chips:
-        x, y = 60, 1225
+        x, y = 60, MAP_BOX[3] + 45
         for cue, emoji, lab in chips:
             tc = wt(s, cue); tc = (tc - 0.15) if tc is not None else 0.5
             a = ease((lt-tc)/0.25)
             f_ = font("Inter-ExtraBold.otf", 40); wch = d.textlength(lab, font=f_) + 112
-            if x + wch > W - 60: x = 60; y += 96
+            if x + wch > CHIP_R: x = 60; y += 96
             if a > 0:
                 dy = (1-eout((lt-tc)/0.3))*20
                 card_chip(d, img, x, y+dy, emoji, lab, a, col)
             x += wch + 18
     if k == "intro":
         a = ease((lt-0.3)/0.4)
-        d.text((W/2, 1260), "Hansı bölgə nə ilə məşhurdur?", font=font("InterDisplay-Black.otf", 56), fill=WHITE + (int(255*a),), anchor="mm")
-        d.text((W/2, 1340), "Yerin altında nə var?", font=font("InterDisplay-Black.otf", 56), fill=YEL + (int(255*ease((lt-wt(s, "altında")+0.2)/0.3)),), anchor="mm")
+        d.text((W/2, MAP_BOX[3] + 80), "Ən məşhur seçmələr", font=font("InterDisplay-Black.otf", 56), fill=WHITE + (int(255*a),), anchor="mm")
+        d.text((W/2, MAP_BOX[3] + 160), "Yerin altında nə var?", font=font("InterDisplay-Black.otf", 56), fill=YEL + (int(255*ease((lt-wt(s, "altında")+0.2)/0.3)),), anchor="mm")
     if k == "cta":
         a = ease((lt-0.2)/0.4)
-        paste_emo(img, "💬", 170, 1270, 90, a)
-        d.text((W/2+50, 1270), "Şərhdə yaz!", font=font("InterDisplay-Black.otf", 72), fill=WHITE + (int(255*a),), anchor="mm")
+        paste_emo(img, "💬", 170, MAP_BOX[3] + 90, 90, a)
+        d.text((W/2+50, MAP_BOX[3] + 90), "Şərhdə yaz!", font=font("InterDisplay-Black.otf", 72), fill=WHITE + (int(255*a),), anchor="mm")
         cue = "abunə" if VARIANT == "yt" else "izlə"
         tb = wt(s, cue) or 2.5
         ab = ease((lt-tb+0.4)/0.3)
         if ab > 0:
             pressed = lt > tb + 0.3
             kk = 1 - 0.08*math.sin(clamp((lt-tb-0.25)/0.3)*math.pi) if tb+0.25 < lt < tb+0.55 else 1
-            bw, bh, by = 700*kk, 150*kk, 1420
+            bw, bh, by = 700*kk, 150*kk, MAP_BOX[3] + 240
             if VARIANT == "yt":
                 colb = (70, 70, 70) if pressed else (222, 34, 40); lab = "ABUNƏ OLDUN" if pressed else "ABUNƏ OL"
             else:
-                colb = (70, 70, 70) if pressed else (254, 44, 85); lab = "İZLƏYİRSƏN" if pressed else "İZLƏ"
+                colb = (70, 70, 70) if pressed else ((0, 149, 246) if IG else (254, 44, 85)); lab = "İZLƏYİRSƏN" if pressed else "İZLƏ"
             d.rounded_rectangle((W/2-bw/2, by-bh/2, W/2+bw/2, by+bh/2), int(bh/2), fill=colb + (int(255*ab),))
             d.text((W/2+30, by), lab, font=font("InterDisplay-Black.otf", int((70 if pressed else 84)*kk)), fill=(255, 255, 255, int(255*ab)), anchor="mm")
             if not pressed and VARIANT == "yt": paste_emo(img, "🔔", W/2-bw/2+80, by, 80, ab)
-            if not pressed and VARIANT == "tt": d.text((W/2-bw/2+80, by), "+", font=font("InterDisplay-Black.otf", 90), fill=(255, 255, 255, int(255*ab)), anchor="mm")
+            if not pressed and VARIANT in ("tt", "ig"): d.text((W/2-bw/2+80, by), "+", font=font("InterDisplay-Black.otf", 90), fill=(255, 255, 255, int(255*ab)), anchor="mm")
             if pressed: d.line([(W/2-bw/2+58, by), (W/2-bw/2+78, by+22), (W/2-bw/2+112, by-22)], fill=(255, 255, 255, int(255*ab)), width=9)
-            path = [(tb-0.4, 900, 1800), (tb+0.2, 620, 1440), (tb+0.45, 640, 1480), (dur, 950, 1900)]
+            path = [(tb-0.4, 900, by+380), (tb+0.2, 620, by+20), (tb+0.45, 640, by+60), (dur, 950, by+480)]
             for p0, p1 in zip(path, path[1:]):
                 if p0[0] <= lt <= p1[0]:
                     g = eio((lt-p0[0])/(p1[0]-p0[0])); hx = p0[1]+(p1[1]-p0[1])*g; hy = p0[2]+(p1[2]-p0[2])*g
@@ -249,17 +255,17 @@ def frame(i):
             f_ = font("InterDisplay-Black.otf", 72); sp = d.textlength(" ", font=f_)
             ws = [(tw, w.upper(), d.textlength(w.upper(), font=f_)) for tw, w in c]
             tot = sum(x[2] for x in ws) + sp*(len(ws)-1)
-            if tot > 960:
+            if tot > CAP_W:
                 f_ = font("InterDisplay-Black.otf", 56); sp = d.textlength(" ", font=f_)
                 ws = [(tw, w, d.textlength(w, font=f_)) for tw, w, _ in ws]; tot = sum(x[2] for x in ws) + sp*(len(ws)-1)
             x = W/2 - tot/2; pop = back((t - c[0][0] + 0.03)/0.18)
             for tw, w, ww in ws:
                 said = t >= tw - 0.02
-                d.text((x, 1560 + (1-pop)*18), w, font=f_, fill=(YEL if said and t < tw + 0.45 else WHITE) + (255 if said else 130,),
+                d.text((x, CAP_Y + (1-pop)*18), w, font=f_, fill=(YEL if said and t < tw + 0.45 else WHITE) + (255 if said else 130,),
                        anchor="lm", stroke_width=8, stroke_fill=(0, 0, 0, 255))
                 x += ww + sp
             break
-    d.text((W/2, 1188 + 16), "Xəritə: Natural Earth · 14 iqtisadi rayon (2021)", font=font("Inter-Medium.otf", 20), fill=(110, 120, 145), anchor="mm")
+    d.text((W/2, MAP_BOX[3] + 24), "Xəritə: Natural Earth · 14 iqtisadi rayon (2021)", font=font("Inter-Medium.otf", 20), fill=(110, 120, 145), anchor="mm")
     if s is not SC[0] and lt < 0.12: d.rectangle((0, 0, W, H), fill=(255, 255, 255, int(70*(1-lt/0.12))))
     if t < 0.2: img = Image.blend(Image.new("RGB", img.size, BG), img, t/0.2)
     return img.tobytes()

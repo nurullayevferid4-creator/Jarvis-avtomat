@@ -1,16 +1,58 @@
 [
- ["intro","Azərbaycan on dörd iqtisadi rayona bölünür. Hansı bölgə nə ilə məşhurdur, yerin altında nə var? Gəl, xəritəni birlikdə gəzək!"],
- ["baku","Bakı və Abşeron neft və qaz diyarıdır. Qobustanda isə palçıq vulkanları və qədim qayaüstü rəsmlər var."],
- ["ganja","Gəncə-Daşkəsən bölgəsində dəmir filizi, kobalt və alunit yataqları var. Naftalan isə müalicəvi nefti ilə dünyada tanınır."],
- ["qazax","Qazax-Tovuzda Gədəbəy rayonu qızıl yatağı ilə, Şəmkir isə alunit ehtiyatı ilə tanınır."],
- ["sheki","Şəki halvası, ipəyi və Xan sarayı ilə, Qəbələ və Zaqatala isə fındıq bağları və dağ kurortları ilə məşhurdur."],
- ["quba","Quba alması və xalçaları, Qusar Şahdağ kurortu, Şabran isə Qalaaltı mineral suyu ilə tanınır."],
- ["shirvan","Dağlıq Şirvanda Şamaxı üzüm bağları və Pirqulu rəsədxanası ilə məşhurdur."],
- ["lenkoran","Lənkəran-Astara çay, sitrus meyvələri və qədim Hirkan meşələri diyarıdır."],
- ["aran","Mərkəzi Aranda, Mingəçevirdə ölkənin ən böyük su anbarı və su elektrik stansiyası yerləşir."],
- ["mil","Mil-Muğan və Şirvan-Salyan düzənlikləri pambıq və taxıl zəmiləri ilə, Neftçala isə neft yataqları ilə tanınır."],
- ["qarabag","Qarabağ öz adını daşıyan Qarabağ atı və Şuşa ilə məşhurdur. Kəlbəcərdə İstisu mineral suyu və Söyüdlü qızıl yatağı var."],
- ["naxcivan","Naxçıvanda Duzdağ duz yatağı, Badamlı və Sirab mineral suları, Ordubadda isə molibden yataqları var."],
- ["cta_yt","Sənin rayonun nə ilə məşhurdur? Şərhdə yaz və kanala abunə ol!"],
- ["cta_tt","Sənin rayonun nə ilə məşhurdur? Şərhdə yaz və bizi izlə!"]
+ [
+  "intro",
+  "Azərbaycan on dörd iqtisadi rayona bölünür. Hər bölgədən ən məşhur seçmələr: nə ilə tanınır, yerin altında nə var? Gəl, xəritəni birlikdə gəzək!"
+ ],
+ [
+  "baku",
+  "Bakı və Abşeron-Xızıda neft və qaz yataqları var. Qobustanda isə palçıq vulkanları və qədim qayaüstü rəsmlər var."
+ ],
+ [
+  "ganja",
+  "Gəncə-Daşkəsəndə dəmir filizi, kobalt, alunit, Goranboyda isə gips yataqları var. Naftalan şəhəri müalicəvi nefti ilə, Samux isə dünyada yeganə təbii Eldar şamı meşəsi ilə tanınır."
+ ],
+ [
+  "qazax",
+  "Qazax-Tovuzda Gədəbəy qızıl və mis yataqları ilə, Qazax isə ölkənin ən böyük bentonit gili yatağı ilə tanınır."
+ ],
+ [
+  "sheki",
+  "Şəki halvası, ipəyi və Xan sarayı ilə, Qəbələ və Zaqatala fındıq bağları və dağ kurortları ilə məşhurdur. Balakən xurması, Qax isə İlisu kəndi ilə tanınır."
+ ],
+ [
+  "quba",
+  "Quba alması və xalçaları, Qusar Şahdağ kurortu, Şabran Qalaaltı mineral suyu, Xaçmaz isə Samur-Yalama Milli Parkı ilə tanınır."
+ ],
+ [
+  "shirvan",
+  "Dağlıq Şirvanda Şamaxı üzüm bağları, Pirqulu rəsədxanası və qədim Cümə məscidi ilə məşhurdur."
+ ],
+ [
+  "lenkoran",
+  "Lənkəran-Astara çay, sitrus meyvələri və qədim Hirkan meşələri diyarıdır."
+ ],
+ [
+  "aran",
+  "Mərkəzi Aranda, Mingəçevirdə on altı milyard kubmetrlik su anbarı və su elektrik stansiyası var. Göyçay isə narı ilə məşhurdur, Nar bayramı UNESCO siyahısındadır."
+ ],
+ [
+  "mil",
+  "Mil-Muğan və Şirvan-Salyan düzənlikləri pambıq və taxıl zəmiləri ilə tanınır. İmişli və Neftçalada isə neft yataqları işlənir."
+ ],
+ [
+  "qarabag",
+  "Qarabağ öz adını daşıyan Qarabağ atı, Şuşa və Bərdə türbəsi ilə məşhurdur. Şərqi Zəngəzurda, Kəlbəcərdə İstisu mineral suyu, Söyüdlü qızılı və civə yataqları var."
+ ],
+ [
+  "naxcivan",
+  "Naxçıvanda Duzdağ duz yatağı, Badamlı və Sirab mineral suları, Ordubadda isə molibden yataqları var."
+ ],
+ [
+  "cta_yt",
+  "Sənin rayonun nə ilə məşhurdur? Şərhdə yaz və kanala abunə ol!"
+ ],
+ [
+  "cta_tt",
+  "Sənin rayonun nə ilə məşhurdur? Şərhdə yaz və bizi izlə!"
+ ]
 ]
