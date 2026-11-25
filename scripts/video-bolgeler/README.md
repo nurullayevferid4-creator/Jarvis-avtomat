@@ -21,5 +21,7 @@ Bu fayllar yayımlanıb və dəyişdirilməyib.
 - Yeni və düzəldilmiş faktlar rəsmi mənbə ilə yoxlanıb (`BOLGELER.md`, "Mənbələr" bölməsi).
 - Instagram təhlükəsiz zonası: altdakı ~420 px və sağdakı düymə sütunu boş qalır.
 - Yoxlama: hər sancağın öz rayonunda olması və hər işarə sözünün tapılması skriptlə yoxlanıb. Bütün bölgələr bir parçadır; istisnalar Bakı adaları, Qazax anklavı və Abşeronun kiçik ayrıca hissəsidir (sonuncu məlumatdandır, ayrıca təsdiqlənməyib).
-- Gözləyir: `CHATGPT_YOXLAMA.md` ilə ChatGPT yoxlaması (VIDEO-QA, 4-cü bənd).
+- Kadr-kadr baxışdan sonra düzəldilənlər (2026-11-25): altyazıda "İ" hərfi (`up()`), üst-üstə düşən sancaq yazıları (Lənkəran, Qusar, Kəlbəcər, Balakən, Zaqatala, Qax), üç sıra çip ilə altyazının toqquşması, sonluqda düymə ilə altyazının toqquşması.
+- Söz vaxtları (`align.json`) nitq tanımadan (Speko transcribe, söz vaxtları ilə) götürülüb. Naxçıvan sətri yenidən yazdırılıb, çünki köhnə sətirdə "molibden" sözü "Malibey" kimi eşidilirdi. Qarabağ sətri iki versiyanı birləşdirmədən, bütöv yazılıb.
+- Gözləyir: `CHATGPT_YOXLAMA.md` ilə ChatGPT yoxlaması (VIDEO-QA, 6-cı bənd).
 - Gələcək videolar üçün qaydalar: `scripts/VIDEO-QA.md`.

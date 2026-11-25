@@ -20,6 +20,7 @@ def font(n, s):
         p = ("/usr/share/fonts/truetype/noto/" + n) if n.startswith("Noto") else (FI + n)
         _fc[(n, s)] = ImageFont.truetype(p, s)
     return _fc[(n, s)]
+def up(s): return s.replace("i", "İ").upper()   # Azərbaycan dili: i→İ, ı→I (str.upper() i-ni I edir)
 def clamp(v, a=0.0, b=1.0): return max(a, min(b, v))
 def ease(t): t = clamp(t); return t*t*(3-2*t)
 def eio(t): t = clamp(t); return 4*t*t*t if t < .5 else 1-(-2*t+2)**3/2
@@ -43,19 +44,19 @@ SC_DEF = {
            [("dəmir", "⛏️", "Dəmir"), ("kobalt", "⛏️", "Kobalt"), ("alunit", "⛏️", "Alunit"), ("gips", "🪨", "Gips"), ("müalicəvi", "🛢️", "Müalicəvi neft"), ("Eldar", "🌲", "Eldar şamı")]),
  "qazax": ("QAZAX-TOVUZ", ["Qazax-Tovuz"], [("Gədəbəy", "🪙", "Gədəbəy", "Gədəbəy"), ("Qazax", "🧱", "Qazax", "isə")],
            [("qızıl", "🪙", "Qızıl"), ("mis", "🟠", "Mis"), ("bentonit", "🧱", "Bentonit gili")]),
- "sheki": ("ŞƏKİ-ZAQATALA", ["Şəki-Zaqatala"], [("Şəki", "🏰", "Şəki", "Şəki"), ("Qəbələ", "⛰️", "Qəbələ", "Qəbələ"), ("Zaqatala", "🌰", "Zaqatala", "Zaqatala"), ("Balakən", "🟠", "Balakən", "Balakən"), ("Qax", "🏘️", "Qax", "Qax")],
+ "sheki": ("ŞƏKİ-ZAQATALA", ["Şəki-Zaqatala"], [("Şəki", "🏰", "Şəki", "Şəki"), ("Qəbələ", "⛰️", "Qəbələ", "Qəbələ"), ("Zaqatala", "🌰", "Zaqatala", "Zaqatala", "r"), ("Balakən", "🟠", "Balakən", "Balakən", "l"), ("Qax", "🏘️", "Qax", "Qax", "l")],
            [("halvası", "🍬", "Şəki halvası"), ("ipəyi", "🧵", "İpək"), ("Xan", "🏰", "Xan sarayı"), ("fındıq", "🌰", "Fındıq"), ("xurması", "🟠", "Xurma"), ("İlisu", "🏘️", "İlisu")]),
- "quba": ("QUBA-XAÇMAZ", ["Quba-Xaçmaz"], [("Quba", "🍎", "Quba", "Quba"), ("Qusar", "⛷️", "Qusar", "Qusar"), ("Dəvəçi", "💧", "Şabran", "Şabran"), ("Xaçmaz", "🌳", "Xaçmaz", "Xaçmaz")],
+ "quba": ("QUBA-XAÇMAZ", ["Quba-Xaçmaz"], [("Quba", "🍎", "Quba", "Quba"), ("Qusar", "⛷️", "Qusar", "Qusar", "l"), ("Dəvəçi", "💧", "Şabran", "Şabran"), ("Xaçmaz", "🌳", "Xaçmaz", "Xaçmaz")],
           [("almas", "🍎", "Quba alması"), ("xalçalar", "🧶", "Xalça"), ("Şahdağ", "⛷️", "Şahdağ"), ("Qalaaltı", "💧", "Qalaaltı suyu"), ("Samur", "🌳", "Samur-Yalama")]),
  "shirvan": ("DAĞLIQ ŞİRVAN", ["Dağlıq Şirvan"], [("Şamaxı", "🍇", "Şamaxı", "Şamaxı")],
              [("üzüm", "🍇", "Üzüm bağları"), ("Pirqulu", "🔭", "Pirqulu rəsədxanası"), ("Cümə", "🕌", "Cümə məscidi")]),
- "lenkoran": ("LƏNKƏRAN-ASTARA", ["Lənkəran-Astara"], [((48.85, 38.75), "🍵", "Lənkəran", "Lənkəran"), ("Astara", "🍋", "Astara", "Astara")],
+ "lenkoran": ("LƏNKƏRAN-ASTARA", ["Lənkəran-Astara"], [((48.85, 38.75), "🍵", "Lənkəran", "Lənkəran", "l"), ("Astara", "🍋", "Astara", "Astara")],
               [("çay", "🍵", "Çay"), ("sitrus", "🍋", "Sitrus"), ("Hirkan", "🌳", "Hirkan meşələri")]),
  "aran": ("MƏRKƏZİ ARAN", ["Mərkəzi Aran"], [("Mingəçevir", "⚡", "Mingəçevir", "Mingəçevirdə"), ("Göyçay", "🔴", "Göyçay", "Göyçay")],
           [("kubmetrlik", "💧", "16 mlrd m³ su anbarı"), ("elektrik", "⚡", "SES"), ("narı", "🔴", "Göyçay narı"), ("UNESCO", "🏛️", "UNESCO irsi")]),
  "mil": ("MİL-MUĞAN · ŞİRVAN-SALYAN", ["Mil-Muğan", "Şirvan-Salyan"], [("Saatlı", "🌱", "Saatlı", "pambıq"), ("İmişli", "⛽", "İmişli", "İmişli"), ("Neftçala", "⛽", "Neftçala", "Neftçala")],
          [("pambıq", "🌱", "Pambıq"), ("taxıl", "🌾", "Taxıl"), ("neft", "⛽", "Neft")]),
- "qarabag": ("QARABAĞ · ŞƏRQİ ZƏNGƏZUR", ["Qarabağ", "Şərqi Zəngəzur"], [("Şuşa", "🏰", "Şuşa", "Şuşa"), ("Bərdə", "🏛️", "Bərdə", "Bərdə"), ("Kəlbəcər", "💧", "Kəlbəcər", "Kəlbəcərdə")],
+ "qarabag": ("QARABAĞ · ŞƏRQİ ZƏNGƏZUR", ["Qarabağ", "Şərqi Zəngəzur"], [("Şuşa", "🏰", "Şuşa", "Şuşa"), ("Bərdə", "🏛️", "Bərdə", "Bərdə"), ("Kəlbəcər", "💧", "Kəlbəcər", "Kəlbəcərdə", "l")],
              [("atı", "🐎", "Qarabağ atı"), ("türbəsi", "🏛️", "Bərdə türbəsi"), ("İstisu", "💧", "İstisu"), ("qızıl", "🪙", "Söyüdlü qızılı"), ("civə", "⚗️", "Civə")]),
  "naxcivan": ("NAXÇIVAN", ["Naxçıvan"], [((45.38, 39.24), "🧂", "Duzdağ", "Duzdağ"), ("Ordubad", "⛏️", "Ordubad", "Ordubadda")],
               [("duz", "🧂", "Duz"), ("Badamlı", "💧", "Badamlı"), ("Sirab", "💧", "Sirab"), ("molibden", "⛏️", "Molibden")]),
@@ -131,9 +132,9 @@ def map_image(s, lt):
     img[BORDER & (RID > 0)] = img[BORDER & (RID > 0)]*0.45
     return Image.fromarray(np.clip(img, 0, 255).astype(np.uint8))
 
-MAP_BOX = (40, 380, 1040, 1120) if IG else (40, 400, 1040, 1180)   # kadrda xəritə sahəsi
+MAP_BOX = (40, 370, 1040, 1080) if IG else (40, 400, 1040, 1180)   # kadrda xəritə sahəsi
 # Instagram: altdakı ~420 px və sağdakı düymə sütunu boş qalır
-CAP_Y, CAP_W, CHIP_R = (1475, 840, W - 140) if IG else (1560, 960, W - 60)
+CAP_Y, CAP_W, CHIP_R, CHIP_DY = (1460, 840, W - 140, 90) if IG else (1560, 960, W - 60, 96)
 def cam_for(key):
     if key in ("intro", "cta"): x0, y0, x1, y1 = BOX[key]; pad = 0.05
     else: x0, y0, x1, y1 = BOX[key]; pad = 0.22
@@ -213,7 +214,7 @@ def frame(i):
             tc = wt(s, cue); tc = (tc - 0.15) if tc is not None else 0.5
             a = ease((lt-tc)/0.25)
             f_ = font("Inter-ExtraBold.otf", 40); wch = d.textlength(lab, font=f_) + 112
-            if x + wch > CHIP_R: x = 60; y += 96
+            if x + wch > CHIP_R: x = 60; y += CHIP_DY
             if a > 0:
                 dy = (1-eout((lt-tc)/0.3))*20
                 card_chip(d, img, x, y+dy, emoji, lab, a, col)
@@ -250,10 +251,11 @@ def frame(i):
                     him = e.resize((int(e.width*scl), int(e.height*scl)), Image.LANCZOS)
                     img.paste(him, (int(hx-him.width*0.36), int(hy-him.height*0.03)), him)
     # caption
+    cap_off = IG and k == "cta" and lt > (wt(s, "izlə") or 2.5) - 0.45   # düymə + barmaq altyazını örtməsin
     for c, t1 in s["caps"]:
-        if c[0][0] - 0.03 <= t < t1:
+        if not cap_off and c[0][0] - 0.03 <= t < t1:
             f_ = font("InterDisplay-Black.otf", 72); sp = d.textlength(" ", font=f_)
-            ws = [(tw, w.upper(), d.textlength(w.upper(), font=f_)) for tw, w in c]
+            ws = [(tw, up(w), d.textlength(up(w), font=f_)) for tw, w in c]
             tot = sum(x[2] for x in ws) + sp*(len(ws)-1)
             if tot > CAP_W:
                 f_ = font("InterDisplay-Black.otf", 56); sp = d.textlength(" ", font=f_)
